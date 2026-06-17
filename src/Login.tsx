@@ -8,6 +8,7 @@ import React, {
 import md5 from "md5";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import LinearGradient from 'react-native-linear-gradient';
 import {
     View,
     Text,
@@ -134,9 +135,9 @@ const CustomInput = forwardRef<CustomInputRef, any>(
                         />
 
                         {isPassword && (
-                            <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+                            <TouchableOpacity onPress={() => setShowPassword(showPassword)}>
                                 <Image
-                                    source={showPassword ? eyeIcon : eyeCrossedIcon}
+                                    source={eyeCrossedIcon}
                                     style={styles.eyeIcon}
                                 />
                             </TouchableOpacity>
@@ -202,6 +203,9 @@ export default function Login({ navigation }: any) {
     const [userCode, setUserCode] = useState("");
     const [password, setPassword] = useState("");
     const [serverPassword, setServerPassword] = useState("");
+    const [originalQRUser, setOriginalQRUser] = useState("");
+    const [originalQRPassword, setOriginalQRPassword] = useState("");
+    const [displayUserCode, setDisplayUserCode] = useState("");
     const scanTimer = useRef<any>(null);
 
     const [classOptions, setClassOptions] = useState<ClassItem[]>(
@@ -212,60 +216,74 @@ export default function Login({ navigation }: any) {
     const scanBuffer = useRef("");
     const lastKeyTime = useRef(0);
 
+    /* =====================
+       Password Compare Helper
+    ===================== */
+
+    const passwordsMatch = (input: string, server: string): boolean => {
+        const normalize = (str: string) =>
+            str.replace(/\\/g, "")  
+                .replace(/[\r\n]/g, "") 
+                .trim();
+
+        return normalize(input) === normalize(server);
+    };
+
+    const checkUpdate = async (url?: string) => {
+        const finalURL = url || gsURL;
+
+        try {
+            const res = await fetch(`${finalURL}/api/update/latest`);
+            const json = await res.json();
+
+            console.log("UPDATE API:", json);
+
+            if (json.Code === 500) {
+                Alert.alert("Error", json.Message);
+                return;
+            }
+
+            const serverVersion = json.data.version;
+            const apkUrl = json.data.url;
+            const required = json.data.required;
+
+            const currentVersion = operateVersion;
+
+            if (currentVersion !== serverVersion) {
+                if (required) {
+                    Alert.alert(
+                        "Mise à jour obligatoire",
+                        `Version ${serverVersion} disponible`,
+                        [
+                            {
+                                text: "Installer",
+                                onPress: () => Linking.openURL(apkUrl)
+                            }
+                        ],
+                        { cancelable: false }
+                    );
+                } else {
+                    Alert.alert(
+                        "Mise à jour disponible",
+                        `Version ${serverVersion} disponible`,
+                        [
+                            { text: "Plus tard", style: "cancel" },
+                            {
+                                text: "Installer",
+                                onPress: () => Linking.openURL(apkUrl)
+                            }
+                        ]
+                    );
+                }
+            }
+
+        } catch (err) {
+            console.log("Update error:", err);
+        }
+    };
 
     useEffect(() => {
-        const checkUpdate = async () => {
-            try {
-                const res = await fetch(`${gsURL}/api/update/latest`);
-                const json = await res.json();
-
-                console.log("UPDATE API:", json);
-
-                if (json.code !== 200 || !json.data) {
-                    return;
-                }
-
-                const serverVersion = json.data.version;
-                const apkUrl = json.data.url;
-                const required = json.data.required;
-
-                const currentVersion = operateVersion;
-
-                if (currentVersion !== serverVersion) {
-
-                    if (required) {
-                        Alert.alert(
-                            "Mise à jour obligatoire",
-                            `Version ${serverVersion} disponible`,
-                            [
-                                {
-                                    text: "Installer",
-                                    onPress: () => Linking.openURL(apkUrl)
-                                }
-                            ],
-                            { cancelable: false }
-                        );
-                    } else {
-                        Alert.alert(
-                            "Mise à jour disponible",
-                            `Version ${serverVersion} disponible`,
-                            [
-                                { text: "Plus tard", style: "cancel" },
-                                {
-                                    text: "Installer",
-                                    onPress: () => Linking.openURL(apkUrl)
-                                }
-                            ]
-                        );
-                    }
-                }
-
-            } catch (err) {
-                console.log("Update error:", err);
-            }
-        };
-
-        checkUpdate();
+        checkUpdate(gsURL);
     }, []);
 
 
@@ -282,16 +300,17 @@ export default function Login({ navigation }: any) {
         const now = Date.now();
         lastKeyTime.current = now;
 
-        // On réinitialise le timer à chaque frappe
         clearTimeout(scanTimer.current);
 
-        // Si le texte se termine par un retour chariot (PDA Standard)
+
+
         if (text.endsWith("\n") || text.endsWith("\r")) {
             const cleanCode = text.trim();
             if (cleanCode.length > 0) {
                 setUserCode(cleanCode);
                 checkUserCode(cleanCode);
             }
+
             return;
         }
 
@@ -299,11 +318,30 @@ export default function Login({ navigation }: any) {
 
 
         if (text.includes("|")) {
+
+            setDisplayUserCode(" ".repeat(text.length));
             scanTimer.current = setTimeout(() => {
                 const finalCode = text.trim();
-                console.log("Reinforced Scan Buffer Stabilized:", finalCode);
+                //console.log("Reinforced Scan Buffer Stabilized:", finalCode);
+
+              
+                const parts = finalCode.split("|");
+                if (parts.length >= 2) {
+                    setDisplayUserCode(parts[0].trim()); 
+                }
                 checkUserCode(finalCode);
-            }, 1500);
+            }, 800);
+        } else {
+
+            scanTimer.current = setTimeout(() => {
+                const finalCode = text.trim();
+
+                Alert.alert("Error", "QR invalide ");
+                setUserCode("")
+                return;
+            }, 400);
+
+
         }
     };
 
@@ -324,7 +362,7 @@ export default function Login({ navigation }: any) {
     const warehouseRef = useRef<CustomInputRef>(null);
     const classRef = useRef<CustomInputRef>(null);
 
-    // PDA Optimization: Focus management
+
     const [activeField, setActiveField] = useState<"user" | "password" | "warehouse" | "class">("class");
 
     const ensureFocus = () => {
@@ -365,31 +403,40 @@ export default function Login({ navigation }: any) {
        Load Classes
     ===================== */
 
-    useEffect(() => {
-        const loadClasses = async () => {
-            try {
-                const res = await fetch(`${gsURL}/api/GetClassList/GetClassList`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ factoryCode: gs_factoryCode }),
-                });
+    const loadClasses = async (url?: string) => {
+        const finalURL = url || gsURL;
 
-                const data = await res.json();
-                console.log("API RESPONSE:", data);
+        try {
+            const res = await fetch(`${finalURL}/api/GetClassList/GetClassList`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ factoryCode: gs_factoryCode }),
+            });
 
-                setClassOptions(
-                    data.data.map((c: any) => ({
-                        ClassCode: c.classesCode,
-                        ClassName: c.classesName,
-                    }))
-                );
-            } catch (err) {
-                console.log(err);
-                Alert.alert("Error", "Unable to load classes");
+            const data = await res.json();
+
+            if (data.Code === 500) {
+                Alert.alert("Error", data.Message);
+                return;
             }
-        };
 
-        loadClasses();
+            setClassOptions(
+                data.data.map((c: any) => ({
+                    ClassCode: c.classesCode,
+                    ClassName: c.classesName,
+                }))
+            );
+
+        } catch (err) {
+            console.log(err);
+            //  Alert.alert("Error", "Unable to load classes");
+        }
+    };
+
+
+    useEffect(() => {
+
+        loadClasses(gsURL);
         setTimeout(() => {
             classRef.current?.focus();
             setActiveField("class");
@@ -407,7 +454,7 @@ export default function Login({ navigation }: any) {
             return;
         }
 
-        console.log("Raw Input to checkUserCode:", `[${inputToProcess}]`);
+       // console.log("Raw Input to checkUserCode:", `[${inputToProcess}]`);
 
 
         const normalizeQR = (str: string) => {
@@ -416,18 +463,18 @@ export default function Login({ navigation }: any) {
                 .trim();
         };
 
-        // Comparison helper to handle backslash issues
         const cleanForCompare = (str: string) => {
             if (!str) return "";
             return str.replace(/\\/g, "").trim();
         };
 
-        // QR Scan Detection (Format: username|password)
+
+        // QR Scan Detection (Format: username|password)  
         if (inputToProcess.includes("|")) {
             const cleanInput = normalizeQR(inputToProcess);
 
-            console.log("SCAN RAW:", `[${inputToProcess}]`);
-            console.log("SCAN CLEAN:", `[${cleanInput}]`);
+           // console.log("SCAN RAW:", `[${inputToProcess}]`);
+            //console.log("SCAN CLEAN:", `[${cleanInput}]`);
 
             const parts = cleanInput.split("|");
             if (parts.length >= 2) {
@@ -438,7 +485,7 @@ export default function Login({ navigation }: any) {
                 setUserCode(u);
                 setPassword(p);
 
-                console.log("Parsed QR -> User:", `[${u}]`, "Pass:", `[${p}]`);
+                //console.log("Parsed QR -> User:", `[${u}]`, "Pass:", `[${p}]`);
                 processQRScan(u, p);
                 return;
             }
@@ -455,6 +502,11 @@ export default function Login({ navigation }: any) {
             });
 
             const data = await res.json();
+
+            if (data.Code === 500) {
+                Alert.alert("Error", data.Message);
+                return;
+            }
             console.log("User Lookup Response:", data);
 
             if (data.code !== 200) {
@@ -480,6 +532,7 @@ export default function Login({ navigation }: any) {
             setServerPassword(passwordFromServer);
             setOperateUserCode(inputToProcess);
             setOperateUserName(dataObj.userName);
+            setgs_roleCode(dataObj.frolecode);
 
             setActiveField("password");
             setTimeout(() => passwordRef.current?.focus(), 100);
@@ -496,6 +549,8 @@ export default function Login({ navigation }: any) {
     ===================== */
     const processQRScan = async (u: string, p: string) => {
         setLoading(true);
+        setOriginalQRUser(u);
+        setOriginalQRPassword(p);
         try {
             // 1. Get User Info
             const userRes = await fetch(`${gsURL}/api/UserInfo/getuserinfo`, {
@@ -507,6 +562,11 @@ export default function Login({ navigation }: any) {
                 }),
             });
             const userData = await userRes.json();
+
+            if (userData.Code === 500) {
+                Alert.alert("Error", userData.Message);
+                return;
+            }
 
             const rawData = userData.data;
             const dataObj = Array.isArray(rawData) ? rawData[0] : rawData;
@@ -522,21 +582,19 @@ export default function Login({ navigation }: any) {
             const srvPwdRaw = dataObj.passwordInput;
             const srvPwd = srvPwdRaw?.trim() || "";
 
-            const pClean = p.trim().replace(/\\/g, "");
-            const srvClean = srvPwd.replace(/\\/g, "");
-
-            console.log("QR Validation - Comparing Input:", `[${p.trim()}]`, "with Server:", `[${srvPwd}]`);
-            console.log("Normalized Comparison:", `[${pClean}]`, "vs", `[${srvClean}]`);
+            //console.log("QR Validation - Comparing Input:", `[${p.trim()}]`, "with Server:", `[${srvPwd}]`);
 
             setServerPassword(srvPwd);
             setOperateUserCode(u);
             setOperateUserName(dataObj.userName);
+            setgs_roleCode(dataObj.frolecode);
 
-            // 2. Validate Password (Tolerant to backslashes)
-            if (pClean !== srvClean) {
+            // 2. Validate Password (Tolerant to backslashes and scanner reordering)
+            if (!passwordsMatch(p, srvPwd)) {
                 Alert.alert("Error", "QR Password Mismatch");
                 setLoading(false);
                 setUserCode("");
+                setDisplayUserCode("");
                 setPassword("");
                 return;
             }
@@ -553,8 +611,12 @@ export default function Login({ navigation }: any) {
                     }),
                 }
             );
-            const wareData = await wareRes.json();
 
+            const wareData = await wareRes.json();
+            if (wareData.Code === 500) {
+                Alert.alert("Error", wareData.Message);
+                return;
+            }
             setWarehouseOptions(
                 wareData.data.map((w: any) => ({
                     wareHouseCode: w.wareHouseCode,
@@ -579,10 +641,7 @@ export default function Login({ navigation }: any) {
        Check Password
     ===================== */
     const checkPassword = async () => {
-        const pClean = password.trim().replace(/\\/g, "");
-        const srvClean = serverPassword.trim().replace(/\\/g, "");
-
-        if (pClean !== srvClean) {
+        if (!passwordsMatch(password, serverPassword)) {
             Alert.alert("Error", "Password Error, please check!");
             return;
         }
@@ -667,8 +726,12 @@ export default function Login({ navigation }: any) {
             );
 
             const dataWare = await resWare.json();
+            if (dataWare.Code === 500) {
+                Alert.alert("Error", dataWare.Message);
+                return;
+            }
 
-            // ✅ Correction : dataWare.data est un objet, pas un tableau
+
             if (!resWare.ok || !dataWare.data) {
                 Alert.alert("Error", "Warehouse does not exist!");
                 return;
@@ -697,15 +760,16 @@ export default function Login({ navigation }: any) {
 
             const dataCheck = await resCheck.json();
 
+            if (dataCheck.Code === 500) {
+                Alert.alert("Error", dataCheck.Message);
+                return;
+            }
+
             // Vérification
             if (!dataCheck.data) {
                 Alert.alert("License Error", dataCheck.message || "Unknown error");
                 return;
             }
-
-
-
-
 
 
             /* =========================
@@ -717,7 +781,7 @@ export default function Login({ navigation }: any) {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
-                        factoryCode: gs_factoryCode, // ✅ nom correct attendu par l'API
+                        factoryCode: gs_factoryCode,
                         userCode: userCode,
                     }),
                 }
@@ -725,7 +789,12 @@ export default function Login({ navigation }: any) {
 
             const dataUser = await resUser.json();
 
-            // Vérification si la requête a échoué ou si aucun utilisateur trouvé
+            if (dataUser.Code === 500) {
+                Alert.alert("Error", dataUser.Message);
+                return;
+            }
+
+
             if (!resUser.ok || !dataUser.data) {
                 Alert.alert(
                     "Error",
@@ -734,28 +803,26 @@ export default function Login({ navigation }: any) {
                 return;
             }
 
-            // Comparaison du mot de passe (Tolerant to backslashes)
-            const srvPwdManual = dataUser.data.passwordInput?.trim() || "";
-            const pManualClean = password.trim().replace(/\\/g, "");
-            const srvManualClean = srvPwdManual.replace(/\\/g, "");
 
-            if (srvManualClean !== pManualClean) {
+            const srvPwdManual = dataUser.data.passwordInput?.trim() || "";
+
+            if (!passwordsMatch(password, srvPwdManual)) {
                 Alert.alert("Error", "Password Error, please check!");
                 passwordRef.current?.focus();
                 return;
             }
 
-            // Mise à jour des states
+
             setgs_userCode(userCode);
             setgs_userName(dataUser.data.userName);
             setgs_roleCode(dataUser.data.frolecode);
 
-            // Initialize Operate variables
+
             setOperateUserCode(userCode);
             setOperateUserName(dataUser.data.userName);
             setOperateWareHouseCode(wareHouseCode);
 
-            console.log("User info are:", dataUser.data);
+            //console.log("User info are:", dataUser.data);
 
 
             /* =========================
@@ -771,6 +838,30 @@ export default function Login({ navigation }: any) {
                 const ClassCode = selectedClass.ClassCode;
                 const ClassName = selectedClass.ClassName;
 
+                // Check if selected class time is valid
+                try {
+                    const resCheckTime = await fetch(`${gsURL}/api/CheckClassesTime`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            factoryCode: gs_factoryCode,
+                            classesCode: ClassCode,
+                        }),
+                    });
+
+                    if (resCheckTime.ok) {
+                        const dataCheckTime = await resCheckTime.json();
+                        if (dataCheckTime && dataCheckTime.data) {
+                            if (dataCheckTime.data.result === 0) {
+                                Alert.alert("Error", dataCheckTime.data.message || "Heure actuelle hors intervalle du shift");
+                                return;
+                            }
+                        }
+                    }
+                } catch (checkErr) {
+                    console.error("Error verifying classes time:", checkErr);
+                }
+
                 setgs_classCode(ClassCode);
                 setgs_className(ClassName);
 
@@ -784,6 +875,11 @@ export default function Login({ navigation }: any) {
                 });
 
                 const dataWorkdate = await resWorkdate.json();
+
+                if (dataWorkdate.Code === 500) {
+                    Alert.alert("Error", dataWorkdate.Message);
+                    return;
+                }
                 console.log("Workdate API response:", dataWorkdate);
 
                 if (!resWorkdate.ok || !dataWorkdate.data) {
@@ -818,8 +914,8 @@ export default function Login({ navigation }: any) {
                         "Content-Type": "application/json"
                     },
                     body: JSON.stringify({
-                        UserCode: userCode,
-                        Password: password
+                        UserCode: originalQRUser || userCode,
+                        Password: originalQRPassword || password
                     }),
                 });
 
@@ -842,8 +938,6 @@ export default function Login({ navigation }: any) {
 
                 await AsyncStorage.setItem("userToken", token);
 
-                console.log("JWT OK:", token);
-
 
                 const { random, sign } = await generateSignature();
                 setOperateRandomNumber(random);
@@ -851,6 +945,7 @@ export default function Login({ navigation }: any) {
 
 
                 navigation.navigate("Menu");
+                
 
             } catch (error) {
                 console.error("JWT generation error:", error);
@@ -897,7 +992,32 @@ export default function Login({ navigation }: any) {
                             label="Classes"
                             placeholder="Select Class"
                             value={selectedClass?.ClassName}
-                            onChangeText={(val: any) => {
+                            onChangeText={async (val: any) => {
+                                if (!val) return;
+                                try {
+                                    const resCheckTime = await fetch(`${gsURL}/api/CheckClassesTime`, {
+                                        method: "POST",
+                                        headers: { "Content-Type": "application/json" },
+                                        body: JSON.stringify({
+                                            factoryCode: gs_factoryCode,
+                                            classesCode: val.ClassCode,
+                                        }),
+                                    });
+
+                                    if (resCheckTime.ok) {
+                                        const dataCheckTime = await resCheckTime.json();
+                                        if (dataCheckTime && dataCheckTime.data) {
+                                            if (dataCheckTime.data.result === 0) {
+                                                Alert.alert("Error", dataCheckTime.data.message || "Heure actuelle hors intervalle du shift");
+                                                setSelectedClass(null);
+                                                return;
+                                            }
+                                        }
+                                    }
+                                } catch (checkErr) {
+                                    console.error("Error verifying classes time on select:", checkErr);
+                                }
+
                                 setSelectedClass(val);
                                 setActiveField("user");
                                 setTimeout(() => userRef.current?.focus(), 100);
@@ -911,10 +1031,10 @@ export default function Login({ navigation }: any) {
                         <CustomInput
                             label="User Code"
                             placeholder="Enter your ID"
-                            value={userCode}
+                            value={displayUserCode}  
                             onChangeText={handleUserCodeChange}
                             inputRef={userRef}
-                            onSubmitEditing={() => checkUserCode()}
+                            //onSubmitEditing={() => checkUserCode()}
                             onFocus={() => setActiveField("user")}
                             onBlur={ensureFocus}
                             icon={userIcon}
@@ -954,23 +1074,32 @@ export default function Login({ navigation }: any) {
                     <View style={styles.infoBox}>
                         <View style={styles.infoRow}>
                             <Text style={styles.version}>App Version  {operateVersion}</Text>
-                            <TouchableOpacity onPress={() => setShowSettings(true)}>
-                                <Image
-                                    source={settingsIcon}
-                                    style={styles.settingsIcon}
-                                />
-                            </TouchableOpacity>
+                            {gs_roleCode === "RoleAdmin" && (
+                                <TouchableOpacity onPress={() => setShowSettings(true)}>
+                                    <Image
+                                        source={settingsIcon}
+                                        style={styles.settingsIcon}
+                                    />
+                                </TouchableOpacity>
+                            )}
                         </View>
                     </View>
 
                     <View style={styles.buttonContainer}>
-                        <TouchableOpacity
-                            style={[styles.button, styles.primaryButton]}
-                            onPress={handleLogin}
+                        <LinearGradient
+                            colors={['#85ddf3ff', '#0052cc']}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 0 }}
+                            style={styles.gradientButton}
                         >
-                            <Text style={styles.primaryButtonText}>LogIn</Text>
-                        </TouchableOpacity>
-
+                            <TouchableOpacity
+                                style={styles.button}
+                                onPress={handleLogin}
+                                activeOpacity={0.8}
+                            >
+                                <Text style={styles.primaryButtonText}>logIn</Text>
+                            </TouchableOpacity>
+                        </LinearGradient>
                     </View>
                 </View>
 
@@ -996,6 +1125,9 @@ export default function Login({ navigation }: any) {
                                     style={[styles.modalBtn, styles.saveBtn]}
                                     onPress={() => {
                                         setgs_gsURL(tempURL);
+                                        checkUpdate(tempURL);
+                                        loadClasses(tempURL);
+
                                         setShowSettings(false);
                                     }}
                                 >
@@ -1179,6 +1311,10 @@ const styles = StyleSheet.create({
     secondaryButtonText: {
         fontWeight: "700",
         fontSize: isSmallDevice ? scale(13) : scale(15),
+    },
+
+    gradientButton: {
+        borderRadius: 10,
     },
 
     modalOverlay: {

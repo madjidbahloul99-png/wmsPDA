@@ -150,7 +150,11 @@ export default function AllocateInSNConfirmBox({ navigation, route }: any) {
         const isSelected = selectedIndex === index;
         return (
             <TouchableOpacity
-                style={[styles.row, isSelected && styles.selectedRow]}
+                style={[
+                    styles.row,
+                    index % 2 === 0 ? { backgroundColor: "#FFFFFF" } : { backgroundColor: "#BAE6FD" },
+                    isSelected && styles.selectedRow
+                ]}
                 onPress={() => setSelectedIndex(index)}
             >
                 <Text style={[styles.cell, { width: 60 }]}>{item.fxh}</Text>
@@ -219,7 +223,7 @@ export default function AllocateInSNConfirmBox({ navigation, route }: any) {
                 <ScrollView horizontal showsHorizontalScrollIndicator={true}>
                     <View>
                         <View style={styles.tableHeader}>
-                            <Text style={[styles.headerCell, { width: 60 }]}>FXH</Text>
+                            <Text style={[styles.headerCell, { width: 60 }]}>No</Text>
                             <Text style={[styles.headerCell, { width: 150 }]}>Box Code</Text>
                             <Text style={[styles.headerCell, { width: 60 }]}>Qty</Text>
                             <Text style={[styles.headerCell, { width: 120 }]}>Model</Text>
@@ -300,22 +304,23 @@ const styles = StyleSheet.create({
         justifyContent: "space-between",
         alignItems: "center",
         backgroundColor: "#0052cc",
-        paddingHorizontal: 16,
-        paddingVertical: 12,
+        paddingHorizontal: 12,
+        paddingVertical: 8,
         borderRadius: 12,
         elevation: 2,
         borderWidth: 1,
-        borderColor: "#E2E8F0"
+        borderColor: "#E2E8F0",
+        marginBottom:-4
     },
-    statLabel: { color: "#FFFFFF", fontSize: 11, fontWeight: "700", textTransform: "uppercase" },
-    statValue: { color: "#FFFFFF", fontSize: 12, fontWeight: "800" },
+    statLabel: { color: "#FFFFFF", fontSize: 13, fontWeight: "700", textTransform: "uppercase" },
+    statValue: { color: "#FFFFFF", fontSize: 13, fontWeight: "800" },
     tableHeader: { flexDirection: "row", backgroundColor: "#0052cc", paddingVertical: 10, borderRadius: 10, marginBottom: 8 },
-    headerCell: { fontSize: 10, fontWeight: "900", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
-    row: { flexDirection: "row", paddingVertical: 14, borderBottomWidth: 1, borderColor: "0052cc", borderBottomColor: "#F1F5F9", backgroundColor: "#FFF", borderRadius: 8, marginBottom: 4 },
+    headerCell: { fontSize: 12, fontWeight: "900", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
+    row: { flexDirection: "row", paddingVertical: 14, borderBottomWidth: 1, borderColor: "0052cc", borderBottomColor: "#F1F5F9", borderRadius: 8, marginBottom: 4 },
     cell: { fontSize: 11, color: "#334155", textAlign: "center", fontWeight: "600" },
-    selectedRow: { backgroundColor: "#E0E7FF" },
+    selectedRow: { backgroundColor: "#ffc3c3ff" },
     actions: { flexDirection: "row", gap: 12, marginTop: 16 },
-    detailButton: { flex: 1, backgroundColor: "#f1f5f9", padding: 8, borderRadius: 12, alignItems: "center", },
+    detailButton: { flex: 1, backgroundColor: "#BAE6FD", padding: 8, borderRadius: 12, alignItems: "center", },
     detailButtonText: { color: "#475569", fontWeight: "900", fontSize: 15 },
 
     confirmButton: { flex: 1, backgroundColor: "#2563eb", padding: 8, borderRadius: 12, alignItems: "center", elevation: 2 },

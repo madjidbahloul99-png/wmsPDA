@@ -17,6 +17,9 @@ import {
 } from "react-native";
 import { useGlobal } from "../../GlobalContext";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { FlashList } from "@shopify/flash-list";
+
+const FList = FlashList as any;
 
 const warehouseIcon = require("../../assets/logo/warehouse.png");
 
@@ -81,7 +84,8 @@ const CustomInput = React.forwardRef<CustomInputRef, CustomInputProps>(
                 {isSelect ? (
                     <TouchableOpacity
                         style={[
-                            styles.inputContainer,
+
+                            styles.inputContainer, { borderColor: "#0052cc" },
                             isFocused ? styles.inputFocused : null,
                             isSelect && value ? { borderWidth: 0, borderBottomWidth: 1, backgroundColor: 'transparent', paddingHorizontal: 0, borderRadius: 0 } : null
                         ]}
@@ -179,7 +183,7 @@ export default function PD({ navigation }: any) {
     const global = useGlobal();
     const { gsURL, gs_factoryCode, gs_wareCode, gs_userCode, gs_userName,
         operateUserCode, operateUserName, operateWareHouseCode, operateRandomNumber, operateSign, operateVersion,
-     } = global;
+    } = global;
     const BASE_URL = gsURL;
     const [token, setToken] = useState("");
 
@@ -388,9 +392,10 @@ export default function PD({ navigation }: any) {
             const typeRes = await fetch(`${BASE_URL}/api/BarcodeType`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, },
-                body: JSON.stringify({ 
+                body: JSON.stringify({
                     operateUserCode, operateUserName, operateWareHouseCode, operateRandomNumber, operateSign, operateVersion,
-                    factoryCode: gs_factoryCode, scanCode: code }),
+                    factoryCode: gs_factoryCode, scanCode: code
+                }),
             });
 
             if (typeRes.status === 401) {
@@ -408,11 +413,13 @@ export default function PD({ navigation }: any) {
                 navigation.goBack();
                 return;
             }
+             console.log("typeResult", typeResult);
             let scanType = "";
-            if (typeResult.message === "success" && typeResult.data && typeResult.data.length > 0) {
-                scanType = typeResult.data[0].scanType;
+            if (typeResult.message === "success" && typeResult.data ) {
+                scanType = typeResult.data.scanType;
             }
-            if (scanType === "pallet" || scanType === "box" || scanType === "sn" || code === "P0140480205") {
+            console.log("scanType", scanType);
+            if (scanType === "pallet" || scanType === "box" || scanType === "sn") {
                 const scanRes = await fetch(`${BASE_URL}/api/InventoryScan/CheckAndWriteScan`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, },
@@ -444,8 +451,8 @@ export default function PD({ navigation }: any) {
                     const resultData = scanResult.data;
 
                     if (resultData.isok === "0") {
-                        -
-                            Alert.alert("Error", resultData.retstr || "Scan failed");
+                        
+                        Alert.alert("Error", resultData.retstr || "Scan failed");
                     } else {
                         Alert.alert("Success", "scan successfully.");
                         const addedQty = parseInt(resultData.qty || "0");
@@ -539,12 +546,12 @@ export default function PD({ navigation }: any) {
         );
     };
 
-    const renderItem = ({ item }: { item: ScannedItem }) => (
-        <View style={styles.tableRow}>
-            <Text style={[styles.cell, { flex: 1.2 }]}>{item.barcode}</Text>
-            <Text style={[styles.cell, { flex: 1 }]}>{item.model}</Text>
-            <Text style={[styles.cell, { flex: 0.8 }]}>{item.color}</Text>
-            <Text style={[styles.cell, { flex: 0.5 }]}>{item.qty}</Text>
+    const renderItem = ({ item, index }: { item: ScannedItem; index: number }) => (
+        <View style={[styles.tableRow, { backgroundColor: index % 2 === 0 ? "#FFFFFF" : "#BAE6FD" }]}>
+            <Text style={[styles.cell, { width: 180 }]}>{item.barcode}</Text>
+            <Text style={[styles.cell, { width: 140 }]}>{item.model}</Text>
+            <Text style={[styles.cell, { width: 120 }]}>{item.color}</Text>
+            <Text style={[styles.cell, { width: 80 }]}>{item.qty}</Text>
         </View>
     );
 
@@ -629,28 +636,33 @@ export default function PD({ navigation }: any) {
                 </View>
 
                 <View style={styles.tableContainer}>
-                    <View style={styles.tableHeader}>
-                        <Text style={[styles.headerCell, { flex: 1.2 }]}>Barcode</Text>
-                        <Text style={[styles.headerCell, { flex: 1 }]}>Model</Text>
-                        <Text style={[styles.headerCell, { flex: 0.8 }]}>Color</Text>
-                        <Text style={[styles.headerCell, { flex: 0.5 }]}>Qty</Text>
-                    </View>
+                    <ScrollView horizontal={true} showsHorizontalScrollIndicator={true}>
+                        <View style={{ width: 520 }}>
+                            <View style={styles.tableHeader}>
+                                <Text style={[styles.headerCell, { width: 180 }]}>Barcode</Text>
+                                <Text style={[styles.headerCell, { width: 140 }]}>Model</Text>
+                                <Text style={[styles.headerCell, { width: 120 }]}>Color</Text>
+                                <Text style={[styles.headerCell, { width: 80 }]}>Qty</Text>
+                            </View>
 
-                    {loading && scannedItems.length === 0 ? (
-                        <ActivityIndicator size="large" color="#0052cc" style={{ marginTop: 40 }} />
-                    ) : (
-                        <FlatList
-                            data={scannedItems}
-                            renderItem={renderItem}
-                            keyExtractor={(item, index) => `${item.id}_${index}`}
-                            contentContainerStyle={{ paddingBottom: 10 }}
-                            ListEmptyComponent={
-                                <View style={{ padding: 20, alignItems: 'center' }}>
-                                    <Text style={{ color: '#94A3B8', fontStyle: 'italic' }}>No items scanned yet</Text>
-                                </View>
-                            }
-                        />
-                    )}
+                            {loading && scannedItems.length === 0 ? (
+                                <ActivityIndicator size="large" color="#0052cc" style={{ marginTop: 40 }} />
+                            ) : (
+                                <FList
+                                    data={scannedItems}
+                                    renderItem={renderItem}
+                                    keyExtractor={(item: ScannedItem, index: number) => `${item.id}_${index}`}
+                                    contentContainerStyle={{ paddingBottom: 10 }}
+                                    estimatedItemSize={40}
+                                    ListEmptyComponent={
+                                        <View style={{ padding: 20, alignItems: 'center' }}>
+                                            <Text style={{ color: '#94A3B8', fontStyle: 'italic' }}>No items scanned yet</Text>
+                                        </View>
+                                    }
+                                />
+                            )}
+                        </View>
+                    </ScrollView>
                 </View>
 
                 <View style={styles.footer}>
@@ -712,7 +724,10 @@ const styles = StyleSheet.create({
     infoBox: { flex: 1, backgroundColor: "#F8FAFC", padding: 4, borderRadius: 8, borderWidth: 1, borderColor: "#F1F5F9" },
     infoLabel: { fontSize: 10, color: "#94A3B8", fontWeight: "700", textTransform: "uppercase" },
     infoValue: { fontSize: 11, color: "#1E293B", fontWeight: "700", marginTop: 0 },
-    input: { backgroundColor: "#F1F5F9", height: 32, borderRadius: 8, paddingHorizontal: 10, fontSize: 12, color: "#1E293B", fontWeight: "600", borderWidth: 1, borderColor: "#CBD5E1", paddingVertical: 0, textAlignVertical: 'center' },
+    input: {
+        backgroundColor: "#F1F5F9", height: 32, borderRadius: 8, paddingHorizontal: 10, fontSize: 12, color: "#1E293B", fontWeight: "600",
+        borderWidth: 1, borderColor: "#0052cc", paddingVertical: 0, textAlignVertical: 'center'
+    },
     tableContainer: { flex: 1, backgroundColor: "#FFF", marginHorizontal: 8, borderRadius: 12, overflow: "hidden", elevation: 2, borderWidth: 1, borderColor: "#E2E8F0", marginBottom: 2 },
     tableHeader: { flexDirection: "row", backgroundColor: "#0052cc", paddingVertical: 8 },
     headerCell: { fontSize: 10, fontWeight: "800", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
@@ -734,12 +749,13 @@ const styles = StyleSheet.create({
     },
     inputWrapper: {
         marginBottom: 4,
+
     },
     inputContainer: {
         height: 32,
         borderRadius: 8,
         borderWidth: 1,
-        borderColor: "#CBD5E1",
+        borderColor: "#0052cc",
         flexDirection: "row",
         alignItems: "center",
         paddingHorizontal: 10,

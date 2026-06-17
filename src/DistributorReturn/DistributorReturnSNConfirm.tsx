@@ -128,7 +128,7 @@ export default function DistributorReturnSNConfirm({ navigation, route }: any) {
                                     <ActivityIndicator size="large" color="#0052cc" style={{ marginTop: 40 }} />
                                 ) : (
                                     itemList.map((item, index) => (
-                                        <View key={index} style={styles.tableRow}>
+                                        <View key={index} style={[styles.tableRow, { backgroundColor: index % 2 === 0 ? "#FFFFFF" : "#BAE6FD" }]}>
                                             <Text style={[styles.cell, { width: 40, color: item.orderStatus === "-1" ? "#EF4444" : "#334155" }]}>{item.fxh}</Text>
                                             <Text style={[styles.cell, { width: 140, color: item.orderStatus === "-1" ? "#EF4444" : "#334155" }]}>{item.SN}</Text>
                                             <Text style={[styles.cell, { width: 130, color: item.orderStatus === "-1" ? "#EF4444" : "#334155" }]}>{item.imeiCode1}</Text>

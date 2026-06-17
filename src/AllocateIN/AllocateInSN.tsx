@@ -105,7 +105,7 @@ export default function AllocateInSN({ navigation, route }: any) {
                 setDetails(mapped);
                 setQtyTotal(mapped.length);
             } else {
-                Alert.alert("Error", "There is no product in the Pallet!");
+                Alert.alert("Error", "There is no product in the box!");
                 navigation.goBack();
             }
         } catch (err: any) {
@@ -127,7 +127,11 @@ export default function AllocateInSN({ navigation, route }: any) {
         const isSelected = selectedIndex === index;
         return (
             <TouchableOpacity
-                style={[styles.row, isSelected && styles.selectedRow]}
+                style={[
+                    styles.row,
+                    index % 2 === 0 ? { backgroundColor: "#FFFFFF" } : { backgroundColor: "#BAE6FD" },
+                    isSelected && styles.selectedRow
+                ]}
                 onPress={() => setSelectedIndex(index)}
             >
                 <Text style={[styles.cell, { width: 60 }]}>{item.fxh}</Text>
@@ -135,7 +139,7 @@ export default function AllocateInSN({ navigation, route }: any) {
                 <Text style={[styles.cell, { width: 120 }]}>{item.imeiCode1}</Text>
                 <Text style={[styles.cell, { width: 120 }]}>{item.imeiCode2}</Text>
                 <Text style={[styles.cell, { width: 120 }]}>{item.imeiCode3}</Text>
-                <Text style={[styles.cell, { width: 150 }]}>{item.createDate}</Text>
+                <Text style={[styles.cell, { width: 200 }]}>{item.createDate}</Text>
             </TouchableOpacity>
         );
     };
@@ -181,20 +185,24 @@ export default function AllocateInSN({ navigation, route }: any) {
                         <Text style={styles.statValue}>{palletCode || "-"}</Text>
                     </View>
                     <View style={styles.statBox}>
+                        <Text style={styles.statLabel}>Box</Text>
+                        <Text style={styles.statValue}>{boxCode || "-"}</Text>
+                    </View>
+                    <View style={styles.statBox}>
                         <Text style={styles.statLabel}>Total Qty</Text>
                         <Text style={styles.statValue}>{qtyTotal}</Text>
                     </View>
                 </View>
 
                 <ScrollView horizontal showsHorizontalScrollIndicator={true}>
-                    <View>
+                    <View style={{ minWidth: width }}>
                         <View style={styles.tableHeader}>
-                            <Text style={[styles.headerCell, { width: 60 }]}>FXH</Text>
+                            <Text style={[styles.headerCell, { width: 60 }]}>No</Text>
                             <Text style={[styles.headerCell, { width: 150 }]}>SN</Text>
                             <Text style={[styles.headerCell, { width: 120 }]}>IMEI1</Text>
                             <Text style={[styles.headerCell, { width: 120 }]}>IMEI2</Text>
                             <Text style={[styles.headerCell, { width: 120 }]}>IMEI3</Text>
-                            <Text style={[styles.headerCell, { width: 150 }]}>Date</Text>
+                            <Text style={[styles.headerCell, { width: 200 }]}>Date</Text>
                         </View>
 
                         {loading ? (
@@ -263,20 +271,20 @@ const styles = StyleSheet.create({
         justifyContent: "space-between",
         alignItems: "center",
         backgroundColor: "#0052cc",
-        paddingHorizontal: 16,
-        paddingVertical: 12,
+        paddingHorizontal: 12,
+        paddingVertical: 6,
         borderRadius: 12,
         elevation: 2,
         borderWidth: 1,
         borderColor: "#E2E8F0"
     },
-    statLabel: { color: "#FFFFFF", fontSize: 11, fontWeight: "700", textTransform: "uppercase" },
-    statValue: { color: "#FFFFFF", fontSize: 12, fontWeight: "800" },
+    statLabel: { color: "#FFFFFF", fontSize: 13, fontWeight: "700", textTransform: "uppercase" },
+    statValue: { color: "#FFFFFF", fontSize: 13, fontWeight: "800" },
     tableHeader: { flexDirection: "row", backgroundColor: "#0052cc", paddingVertical: 10, borderRadius: 10, marginBottom: 8 },
-    headerCell: { fontSize: 10, fontWeight: "900", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
-    row: { flexDirection: "row", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#F1F5F9", backgroundColor: "#FFF", borderRadius: 8, marginBottom: 4 },
+    headerCell: { fontSize: 11, fontWeight: "900", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
+    row: { flexDirection: "row", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#F1F5F9", borderRadius: 8, marginBottom: 4 },
     cell: { fontSize: 11, color: "#334155", textAlign: "center", fontWeight: "600" },
-    selectedRow: { backgroundColor: "#E0E7FF" },
+    selectedRow: { backgroundColor: "#ffc3c3ff" },
     footer: { flexDirection: "row", gap: 12, marginTop: 16 },
     actions: { flexDirection: "row", gap: 12, marginTop: 16 },
 

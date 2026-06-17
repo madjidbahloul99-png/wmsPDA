@@ -12,13 +12,18 @@ import {
     ActivityIndicator,
     Image,
     Dimensions,
-    DeviceEventEmitter
+    DeviceEventEmitter,
+    Animated,
 } from "react-native";
 import { useGlobal } from "../../GlobalContext.tsx";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
+const AnimatedView = Animated.View as any;
+
 type RowType = {
+    palletCode: string;
     boxCode: string;
+    sn: string;
     model: string;
     color: string;
     boxQty: string;
@@ -42,6 +47,56 @@ export default function AllocateFrm({ navigation, route }: any) {
     const showKeyboard = false;
 
     const inputRef = useRef<TextInput>(null);
+    const borderAnim = useRef(new Animated.Value(0)).current;
+
+    const [scanState, setScanState] = useState<
+        "waiting" | "scanning" | "success" | "error"
+    >("waiting");
+
+    useEffect(() => {
+        let animation: Animated.CompositeAnimation | null = null;
+
+        if (scanState === "waiting") {
+            animation = Animated.loop(
+                Animated.sequence([
+                    Animated.timing(borderAnim, {
+                        toValue: 1,
+                        duration: 700,
+                        useNativeDriver: false,
+                    }),
+                    Animated.timing(borderAnim, {
+                        toValue: 0,
+                        duration: 700,
+                        useNativeDriver: false,
+                    }),
+                ])
+            );
+            animation.start();
+        } else {
+            borderAnim.setValue(1);
+        }
+
+        return () => {
+            animation?.stop();
+        };
+    }, [scanState]);
+
+    const animatedBorderColor = borderAnim.interpolate({
+        inputRange: [0, 1],
+        outputRange:
+            scanState === "waiting"
+                ? ["#0052cc", "#60a5fa"]
+                : scanState === "scanning"
+                    ? ["#f59e0b", "#fbbf24"]
+                    : scanState === "success"
+                        ? ["#16a34a", "#4ade80"]
+                        : ["#dc2626", "#f87171"],
+    });
+
+    const animatedBorderWidth = borderAnim.interpolate({
+        inputRange: [0, 1],
+        outputRange: [1, 4],
+    });
 
     const ensureFocus = () => {
         if (inputRef.current) {
@@ -88,25 +143,79 @@ export default function AllocateFrm({ navigation, route }: any) {
             }
 
             const result = await response.json();
+            if (result.code === 500) {
+                setScanState("error");
+                Alert.alert("Error", result.message);
+                navigation.goBack();
+                return;
+            }
             if (result.message === 'success' && result.data) {
                 const data = result.data;
                 setToCkName(data.tockName || "");
             } else {
+                setScanState("error");
                 Alert.alert("Error", result.message || "Data handling exceptions, please check!");
                 navigation.goBack();
             }
         } catch (_) {
+            setScanState("error");
             Alert.alert("Error", "Failed to fetch allocate details");
         } finally {
             setLoading(false);
         }
     }, [allocateCode, gs_factoryCode, gs_wareCode, BASE_URL, token, navigation]);
 
+    const fetchAllocateList = useCallback(async (code: string) => {
+        if (!token) return;
+        try {
+            const response = await fetch(`${BASE_URL}/api/AllocateList`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+                body: JSON.stringify({
+                    operateUserCode,
+                    operateUserName,
+                    operateWareHouseCode,
+                    operateRandomNumber,
+                    operateSign,
+                    operateVersion,
+                    factoryCode: gs_factoryCode,
+                    wareHouseCode: gs_wareCode,
+                    FromWareHouse: gs_wareCode,
+                    allocateCode: code,
+                })
+            });
+
+            if (response.ok) {
+                const result = await response.json();
+                console.log("AllocateList", result);
+                if (result.message === "success" && result.data) {
+                    const newRows = result.data.map((item: any) => ({
+                        palletCode: item.palletCode || "—",
+                        boxCode: item.boxCode || "—",
+                        sn: item.sn || "—",
+                        model: item.model || "",
+                        color: item.color || "",
+                        boxQty: item.boxQty !== undefined ? item.boxQty.toString() : "",
+                    }));
+                    setTableData(newRows);
+                    if (result.data.length > 0 && result.data[0].totalQty !== undefined) {
+                        setTotalQty(result.data[0].totalQty.toString());
+                    }
+                }
+            }
+        } catch (error) {
+            console.error("Error fetching AllocateList:", error);
+        }
+    }, [token, BASE_URL, operateUserCode, operateUserName, operateWareHouseCode, operateRandomNumber, operateSign, operateVersion, gs_factoryCode, gs_wareCode]);
+
     useEffect(() => {
         if (token) {
             fetchAllocateCheck();
+            if (allocateCode) {
+                fetchAllocateList(allocateCode);
+            }
         }
-    }, [token, fetchAllocateCheck]);
+    }, [token, allocateCode, fetchAllocateCheck]);
 
 
     useEffect(() => {
@@ -157,38 +266,48 @@ export default function AllocateFrm({ navigation, route }: any) {
             }
 
             const result = await response.json();
+            if (result.code === 500) {
+                Alert.alert("Error", result.message);
+                navigation.goBack();
+                return;
+            }
             console.log("allocateout", result);
-            if (result.message === 'success' && result.data) {
+            if (result.message === "success" && result.data) {
                 const dataList = result.data;
                 if (dataList.length > 0) {
-                    setTotalQty(dataList[0].totalQty?.toString() || "");
-                    const isfinish = dataList[0].isfinish?.toString();
+                    if (dataList[0].isok === "1") {
+                        setScanState("success");
+                        const isfinish = dataList[0].isfinish?.toString();
 
-                    const newRows = dataList.map((item: any) => ({
-                        boxCode: item.boxCode,
-                        model: item.model,
-                        color: item.color,
-                        boxQty: item.boxQty?.toString(),
-                    }));
+                        if (allocateCode) {
+                            fetchAllocateList(allocateCode);
+                        }
 
-                    setTableData(prev => [...newRows, ...prev]);
-
-                    if (isfinish === "1") {
-                        Alert.alert("Success", "The allocation of documents has been completed a warehouse!");
+                        if (isfinish === "1") {
+                            Alert.alert(
+                                "Message",
+                                "The allocation of documents has been completed a warehouse!"
+                            );
+                        } else {
+                            Alert.alert("Message", dataList[0].retstr);
+                        }
                     } else {
-                        Alert.alert("Error", dataList[0].retstr);
+                        setScanState("error");
+                        Alert.alert("Error", dataList[0].retstr || "Unknown error");
                     }
                 }
             } else {
+                setScanState("error");
                 Alert.alert("Error", result.message || "Failed to insert data");
             }
         } catch (_) {
+            setScanState("error");
             Alert.alert("Error", "Network error during insertion");
         } finally {
-            setBarcode("");
+            // setBarcode("");
             inputRef.current?.focus();
         }
-    }, [BASE_URL, gs_factoryCode, gs_wareCode, gs_wareType, allocateCode, gs_classCode, gs_groupCode, gs_workdate, gs_userCode, token]);
+    }, [BASE_URL, gs_factoryCode, gs_wareCode, gs_wareType, allocateCode, gs_classCode, gs_groupCode, gs_workdate, gs_userCode, token, fetchAllocateList]);
 
     useEffect(() => {
         const sub = DeviceEventEmitter.addListener(
@@ -215,17 +334,20 @@ export default function AllocateFrm({ navigation, route }: any) {
             const typeResponse = await fetch(`${BASE_URL}/api/BarcodeType`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, },
-                body: JSON.stringify({ 
+                body: JSON.stringify({
                     operateUserCode, operateUserName, operateWareHouseCode, operateRandomNumber, operateSign, operateVersion,
-                    factoryCode: gs_factoryCode, scanCode: sn }),
+                    factoryCode: gs_factoryCode, scanCode: sn
+                }),
             });
 
             if (typeResponse.status === 401) {
+                setScanState("error");
                 Alert.alert("Unauthorized", "Token expired or invalid.");
                 return;
             }
 
             if (typeResponse.status === 403) {
+                setScanState("error");
                 Alert.alert("Access Denied", "You do not have permission.");
                 return;
             }
@@ -234,26 +356,24 @@ export default function AllocateFrm({ navigation, route }: any) {
             let scanType = typeResult.message === 'success' && typeResult.data.scanType ? typeResult.data.scanType : "";
             console.log("barcodetype", scanType);
             //change it after
-            if (!scanType) {
+            /*(!scanType) {
                 scanType = "sn";
-                /*Alert.alert("Error", "Unknown barcode type");
-                setBarcode("");
-                inputRef.current?.focus();
-                return;*/
-            }
+            }*/
 
             // 2. Confirmation if needed
             if (scanType === "pallet" || scanType === "box") {
+                setScanState("success");
                 navigation.navigate("AllocateSNConfirmBox", {
                     fromWareHouseCode: gs_wareCode,
                     barCode: sn,
                     scanType: scanType
                 });
-                setBarcode("");
+                //setBarcode("");
                 return;
             }
 
             if (scanType === "sn") {
+                setScanState("success");
                 navigation.navigate("AllocateSNConfirm", {
                     fromWareHouseCode: gs_wareCode,
                     palletCode: "",
@@ -262,12 +382,13 @@ export default function AllocateFrm({ navigation, route }: any) {
                     scanType: scanType,
                     showConfirm: true
                 });
-                setBarcode("");
+                //setBarcode("");
                 return;
             }
 
             await processInsert(sn, scanType);
         } catch (_) {
+            setScanState("error");
             Alert.alert("Error", "Failed to process barcode");
         } finally {
             setLoading(false);
@@ -275,11 +396,16 @@ export default function AllocateFrm({ navigation, route }: any) {
     };
 
     const handleBarcodeChange = (text: string) => {
+        if (text.trim() === "") {
+            setScanState("waiting");
+        } else {
+            setScanState("scanning");
+        }
         // Some scanners append a newline or carriage return instead of triggering onSubmitEditing
         if (text.endsWith('\n') || text.endsWith('\r')) {
             handleBarcodeSubmit(text.trim());
         } else {
-            setBarcode(text);
+            setBarcode("");
         }
     };
 
@@ -289,15 +415,39 @@ export default function AllocateFrm({ navigation, route }: any) {
             handleBarcodeSubmit();
         }
     };
+    const viewDetails = () => {
+
+        navigation.navigate('AllocateSNBox', { allocateCode });
+    };
 
 
+    const columns = [
+        { label: "Pallet", width: 120 },
+        { label: "Box ", width: 120 },
+        { label: "SN ", width: 120 },
+        { label: "Model", width: 110 },
+        { label: "Color", width: 90 },
+        { label: "Qty", width: 60 },
+    ];
+
+    const totalTableWidth = columns.reduce((acc, col) => acc + col.width, 0);
 
     const renderItem = useCallback(({ item, index }: { item: RowType; index: number }) => (
-        <View key={index} style={styles.tableRow}>
-            <Text style={[styles.cell, styles.width120]}>{item.boxCode}</Text>
-            <Text style={[styles.cell, styles.width120]}>{item.model}</Text>
-            <Text style={[styles.cell, styles.width100]}>{item.color}</Text>
-            <Text style={[styles.cell, styles.width60]}>{item.boxQty}</Text>
+        <View
+            key={index}
+            style={[
+                styles.tableRow,
+                index % 2 === 0
+                    ? { backgroundColor: "#FFFFFF" }
+                    : { backgroundColor: "#BAE6FD" }
+            ]}
+        >
+            <Text style={[styles.cell, { width: columns[0].width }]}>{item.palletCode}</Text>
+            <Text style={[styles.cell, { width: columns[1].width }]}>{item.boxCode}</Text>
+            <Text style={[styles.cell, { width: columns[2].width }]}>{item.sn}</Text>
+            <Text style={[styles.cell, { width: columns[3].width }]}>{item.model}</Text>
+            <Text style={[styles.cell, { width: columns[4].width }]}>{item.color}</Text>
+            <Text style={[styles.cell, { width: columns[5].width }]}>{item.boxQty}</Text>
         </View>
     ), []);
 
@@ -317,7 +467,7 @@ export default function AllocateFrm({ navigation, route }: any) {
                             resizeMode="contain"
                         />
                     </TouchableOpacity>
-                    <Text style={styles.headerTitle}>Allocate Scanning</Text>
+                    <Text style={styles.headerTitle}>Allocate out Scanning</Text>
                 </View>
                 <View style={styles.headerRight}>
                     <Text style={styles.userNameText}>{gs_userName}</Text>
@@ -339,36 +489,45 @@ export default function AllocateFrm({ navigation, route }: any) {
                     </View>
 
                     <View style={styles.inputGroup}>
-                        <TextInput
-                            ref={inputRef}
-                            style={styles.input}
-                            value={barcode}
-                            onChangeText={handleBarcodeChange}
-                            onSubmitEditing={(e) => handleBarcodeSubmit(e.nativeEvent.text)}
-                            onKeyPress={handleKeyPress}
-                            placeholder=" Barcode"
-                            placeholderTextColor="#334155"
+                        <AnimatedView style={{
+                            borderRadius: 10,
+                            borderWidth: animatedBorderWidth,
+                            borderColor: animatedBorderColor,
+                            backgroundColor: "#e2f0eeff",
+                            elevation: 2,
+                        }}>
+                            <TextInput
+                                ref={inputRef}
+                                style={[styles.input, { borderWidth: 0, elevation: 0 }]}
+                                value={barcode}
+                                onChangeText={handleBarcodeChange}
+                                onSubmitEditing={(e) => handleBarcodeSubmit(e.nativeEvent.text)}
+                                onKeyPress={handleKeyPress}
+                                placeholder=" Barcode"
+                                placeholderTextColor="#334155"
 
-                            autoFocus={true}
-                            showSoftInputOnFocus={showKeyboard}
-                            blurOnSubmit={false}
-                            onBlur={ensureFocus}
-                        />
+                                autoFocus={true}
+                                showSoftInputOnFocus={showKeyboard}
+                                blurOnSubmit={false}
+                                onBlur={ensureFocus}
+                            />
+                        </AnimatedView>
                     </View>
                 </View>
 
                 <View style={styles.tableCard}>
                     <ScrollView horizontal showsHorizontalScrollIndicator={true}>
-                        <View>
+                        <View style={{ width: totalTableWidth }}>
                             <View style={styles.tableHeader}>
-                                <Text style={[styles.headerCell, styles.width120]}>Box Code</Text>
-                                <Text style={[styles.headerCell, styles.width120]}>Model</Text>
-                                <Text style={[styles.headerCell, styles.width100]}>Color</Text>
-                                <Text style={[styles.headerCell, styles.width60]}>Qty</Text>
+                                {columns.map((col) => (
+                                    <Text key={col.label} style={[styles.headerCell, { width: col.width }]}>
+                                        {col.label}
+                                    </Text>
+                                ))}
                             </View>
                             <ScrollView style={styles.flex1}>
                                 {tableData.length === 0 ? (
-                                    <Text style={styles.emptyTextWithWidth}>No items scanned yet</Text>
+                                    <Text style={[styles.emptyTextWithWidth, { width: totalTableWidth }]}>No items scanned yet</Text>
                                 ) : (
                                     tableData.map((row, index) => (
                                         <React.Fragment key={row.boxCode + "_" + index}>
@@ -384,7 +543,7 @@ export default function AllocateFrm({ navigation, route }: any) {
                 <View style={styles.actions}>
                     <TouchableOpacity
                         style={styles.actionButton}
-                        onPress={() => navigation.navigate('AllocateSNBox', { allocateCode })}
+                        onPress={viewDetails}
                     >
                         <Text style={styles.actionButtonText}>Barcode Details</Text>
                     </TouchableOpacity>
@@ -398,6 +557,7 @@ export default function AllocateFrm({ navigation, route }: any) {
             )}
         </SafeAreaView>
     );
+
 }
 
 const { width } = Dimensions.get("window");
@@ -443,11 +603,11 @@ const styles = StyleSheet.create({
     container: { flex: 1, padding: 10 },
     card: { backgroundColor: "#FFF", borderRadius: 16, padding: 10, marginBottom: 8, elevation: 2, borderWidth: 1, borderColor: "#0052cc" },
     inputGroup: { marginBottom: 1 },
-    label: { fontSize: 11, fontWeight: "700", color: "#64748B", marginBottom: 4, textTransform: "uppercase" },
-    input: { backgroundColor: "#e2f0eeff", padding: 3, borderRadius: 10, fontSize: 12, color: "#334155", borderWidth: 1, borderColor: "#0052cc", height: 32 },
+    label: { fontSize: 13, fontWeight: "700", color: "#64748B", marginBottom: 4, textTransform: "uppercase" },
+    input: { backgroundColor: "#e2f0eeff", padding: 3, borderRadius: 10, fontWeight: 600, fontSize: 15, color: "#334155", borderWidth: 1, borderColor: "#0052cc", height: 35 },
     disabledInput: { backgroundColor: "#0052cc", color: "#64748B" },
     tableHeader: { flexDirection: "row", backgroundColor: "#0052cc", paddingVertical: 10 },
-    headerCell: { fontSize: 10, fontWeight: "800", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
+    headerCell: { fontSize: 11, fontWeight: "800", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
     tableRow: { flexDirection: "row", paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: "#F1F5F9" },
     cell: { fontSize: 11, color: "#334155", textAlign: "center", fontWeight: "600" },
     emptyText: { textAlign: "center", color: "#94A3B8", marginTop: 40, fontStyle: "italic" },
@@ -469,9 +629,12 @@ const styles = StyleSheet.create({
         zIndex: 1000,
     },
     mb8: { marginBottom: 8 },
-    inputRow: { backgroundColor: '#0052cc', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 4, marginBottom: 4, borderRadius: 10, borderWidth: 1, borderColor: "#CBD5E1" },
-    labelNoMargin: { fontSize: 11, fontWeight: "700", color: "#FFFFFF", marginBottom: 0, textTransform: "uppercase" },
-    valueText: { fontSize: 12, color: "#FFFFFF", fontWeight: "700" },
+    inputRow: {
+        backgroundColor: '#0052cc', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12,
+        paddingVertical: 4, marginBottom: 4, borderRadius: 10, borderWidth: 1, borderColor: "#CBD5E1", height: 35
+    },
+    labelNoMargin: { fontSize: 13, fontWeight: "700", color: "#FFFFFF", marginBottom: 0, textTransform: "uppercase" },
+    valueText: { fontSize: 13, color: "#FFFFFF", fontWeight: "700" },
     tableCard: { flex: 1, backgroundColor: "#FFF", borderRadius: 16, overflow: "hidden", elevation: 2, borderWidth: 1, borderColor: "#0052cc", marginBottom: 12 },
     width120: { width: 120 },
     width100: { width: 100 },

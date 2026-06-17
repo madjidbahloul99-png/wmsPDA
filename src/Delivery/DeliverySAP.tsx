@@ -13,8 +13,8 @@ import {
   Alert,
   Image,
   Dimensions,
+  DeviceEventEmitter
 } from "react-native";
-import { useFocusEffect } from '@react-navigation/native';
 import { useGlobal } from "../../GlobalContext.tsx";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
@@ -33,13 +33,13 @@ interface DeliveryItem {
 
 export default function DeliverySAP({ navigation, route }: any) {
   const global = useGlobal();
-  const { gsURL, gs_factoryCode, gs_wareCode, gs_userCode, gs_userName ,
+  const { gsURL, gs_factoryCode, gs_wareCode, gs_userCode, gs_userName,
     operateUserCode, operateUserName, operateWareHouseCode, operateRandomNumber, operateSign, operateVersion,
   } = global;
   const BASE_URL = gsURL;
   const [token, setToken] = useState("");
 
-
+  const [BonNo, setBonNo] = useState("");
   const [depotNo, setDepotNo] = useState("");
   const [modelInput, setModelInput] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
@@ -50,6 +50,7 @@ export default function DeliverySAP({ navigation, route }: any) {
 
   // Use ref for bonNo to prevent re-renders on every keystroke
   const bonNoRef = useRef("");
+  const scanTimer = useRef<any>(null);
   const [f_systemDeliveryCode, setFSystemDeliveryCode] = useState("");
   const [f_fromck, setFFromck] = useState("");
   const [f_tokh, setFTokh] = useState("");
@@ -116,7 +117,7 @@ export default function DeliverySAP({ navigation, route }: any) {
       const sapResult = await sapResponse.json();
       console.log("SAP API RESPONSE:", sapResult);
 
-      if (sapResult && sapResult.code !== 200 && sapResult.message) {
+      if (sapResult && sapResult.message) {
         setErrorMsg("SAP msg: " + sapResult.message);
       }
 
@@ -193,7 +194,7 @@ export default function DeliverySAP({ navigation, route }: any) {
       } else {
         setDepotNo("");
         setModelInput("");
-        depotRef.current?.focus();
+        //depotRef.current?.focus();
       }
     } catch (err: any) {
       setErrorMsg("Error: " + err.message);
@@ -204,62 +205,89 @@ export default function DeliverySAP({ navigation, route }: any) {
   };
 
 
-  useFocusEffect(
-    React.useCallback(() => {
+
+  const fetchDeliveryPlanRef = useRef(fetchDeliveryPlan);
+  useEffect(() => {
+
+    fetchDeliveryPlanRef.current = fetchDeliveryPlan;
+  }, [fetchDeliveryPlan]);
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      setTimeout(() => {
+        bonRef.current?.focus();
+      }, 100);
+    });
+    return unsubscribe;
+  }, [navigation]);
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
       if (f_systemDeliveryCode) {
         fetchDeliveryPlan(f_systemDeliveryCode);
+        setBonNo("");
+        bonNoRef.current = "";
       }
-    }, [f_systemDeliveryCode, token])
-  );
+    });
+
+    return unsubscribe;
+  }, [navigation, f_systemDeliveryCode]);
+
+  useEffect(() => {
+    const sub = DeviceEventEmitter.addListener(
+      "ON_DELIVERY_REFRESH",
+      () => {
+        console.log("Refreshing Delivery Plan on Event:", f_systemDeliveryCode);
+        if (token && f_systemDeliveryCode) {
+          fetchDeliveryPlanRef.current(f_systemDeliveryCode);
+        }
+      }
+    );
+    return () => sub.remove();
+  }, [token, f_systemDeliveryCode]);
 
   const handleBonChange = (text: string) => {
+    setBonNo(text);
     bonNoRef.current = text;
+    clearTimeout(scanTimer.current);
+
     if (text.includes('\n') || text.includes('\r')) {
       const sn = text.trim();
-      if (bonRef.current) {
-        bonRef.current.setNativeProps({ text: "" });
-      }
-      bonNoRef.current = "";
       if (sn.length > 0) {
         fetchDeliveryPlan(sn);
       }
+    } else {
+      scanTimer.current = setTimeout(() => {
+        const sn = text.trim();
+        if (sn.length > 0) {
+          fetchDeliveryPlan(sn);
+        }
+      }, 300);
     }
   };
 
   const handleBonSubmit = () => {
+    clearTimeout(scanTimer.current);
     const sn = bonNoRef.current.trim();
+    setBonNo(sn);
     if (sn.length > 0) {
-      if (bonRef.current) {
-        bonRef.current.setNativeProps({ text: "" });
-      }
-      bonNoRef.current = "";
+      setBonNo(sn);
       fetchDeliveryPlan(sn);
     }
   };
 
   const handleChoice = () => {
-    let selectedItem;
 
-    if (selectedIndex !== null && items[selectedIndex]) {
-      selectedItem = items[selectedIndex];
+    if (selectedIndex === null || !items[selectedIndex]) {
+      Alert.alert("Warning", "Please select an item first");
+      return;
     }
 
-    if (selectedItem) {
-      const deliveryCode = selectedItem.deliveryCode;
+    const selectedItem = items[selectedIndex];
 
-      // Ouvrir le modal pour l'écran DeliveryFrm (équivalent à ShowDialog)
-      navigation.navigate('DeliveryFrm', {
-        deliveryCode,
-        onClose: () => {
-          // Rafraîchir la liste après fermeture du modal
-          fetchDeliveryPlan(f_systemDeliveryCode);
-        },
-      });
-    } else {
-      setErrorMsg("Please select an item first");
-    }
-
-
+    navigation.navigate('DeliveryFrm', {
+      deliveryCode: selectedItem.deliveryCode,
+    });
   };
 
   const renderItem = React.useCallback(({ item, index }: { item: DeliveryItem; index: number }) => {
@@ -273,18 +301,22 @@ export default function DeliverySAP({ navigation, route }: any) {
     return (
       <TouchableOpacity
         key={index}
-        style={[styles.tableRow, isSelected && styles.selectedRow]}
+        style={[
+          styles.tableRow,
+          { backgroundColor: index % 2 === 0 ? "#FFFFFF" : "#BAE6FD" },
+          isSelected && styles.selectedRow
+        ]}
         onPress={() => setSelectedIndex(index)}
       >
         <Text style={[styles.cell, { color: textColor, width: 120 }]}>{item.bonNo}</Text>
         <Text style={[styles.cell, { color: textColor, width: 120 }]}>{item.model}</Text>
-        <Text style={[styles.cell, { color: textColor, width: 100 }]}>{item.color}</Text>
+        <Text style={[styles.cell, { color: textColor, width: 180 }]}>{item.color}</Text>
         <Text style={[styles.cell, { color: textColor, width: 60 }]}>{item.qty}</Text>
         <Text style={[styles.cell, { color: textColor, width: 60 }]}>{item.finishQty}</Text>
         <Text style={[styles.cell, { color: textColor, width: 60 }]}>{item.difference}</Text>
         <Text style={[styles.cell, { color: textColor, width: 100 }]}>{item.from}</Text>
         <Text style={[styles.cell, { color: textColor, width: 100 }]}>{item.to}</Text>
-        <Text style={[styles.cell, { color: textColor, width: 200 }]}>{item.deliveryCode}</Text>
+        <Text style={[styles.cell, { color: textColor, width: 250 }]}>{item.deliveryCode}</Text>
       </TouchableOpacity>
     );
   }, [selectedIndex]);
@@ -301,7 +333,7 @@ export default function DeliverySAP({ navigation, route }: any) {
               resizeMode="contain"
             />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Warehouse Delivery Scann</Text>
+          <Text style={styles.headerTitle}> Delivery Scann</Text>
         </View>
 
         <View style={styles.headerRight}>
@@ -317,7 +349,7 @@ export default function DeliverySAP({ navigation, route }: any) {
             <TextInput
               ref={bonRef}
               style={styles.input}
-              defaultValue=""
+              value={BonNo}
               onChangeText={handleBonChange}
               onSubmitEditing={handleBonSubmit}
               placeholder=" BON NO"
@@ -349,14 +381,14 @@ export default function DeliverySAP({ navigation, route }: any) {
               <View style={styles.tableHeader}>
                 <Text style={[styles.headerCell, { width: 120 }]}>BON NO</Text>
                 <Text style={[styles.headerCell, { width: 120 }]}>Model</Text>
-                <Text style={[styles.headerCell, { width: 100 }]}>Color</Text>
+                <Text style={[styles.headerCell, { width: 180 }]}>Color</Text>
                 <Text style={[styles.headerCell, { width: 60 }]}>QTY</Text>
                 <Text style={[styles.headerCell, { width: 60 }]}>Finish</Text>
                 <Text style={[styles.headerCell, { width: 60 }]}>Diff</Text>
                 <Text style={[styles.headerCell, { width: 100 }]}>From</Text>
                 <Text style={[styles.headerCell, { width: 100 }]}>To</Text>
-                <Text style={[styles.headerCell, { width: 150 }]}>Delivery</Text>
-              </View>
+                <Text style={[styles.headerCell, { width: 250 }]}>Delivery</Text>
+              </View> 
               <FlatList
                 data={items}
                 renderItem={renderItem}
@@ -439,7 +471,7 @@ const styles = StyleSheet.create({
   input1: { backgroundColor: "#0052cc", height: 40, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 0, fontSize: 14, color: "#FFFFFF", fontWeight: "600", borderWidth: 1, borderColor: "#CBD5E1" },
   tableCard: { flex: 1, backgroundColor: "#FFF", borderRadius: 16, overflow: "hidden", elevation: 2, borderWidth: 1, borderColor: "#0052cc", marginBottom: 8 },
   tableHeader: { flexDirection: "row", backgroundColor: "#0052cc", paddingVertical: 10 },
-  headerCell: { fontSize: 10, fontWeight: "800", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
+  headerCell: { fontSize: 11, fontWeight: "800", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
   tableRow: { flexDirection: "row", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#F1F5F9", alignItems: "center" },
   cell: { fontSize: 11, color: "#334155", textAlign: "center", fontWeight: "600" },
   emptyText: { textAlign: "center", padding: 40, color: "#94A3B8", fontStyle: "italic", width: 830 },
@@ -447,7 +479,7 @@ const styles = StyleSheet.create({
   detailButton: { height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0052cc' },
   detailButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
   errorText: { color: "#EF4444", fontSize: 12, marginBottom: 8, fontWeight: "700" },
-  selectedRow: { backgroundColor: "#E0E7FF" },
+  selectedRow: { backgroundColor: "#ffc3c3ff" },
   returnLogoWrapper: { padding: 4 },
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,

@@ -27,6 +27,35 @@ interface PalletSNBoxDetail {
     color: string;
 }
 
+const BoxRow = React.memo(({ 
+    item, 
+    index, 
+    isSelected, 
+    onPress 
+}: { 
+    item: PalletSNBoxDetail; 
+    index: number; 
+    isSelected: boolean; 
+    onPress: (index: number) => void;
+}) => (
+    <TouchableOpacity
+        style={[
+            styles.row,
+            index % 2 === 0 ? { backgroundColor: "#FFFFFF" } : { backgroundColor: "#BAE6FD" },
+            isSelected && styles.selectedRow
+        ]}
+        onPress={() => onPress(index)}
+        activeOpacity={0.7}
+    >
+        <Text style={[styles.cell, { width: 60 }]}>{item.fxh}</Text>
+        <Text style={[styles.cell, { width: 150 }]}>{item.palletCode}</Text>
+        <Text style={[styles.cell, { width: 150 }]}>{item.boxCode}</Text>
+        <Text style={[styles.cell, { width: 60 }]}>{item.qty}</Text>
+        <Text style={[styles.cell, { width: 120 }]}>{item.model}</Text>
+        <Text style={[styles.cell, { width: 100 }]}>{item.color}</Text>
+    </TouchableOpacity>
+));
+
 export default function AllocateInSNBox({ navigation, route }: any) {
     const { allocateCode } = route.params || {};
     const global = useGlobal();
@@ -82,7 +111,7 @@ export default function AllocateInSNBox({ navigation, route }: any) {
             }
             console.log("resultat de snbox", result);
             console.log("resultat de allocateCode", allocateCode);
-            if (result.message === 'success' && result.data) {
+            if (result.message === 'success' && result.data && result.data.length > 0) {
                 let sum = 0;
                 const mapped = result.data.map((item: any, index: number) => {
                     sum += parseInt(item.qty || "0");
@@ -117,22 +146,18 @@ export default function AllocateInSNBox({ navigation, route }: any) {
         }
     }, [token, fetchDetails]);
 
-    const renderItem = ({ item, index }: { item: PalletSNBoxDetail; index: number }) => {
-        const isSelected = selectedIndex === index;
-        return (
-            <TouchableOpacity
-                style={[styles.row, isSelected && styles.selectedRow]}
-                onPress={() => setSelectedIndex(index)}
-            >
-                <Text style={[styles.cell, { width: 60 }]}>{item.fxh}</Text>
-                <Text style={[styles.cell, { width: 150 }]}>{item.palletCode}</Text>
-                <Text style={[styles.cell, { width: 150 }]}>{item.boxCode}</Text>
-                <Text style={[styles.cell, { width: 60 }]}>{item.qty}</Text>
-                <Text style={[styles.cell, { width: 120 }]}>{item.model}</Text>
-                <Text style={[styles.cell, { width: 100 }]}>{item.color}</Text>
-            </TouchableOpacity>
-        );
-    };
+    const handleSelectRow = useCallback((index: number) => {
+        setSelectedIndex(index);
+    }, []);
+
+    const renderItem = useCallback(({ item, index }: { item: PalletSNBoxDetail; index: number }) => (
+        <BoxRow
+            item={item}
+            index={index}
+            isSelected={selectedIndex === index}
+            onPress={handleSelectRow}
+        />
+    ), [selectedIndex, handleSelectRow]);
 
     const handleBarcodeDetails = () => {
         if (selectedIndex !== null && details[selectedIndex]) {
@@ -187,7 +212,7 @@ export default function AllocateInSNBox({ navigation, route }: any) {
                 <ScrollView horizontal showsHorizontalScrollIndicator={true}>
                     <View>
                         <View style={styles.tableHeader}>
-                            <Text style={[styles.headerCell, { width: 60 }]}>FXH</Text>
+                            <Text style={[styles.headerCell, { width: 60 }]}>No</Text>
                             <Text style={[styles.headerCell, { width: 150 }]}>Pallet</Text>
                             <Text style={[styles.headerCell, { width: 150 }]}>Box</Text>
                             <Text style={[styles.headerCell, { width: 60 }]}>Qty</Text>
@@ -202,7 +227,12 @@ export default function AllocateInSNBox({ navigation, route }: any) {
                                 data={details}
                                 renderItem={renderItem}
                                 keyExtractor={(item) => item.id}
+                                extraData={selectedIndex}
                                 contentContainerStyle={{ paddingBottom: 20 }}
+                                removeClippedSubviews={true}
+                                maxToRenderPerBatch={10}
+                                windowSize={5}
+                                initialNumToRender={10}
                             />
                         )}
                     </View>
@@ -265,20 +295,20 @@ const styles = StyleSheet.create({
         justifyContent: "space-between",
         alignItems: "center",
         backgroundColor: "#0052cc",
-        paddingHorizontal: 16,
-        paddingVertical: 12,
+        paddingHorizontal: 12,
+        paddingVertical: 6,
         borderRadius: 12,
         elevation: 2,
         borderWidth: 1,
         borderColor: "#E2E8F0"
     },
-    statLabel: { color: "#FFFFFF", fontSize: 11, fontWeight: "700", textTransform: "uppercase" },
-    statValue: { color: "#FFFFFF", fontSize: 12, fontWeight: "800" },
+    statLabel: { color: "#FFFFFF", fontSize: 13, fontWeight: "700", textTransform: "uppercase" },
+    statValue: { color: "#FFFFFF", fontSize: 13, fontWeight: "800" },
     tableHeader: { flexDirection: "row", backgroundColor: "#0052cc", paddingVertical: 10, borderRadius: 10, marginBottom: 8 },
-    headerCell: { fontSize: 10, fontWeight: "900", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
-    row: { flexDirection: "row", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#F1F5F9", backgroundColor: "#FFF", borderRadius: 8, marginBottom: 4 },
-    cell: { fontSize: 11, color: "#334155", textAlign: "center", fontWeight: "600" },
-    selectedRow: { backgroundColor: "#E0E7FF" },
+    headerCell: { fontSize: 11, fontWeight: "900", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
+    row: { flexDirection: "row", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#F1F5F9", borderRadius: 8, marginBottom: 4 },
+    cell: { fontSize: 12, color: "#334155", textAlign: "center", fontWeight: "600" },
+    selectedRow: { backgroundColor: "#ffc3c3ff" },
     footer: { flexDirection: "row", gap: 12, marginTop: 16 },
     detailButton: { flex: 1, backgroundColor: "#4F46E5", padding: 8, borderRadius: 12, alignItems: "center" },
     detailButtonText: { color: "#FFF", fontWeight: "900", fontSize: 15 },

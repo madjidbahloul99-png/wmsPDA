@@ -168,17 +168,24 @@ export default function AllocateRejectInSNConfirm({ navigation, route }: any) {
         navigation.goBack();
     };
 
-    const renderItem = ({ item }: { item: SNDetail }) => (
-        <View style={styles.tableRow}>
-            <Text style={[styles.cell, { width: 50 }]}>{item.fxh}</Text>
+    const renderItem = ({ item, index }: { item: SNDetail, index: number }) => (
+        <View
+            style={[
+                styles.tableRow,
+                index % 2 === 0
+                    ? { backgroundColor: "#FFFFFF" }
+                    : { backgroundColor: "#BAE6FD" }
+            ]}
+        >
+            <Text style={[styles.cell, { width: 40 }]}>{item.fxh}</Text>
             <Text style={[styles.cell, { width: 150 }]}>{item.sn}</Text>
             <Text style={[styles.cell, { width: 150 }]}>{item.imei1}</Text>
             <Text style={[styles.cell, { width: 150 }]}>{item.imei2}</Text>
             <Text style={[styles.cell, { width: 150 }]}>{item.imei3}</Text>
             <Text style={[styles.cell, { width: 120 }]}>{item.model}</Text>
             <Text style={[styles.cell, { width: 100 }]}>{item.color}</Text>
-            <Text style={[styles.cell, { width: 120 }]}>{item.date}</Text>
-            <Text style={[styles.cell, { width: 120 }]}>{item.orderCode}</Text>
+            <Text style={[styles.cell, { width: 150 }]}>{item.date}</Text>
+            <Text style={[styles.cell, { width: 150 }]}>{item.orderCode}</Text>
         </View>
     );
 
@@ -229,19 +236,19 @@ export default function AllocateRejectInSNConfirm({ navigation, route }: any) {
                     ) : (
                         <FlatList
                             data={details}
-                            renderItem={renderItem}
+                            renderItem={({ item, index }) => renderItem({ item, index })}
                             keyExtractor={(item) => item.id}
                             ListHeaderComponent={
                                 <View style={styles.tableHeader}>
-                                    <Text style={[styles.headerCell, { width: 50 }]}>FXH</Text>
+                                    <Text style={[styles.headerCell, { width: 40 }]}>No</Text>
                                     <Text style={[styles.headerCell, { width: 150 }]}>SN</Text>
                                     <Text style={[styles.headerCell, { width: 150 }]}>IMEI1</Text>
                                     <Text style={[styles.headerCell, { width: 150 }]}>IMEI2</Text>
                                     <Text style={[styles.headerCell, { width: 150 }]}>IMEI3</Text>
                                     <Text style={[styles.headerCell, { width: 120 }]}>Model</Text>
                                     <Text style={[styles.headerCell, { width: 100 }]}>Color</Text>
-                                    <Text style={[styles.headerCell, { width: 120 }]}>Date</Text>
-                                    <Text style={[styles.headerCell, { width: 120 }]}>Order</Text>
+                                    <Text style={[styles.headerCell, { width: 150 }]}>Date</Text>
+                                    <Text style={[styles.headerCell, { width: 150 }]}>Order</Text>
                                 </View>
                             }
                             stickyHeaderIndices={[0]}
@@ -331,15 +338,15 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: "#E2E8F0"
     },
-    statLabel: { color: "#FFFFFF", fontSize: 11, fontWeight: "700", textTransform: "uppercase" },
-    statValue: { color: "#FFFFFF", fontSize: 12, fontWeight: "800" },
+    statLabel: { color: "#FFFFFF", fontSize: 13, fontWeight: "700", textTransform: "uppercase" },
+    statValue: { color: "#FFFFFF", fontSize: 13, fontWeight: "800" },
     statInput: { flex: 1, textAlign: 'right', color: "#1E293B", fontSize: 12, fontWeight: "800", padding: 0, height: 24 },
     tagCard: { backgroundColor: "#E0E7FF", marginHorizontal: 16, padding: 10, borderRadius: 10, flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
     tagLabel: { color: "#4338CA", fontSize: 11, fontWeight: "700", marginRight: 6 },
     tagValue: { color: "#1E293B", fontSize: 11, fontWeight: "800" },
     tableCard: { flex: 1, backgroundColor: "#FFF", marginHorizontal: 16, borderRadius: 16, overflow: "hidden", elevation: 2, borderWidth: 1, borderColor: "#E2E8F0", marginBottom: -4 },
     tableHeader: { flexDirection: "row", backgroundColor: "#0052cc", paddingVertical: 10 },
-    headerCell: { fontSize: 10, fontWeight: "800", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
+    headerCell: { fontSize: 12, fontWeight: "800", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
     tableRow: { flexDirection: "row", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#F1F5F9", alignItems: "center" },
     cell: { fontSize: 11, color: "#334155", textAlign: "center", fontWeight: "600" },
     cellMain: { fontSize: 11, color: "#1E293B", fontWeight: "700", textAlign: "center" },
@@ -348,7 +355,6 @@ const styles = StyleSheet.create({
     buttonRow: { flexDirection: 'row', gap: 12 },
     actionBtn: { flex: 1, height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
     btnPrimary: { backgroundColor: '#2563eb' },
-    btnSecondary: { backgroundColor: '#f1f5f9', borderWidth: 1, borderColor: '#e2e8f0' },
     btnTextPrimary: { color: '#fff', fontSize: 15, fontWeight: '800' },
-    btnTextSecondary: { color: '#475569', fontSize: 15, fontWeight: '700' },
+    
 });

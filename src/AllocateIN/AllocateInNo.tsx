@@ -17,7 +17,7 @@ import { useGlobal } from "../../GlobalContext.tsx";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 interface AllocateInItem {
-    systemAllocateCode: string;
+    systemAllocateCode: string;   
     model: string;
     color: string;
     qty: number;
@@ -81,7 +81,7 @@ export default function AllocateInNO({ navigation }: any) {
             });
 
             if (response.status === 401) {
-                Alert.alert("Unauthorized", "Token expired or invalid.");
+                Alert.alert("Unauthorized", "Token expired or invalid."); 
                 return;
             }
 
@@ -99,6 +99,7 @@ export default function AllocateInNO({ navigation }: any) {
             }
             const newItems: AllocateInItem[] = [];
             let tock = "";
+             console.log("result  AllocateIN", result);
 
             if (result && result.message === 'success' && result.data) {
                 result.data.forEach((row: any) => {
@@ -160,13 +161,13 @@ export default function AllocateInNO({ navigation }: any) {
             if (text.trim().length > 0) {
                 handleSnSubmit(text.trim());
             }
-        }, 300);
+        }, 200);
     };
 
     const handleSnSubmit = (text?: string) => {
         const code = (text || sn).trim().toUpperCase();
         if (code.length > 0) {
-            setSn("");
+            //setSn("");
             if (scanTimer.current) clearTimeout(scanTimer.current);
             fetchAllocateInModelList(code);
         }
@@ -179,12 +180,15 @@ export default function AllocateInNO({ navigation }: any) {
     };
 
     const handleChoice = () => {
-        if (selectedIndex !== null && items[selectedIndex]) {
-            const allocateCode = items[selectedIndex].allocateCode;
-            navigation.navigate('AllocateInFrm', { allocateCode });
-        } else {
+        if (selectedIndex === null || !items[selectedIndex]) {
             setErrorMsg("Please select an item first");
+            return;
         }
+
+        const selectedItem = items[selectedIndex];
+
+        const allocateCode = selectedItem.allocateCode;
+        navigation.navigate('AllocateInFrm', { allocateCode });
     };
 
     const renderItem = ({ item, index }: { item: AllocateInItem; index: number }) => {
@@ -197,19 +201,23 @@ export default function AllocateInNO({ navigation }: any) {
         return (
             <TouchableOpacity
                 key={item.allocateCode + "_" + index}
-                style={[styles.tableRow, isSelected && styles.selectedRow]}
+                style={[
+                    styles.tableRow,
+                    index % 2 === 0 ? { backgroundColor: "#FFFFFF" } : { backgroundColor: "#BAE6FD" },
+                    isSelected && styles.selectedRow
+                ]}
                 onPress={() => setSelectedIndex(index)}
             >
                 <Text style={[styles.cell, { color: textColor, width: 120 }]}>{item.systemAllocateCode}</Text>
                 <Text style={[styles.cell, { color: textColor, width: 120 }]}>{item.model}</Text>
-                <Text style={[styles.cell, { color: textColor, width: 100 }]}>{item.color}</Text>
+                <Text style={[styles.cell, { color: textColor, width: 150 }]}>{item.color}</Text>
                 <Text style={[styles.cell, { color: textColor, width: 60 }]}>{item.qty}</Text>
                 <Text style={[styles.cell, { color: textColor, width: 60 }]}>{item.outqty}</Text>
                 <Text style={[styles.cell, { color: textColor, width: 60 }]}>{item.inqty}</Text>
                 <Text style={[styles.cell, { color: textColor, width: 60 }]}>{item.cyqty}</Text>
                 <Text style={[styles.cell, { color: textColor, width: 100 }]}>{item.fromWareHouse}</Text>
-                <Text style={[styles.cell, { color: textColor, width: 100 }]}>{item.toWareHouse}</Text>
-                <Text style={[styles.cell, { color: textColor, width: 200 }]}>{item.allocateCode}</Text>
+                <Text style={[styles.cell, { color: textColor, width: 150 }]}>{item.toWareHouse}</Text>
+                <Text style={[styles.cell, { color: textColor, width: 240 }]}>{item.allocateCode}</Text>
             </TouchableOpacity>
         );
     };
@@ -231,7 +239,7 @@ export default function AllocateInNO({ navigation }: any) {
                             resizeMode="contain"
                         />
                     </TouchableOpacity>
-                    <Text style={styles.headerTitle}>AllocateIn NO Scann</Text>
+                    <Text style={styles.headerTitle}>AllocateIn Scann</Text>
                 </View>
 
                 <View style={styles.headerRight}>
@@ -248,7 +256,7 @@ export default function AllocateInNO({ navigation }: any) {
                     style={styles.input}
                     value={sn}
                     onChangeText={handleSnChange}
-                    onSubmitEditing={() => handleSnSubmit()}
+                    //onSubmitEditing={() => handleSnSubmit()}
                     onKeyPress={handleKeyPress}
                     placeholder="BON NO"
                     placeholderTextColor="#334155"
@@ -258,21 +266,20 @@ export default function AllocateInNO({ navigation }: any) {
                     onBlur={ensureFocus}
                 />
 
-
                 <View style={styles.tableCard}>
                     <ScrollView horizontal showsHorizontalScrollIndicator={true}>
                         <View>
                             <View style={styles.tableHeader}>
                                 <Text style={[styles.headerCell, { width: 120 }]}>BON NO</Text>
                                 <Text style={[styles.headerCell, { width: 120 }]}>Model</Text>
-                                <Text style={[styles.headerCell, { width: 100 }]}>Color</Text>
+                                <Text style={[styles.headerCell, { width: 150 }]}>Color</Text>
                                 <Text style={[styles.headerCell, { width: 60 }]}>QTY</Text>
                                 <Text style={[styles.headerCell, { width: 60 }]}>Out</Text>
                                 <Text style={[styles.headerCell, { width: 60 }]}>In</Text>
                                 <Text style={[styles.headerCell, { width: 60 }]}>Diff</Text>
                                 <Text style={[styles.headerCell, { width: 100 }]}>From</Text>
-                                <Text style={[styles.headerCell, { width: 100 }]}>To</Text>
-                                <Text style={[styles.headerCell, { width: 150 }]}>Allocate</Text>
+                                <Text style={[styles.headerCell, { width: 150 }]}>To</Text>
+                                <Text style={[styles.headerCell, { width: 240 }]}>Allocate</Text>
                             </View>
                             <ScrollView style={{ flex: 1 }}>
                                 {items.length === 0 ? (
@@ -355,12 +362,12 @@ const styles = StyleSheet.create({
     },
     tableHeader: { flexDirection: "row", backgroundColor: "#0052cc", paddingVertical: 10 },
     tableRow: { flexDirection: "row", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#F1F5F9", alignItems: "center" },
-    cell: { fontSize: 11, color: "#334155", textAlign: "center", fontWeight: "600" },
-    headerCell: { fontSize: 10, fontWeight: "800", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
+    cell: { fontSize: 12, color: "#334155", textAlign: "center", fontWeight: "600" },
+    headerCell: { fontSize: 12, fontWeight: "800", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
     emptyText: { textAlign: "center", padding: 40, color: "#94A3B8", fontStyle: "italic", width: 830 },
     actions: { borderTopWidth: 1, borderTopColor: '#e2e8f0', paddingTop: 2 },
     primaryButton: { height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0052cc' },
     primaryButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
     errorText: { color: "#EF4444", fontSize: 12, marginBottom: 8, fontWeight: "700" },
-    selectedRow: { backgroundColor: "#E0E7FF" },
+    selectedRow: { backgroundColor: "#ffc3c3ff" },
 });

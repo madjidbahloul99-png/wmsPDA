@@ -37,7 +37,7 @@ export default function PalletNotInBox({ navigation, route }: any) {
     const [loading, setLoading] = useState(true);
     const [boxes, setBoxes] = useState<BoxItem[]>([]);
     const [totalQty, setTotalQty] = useState(0);
-    const [selectedItem, setSelectedItem] = useState<BoxItem | null>(null);
+    const [selectedItemIndex, setSelectedItemIndex] = useState<number | null>(null);
 
     useEffect(() => {
         const loadToken = async () => {
@@ -113,12 +113,17 @@ export default function PalletNotInBox({ navigation, route }: any) {
         }
     }, [fetchBoxes, token]);
 
-    const renderItem = ({ item }: { item: BoxItem }) => {
-        const isSelected = selectedItem?.id === item.id;
+    const renderItem = ({ item, index }: { item: BoxItem, index: number }) => {
+        const isSelected = selectedItemIndex === index;
         return (
             <TouchableOpacity
-                style={[styles.tableRow, isSelected && styles.selectedRow]}
-                onPress={() => setSelectedItem(item)}
+                style={[
+                    styles.tableRow,
+                    { backgroundColor: index % 2 === 0 ? "#FFFFFF" : "#BAE6FD" },
+                    isSelected && styles.selectedRow
+                ]}
+                onPress={() => setSelectedItemIndex(index)}
+                activeOpacity={0.7}
             >
                 <Text style={[styles.cell, { width: 50 }]}>{item.fxh}</Text>
                 <Text style={[styles.cell, { width: 150 }]}>{item.boxCode}</Text>
@@ -164,7 +169,7 @@ export default function PalletNotInBox({ navigation, route }: any) {
                     <ScrollView horizontal showsHorizontalScrollIndicator={true}>
                         <View>
                             <View style={styles.tableHeader}>
-                                <Text style={[styles.headerCell, { width: 50 }]}>FXH</Text>
+                                <Text style={[styles.headerCell, { width: 50 }]}>No</Text>
                                 <Text style={[styles.headerCell, { width: 150 }]}>Box Code</Text>
                                 <Text style={[styles.headerCell, { width: 60 }]}>Qty</Text>
                                 <Text style={[styles.headerCell, { width: 120 }]}>Model</Text>
@@ -179,7 +184,7 @@ export default function PalletNotInBox({ navigation, route }: any) {
                                     renderItem={renderItem}
                                     keyExtractor={(item) => item.id}
                                     contentContainerStyle={{ paddingBottom: 20 }}
-                                    scrollEnabled={false}
+                                    scrollEnabled={true}
                                 />
                             )}
                         </View>
@@ -188,15 +193,15 @@ export default function PalletNotInBox({ navigation, route }: any) {
 
                 <View style={styles.footer}>
                     <TouchableOpacity
-                        style={[styles.actionBtn, styles.btnPrimary, !selectedItem && styles.btnDisabled]}
+                        style={[styles.actionBtn, styles.btnPrimary, selectedItemIndex === null && styles.btnDisabled]}
                         onPress={() => {
-                            if (selectedItem) {
-                                navigation.navigate("PalletNotInSN", { palletCode: selectedItem.palletCode, boxCode: selectedItem.boxCode });
+                            if (selectedItemIndex !== null) {
+                                navigation.navigate("PalletNotInSN", { palletCode: boxes[selectedItemIndex].palletCode, boxCode: boxes[selectedItemIndex].boxCode });
                             } else {
                                 Alert.alert("Notice", "Please select a box first.");
                             }
                         }}
-                        disabled={!selectedItem}
+                        disabled={selectedItemIndex === null}
                     >
                         <Text style={styles.btnTextPrimary}>Barcode Details</Text>
                     </TouchableOpacity>
@@ -233,22 +238,22 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         alignItems: 'center',
         backgroundColor: "#0052cc",
-        paddingHorizontal: 16,
-        paddingVertical: 12,
+        paddingHorizontal: 12,
+        paddingVertical: 4,
         borderRadius: 12,
         elevation: 2,
         borderWidth: 1,
         borderColor: "#E2E8F0"
     },
-    statLabel: { color: "#FFFFFF", fontSize: 11, fontWeight: "700", textTransform: "uppercase" },
-    statValue: { color: "#FFFFFF", fontSize: 11, fontWeight: "800" },
+    statLabel: { color: "#FFFFFF", fontSize: 13, fontWeight: "700", textTransform: "uppercase" },
+    statValue: { color: "#FFFFFF", fontSize: 13, fontWeight: "800" },
     content: { flex: 1 },
     tableCard: { flex: 1, backgroundColor: "#FFF", marginHorizontal: 16, borderRadius: 16, overflow: "hidden", elevation: 2, borderWidth: 1, borderColor: "#E2E8F0", marginBottom: -2 },
     tableHeader: { flexDirection: "row", backgroundColor: "#0052cc", paddingVertical: 10 },
     headerCell: { fontSize: 10, fontWeight: "800", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
     tableRow: { flexDirection: "row", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#F1F5F9", alignItems: "center" },
-    selectedRow: { backgroundColor: "#E0F2FE" },
-    cell: { fontSize: 11, color: "#334155", textAlign: "center", fontWeight: "600" },
+    selectedRow: { backgroundColor: "#ffc3c3ff" },
+    cell: { fontSize: 13, color: "#334155", textAlign: "center", fontWeight: "600" },
     cellMain: { fontSize: 11, color: "#1E293B", fontWeight: "700", textAlign: "center" },
     cellSub: { fontSize: 10, color: "#64748B", textAlign: "center" },
     footer: { padding: 16, borderTopWidth: 1, borderTopColor: '#e2e8f0' },

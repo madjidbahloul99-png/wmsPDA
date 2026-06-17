@@ -18,17 +18,17 @@ const { width } = Dimensions.get("window");
 const menuItems = [
   { title: "Warehousing\nScanning", icon: require("../assets/logomenu/Inwarehouse.png"), screen: "InWarehouse", fcode: "button_in" },
   { title: "Allocate Into\nWarehouse", icon: require("../assets/logomenu/AllocateIn.png"), screen: "AllocateInNO", fcode: "button_DBIn" },
-  { title: "Allocate Out\nSAP", icon: require("../assets/logomenu/Allocateout.png"), screen: "AllocateSAP", fcode: "button_DBOutSAP" },
-  { title: "Delivery\nSAP", icon: require("../assets/logomenu/Delivery.png"), screen: "DeliverySAP", fcode: "button_fahuoSAP" },
+  { title: "Allocate Out", icon: require("../assets/logomenu/Allocateout.png"), screen: "AllocateSAP", fcode: "button_DBOutSAP" },
+  { title: "Delivery", icon: require("../assets/logomenu/Delivery.png"), screen: "DeliverySAP", fcode: "button_fahuoSAP" },
   { title: "Allocate Return\nInto WH", icon: require("../assets/logomenu/reject.png"), screen: "AllocateRejectIn", fcode: "btnAllocateRejectIn" },
+  { title: "Delivery\nReturn", icon: require("../assets/logomenu/DeliveryReturn.png"), screen: "DeliveryReturnNo", fcode: "btnDeliveryReturn" },
   { title: "Inventory\nVerification", icon: require("../assets/logomenu/inventory1.png"), screen: "PD", fcode: "button_pd" },
   { title: "Pallet\nSearch", icon: require("../assets/logomenu/searchpallet.png"), screen: "PalletSearch", fcode: "button_pallerCx" },
   { title: "Not In\nWare", icon: require("../assets/logomenu/Notinware.png"), screen: "PalletNotIn", fcode: "btnNotIn" },
-  { title: "Delivery\nReturn", icon: require("../assets/logomenu/DeliveryReturn.png"), screen: "DeliveryReturnNo", fcode: "btnDeliveryReturn" },
   { title: "Box/Pallet\nAssembly", icon: require("../assets/logomenu/Assembly.png"), screen: "Assembly", fcode: "button_boxZu" },
   { title: "Box/Pallet\nDisassembly", icon: require("../assets/logomenu/Disassembly.png"), screen: "Disassembly", fcode: "button_boxChai" },
-  { title: "Distributor\nReturn", icon: require("../assets/logomenu/DistributorReturn.png"), screen: "DistributorReturnNo", fcode: "btnDistributeReturn" },
   { title: "SN\nReturn", icon: require("../assets/logomenu/SNReturn.png"), screen: "SNReturn", fcode: "btnReturnSN" },
+  { title: "Distributor\nReturn", icon: require("../assets/logomenu/DistributorReturn.png"), screen: "DistributorReturnNo", fcode: "btnDistributeReturn" },
   /*{ title: "Allocate Out\nWarehouse", icon: "🚚", screen: "/", fcode: "button_DBOut" },
  { title: "Warehouse\nDelivery", icon: "📦", screen: "/", fcode: "button_fahuo" },
  */
@@ -42,6 +42,8 @@ export default function Menu({ navigation }: any) {
   const { gs_roleCode } = useGlobal();
   const { gs_wareType, operateUserCode, operateUserName, operateWareHouseCode, operateRandomNumber, operateSign, operateVersion, } = useGlobal();
   const [allowedMenus, setAllowedMenus] = useState<string[]>([]);
+
+
 
 
   useEffect(() => {
@@ -59,6 +61,7 @@ export default function Menu({ navigation }: any) {
     if (!token) return;
 
     const loadMenuByRole = async () => {
+
       try {
         const res = await fetch(
           `${BASE_URL}/api/MenuListByRolePDA/pbc_MenuListByRolePDA`,
@@ -91,16 +94,14 @@ export default function Menu({ navigation }: any) {
           const errorText = await res.text();
           console.log("ERROR:", errorText);
 
-          if (res.status === 401) {
-            Alert.alert("Session expired", "Please login again");
-            navigation.navigate("Login");
-            return;
-          }
-
           throw new Error(`HTTP ${res.status}`);
         }
 
         const data = await res.json();
+        if (data.Code === 500) {
+          Alert.alert("Error", data.Message);
+          return;
+        }
 
         console.log("MENU RESPONSE:", data);
 
@@ -150,11 +151,6 @@ export default function Menu({ navigation }: any) {
   };
 
   const handleReturn = () => {
-    /* navigation.reset({
-         index: 0,
-         routes: [{ name: "Login" }],
-     }); */
-
     navigation.goBack();
 
   };
@@ -416,6 +412,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 8,
+
+    elevation: 30,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.5,
+    shadowRadius: 16,
   },
 
   disabledIconBox: {

@@ -22,8 +22,8 @@ const { width } = Dimensions.get("window");
 
 export default function Assembly({ navigation }: any) {
     const global = useGlobal();
-    const { gsURL, gs_factoryCode, gs_userName, gs_wareCode, gs_userCode 
-        ,operateUserCode, operateUserName, operateWareHouseCode, operateRandomNumber, operateSign, operateVersion,
+    const { gsURL, gs_factoryCode, gs_userName, gs_wareCode, gs_userCode
+        , operateUserCode, operateUserName, operateWareHouseCode, operateRandomNumber, operateSign, operateVersion,
     } = global;
     const BASE_URL = gsURL;
 
@@ -62,13 +62,13 @@ export default function Assembly({ navigation }: any) {
     }, [creationType, token]);
 
 
-    
+
 
 
     const handleScan = async (code?: string) => {
         // High-speed PDA support: Prioritize passed code, then current ref, then state
         const SN = (code || barcodeRef.current || scanBarcode).toUpperCase().trim();
-        
+
         if (!SN) return;
 
         // Clear everything immediately to prevent double-scans
@@ -85,10 +85,22 @@ export default function Assembly({ navigation }: any) {
             const response = await fetch(`${BASE_URL}/api/BarcodeType`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-                body: JSON.stringify({ 
+                body: JSON.stringify({
                     operateUserCode, operateUserName, operateWareHouseCode, operateRandomNumber, operateSign, operateVersion,
-                    factoryCode: gs_factoryCode, barcode: SN }),
+                    factoryCode: gs_factoryCode, barcode: SN
+                }),
             });
+
+            if (response.status === 401) {
+                Alert.alert("Unauthorized", "Token expired or invalid.");
+                return;
+            }
+
+            if (response.status === 403) {
+                Alert.alert("Access Denied", "You do not have permission.");
+                return;
+            }
+
             const result = await response.json();
             console.log("scantype  ", result)
             if (result.message === "success" && result.data && result.data) {
@@ -103,7 +115,7 @@ export default function Assembly({ navigation }: any) {
                 fetchData(scanTypeResult, SN);
                 setScanBarcode("");
             } else {
-                Alert.alert("Error121", "Data handling exceptions, please check!");
+                Alert.alert("Error", "Data handling exceptions, please check!");
             }
         } catch (err: any) {
             Alert.alert("Error", err.message);
@@ -116,7 +128,7 @@ export default function Assembly({ navigation }: any) {
     const handleTextChange = (text: string) => {
         barcodeRef.current = text;
         setScanBarcode(text);
-        
+
         if (scanTimer.current) {
             clearTimeout(scanTimer.current);
         }
@@ -150,7 +162,18 @@ export default function Assembly({ navigation }: any) {
                 }
             });
 
+            if (response.status === 401) {
+                Alert.alert("Unauthorized", "Token expired or invalid.");
+                return;
+            }
+
+            if (response.status === 403) {
+                Alert.alert("Access Denied", "You do not have permission.");
+                return;
+            }
+
             const result = await response.json();
+            console.log("assempbly result", result)
             if (result.message === "success" && result.data) {
                 setItemList(result.data);
                 setSelectedItemIndex(null);
@@ -203,6 +226,15 @@ export default function Assembly({ navigation }: any) {
                 body: JSON.stringify(body),
             });
 
+            if (response.status === 401) {
+                Alert.alert("Unauthorized", "Token expired or invalid.");
+                return;
+            }
+
+            if (response.status === 403) {
+                Alert.alert("Access Denied", "You do not have permission.");
+                return;
+            }
             const result = await response.json();
 
             if (result.message === "success" && result.data) {
@@ -229,10 +261,21 @@ export default function Assembly({ navigation }: any) {
             const response = await fetch(`${BASE_URL}${endpoint}`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-                body: JSON.stringify({ 
+                body: JSON.stringify({
                     operateUserCode, operateUserName, operateWareHouseCode, operateRandomNumber, operateSign, operateVersion,
-                    model, createUser: gs_userCode }),
+                    model, createUser: gs_userCode
+                }),
             });
+
+            if (response.status === 401) {
+                Alert.alert("Unauthorized", "Token expired or invalid.");
+                return;
+            }
+
+            if (response.status === 403) {
+                Alert.alert("Access Denied", "You do not have permission.");
+                return;
+            }
             const result = await response.json();
             if (result.message === "success" && result.data) {
                 // The API might return a raw string or an object like { palletCode: "..." }
@@ -281,7 +324,7 @@ export default function Assembly({ navigation }: any) {
                             placeholder="BarCode..."
                             value={scanBarcode}
                             onChangeText={handleTextChange}
-                            onSubmitEditing={() => handleScan()}
+                            //onSubmitEditing={() => handleScan()}
                             blurOnSubmit={false}
                             placeholderTextColor="#334155"
                             showSoftInputOnFocus={showKeyboard}
@@ -328,7 +371,11 @@ export default function Assembly({ navigation }: any) {
                                         keyExtractor={(item, index) => index.toString()}
                                         renderItem={({ item, index }) => (
                                             <TouchableOpacity
-                                                style={[styles.tableRow, selectedItemIndex === index && styles.selectedRow]}
+                                                style={[
+                                                    styles.tableRow,
+                                                    { backgroundColor: index % 2 === 0 ? "#FFFFFF" : "#BAE6FD" },
+                                                    selectedItemIndex === index && styles.selectedRow
+                                                ]}
                                                 onPress={() => setSelectedItemIndex(index)}
                                             >
                                                 <Text style={[styles.cell, { width: 150 }]}>{scanType === "box" ? (item.SN || item.sn) : item.boxCode}</Text>
@@ -419,7 +466,7 @@ const styles = StyleSheet.create({
     headerCell: { fontSize: 10, fontWeight: "800", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
     tableRow: { flexDirection: "row", paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: "#F1F5F9", alignItems: "center" },
     cell: { fontSize: 11, color: "#334155", textAlign: "center", fontWeight: "600", paddingHorizontal: 8 },
-    selectedRow: { backgroundColor: '#E0E7FF' },
+    selectedRow: { backgroundColor: '#ffc3c3ff' },
     emptyText: { textAlign: "center", padding: 20, color: "#94A3B8", fontStyle: "italic", width: 400 },
     footer: { marginTop: 8 },
     packBtn: { backgroundColor: "#0052cc", padding: 12, borderRadius: 10, alignItems: "center", height: 40 },

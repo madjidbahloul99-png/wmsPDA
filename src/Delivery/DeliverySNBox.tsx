@@ -95,13 +95,15 @@ export default function DeliverySNBox({ navigation, route }: any) {
 
         setDetails(list);
         console.log("message5", deliveryCode);
+        console.log("message55", result);
 
         const total = list.reduce((sum, item) => sum + parseInt(item.qty || "0"), 0);
         setTotalQty(total);
       } else {
-        Alert.alert("Error", result.message || "There is no product in the Pallet!");
+        Alert.alert("Error", "There is no product in the Pallet!");
         setTotalQty(0);
         console.log("message55", result);
+        navigation.goBack();
       }
     } catch (error) {
       console.error(error);
@@ -125,7 +127,16 @@ export default function DeliverySNBox({ navigation, route }: any) {
     });
   };
 
-  const tableHeaders = ["FXH", "Pallet", "Box", "Qty", "Model", "Color"];
+  const columns = [
+    { label: "No", width: 40 },
+    { label: "Pallet", width: 150 },
+    { label: "Box", width: 150 },
+    { label: "Qty", width: 90 },
+    { label: "Model", width: 150 },
+    { label: "Color", width: 150 },
+  ];
+
+  const totalTableWidth = columns.reduce((acc, col) => acc + col.width, 0);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -159,11 +170,11 @@ export default function DeliverySNBox({ navigation, route }: any) {
       {/* List Card */}
       <View style={styles.tableCard}>
         <ScrollView horizontal showsHorizontalScrollIndicator={true}>
-          <View>
+          <View style={{ width: totalTableWidth }}>
             <View style={styles.tableHeader}>
-              {tableHeaders.map((h) => (
-                <Text key={h} style={[styles.headerCell, { width: 90 }]}>
-                  {h}
+              {columns.map((col) => (
+                <Text key={col.label} style={[styles.headerCell, { width: col.width }]}>
+                  {col.label}
                 </Text>
               ))}
             </View>
@@ -175,20 +186,21 @@ export default function DeliverySNBox({ navigation, route }: any) {
                     key={index}
                     style={[
                       styles.row,
+                      { backgroundColor: index % 2 === 0 ? "#FFFFFF" : "#BAE6FD" },
                       selectedIndex === index && styles.selectedRow
                     ]}
                     onPress={() => setSelectedIndex(index)}
                   >
-                    <Text style={[styles.cell, { width: 90 }]}>{item.fxh}</Text>
-                    <Text style={[styles.cell, { width: 90 }]}>{item.palletCode}</Text>
-                    <Text style={[styles.cell, { width: 90 }]}>{item.boxCode}</Text>
-                    <Text style={[styles.cell, { width: 90 }]}>{item.qty}</Text>
-                    <Text style={[styles.cell, { width: 90 }]}>{item.model}</Text>
-                    <Text style={[styles.cell, { width: 90 }]}>{item.color}</Text>
+                    <Text style={[styles.cell, { width: columns[0].width }]}>{item.fxh}</Text>
+                    <Text style={[styles.cell, { width: columns[1].width }]}>{item.palletCode}</Text>
+                    <Text style={[styles.cell, { width: columns[2].width }]}>{item.boxCode}</Text>
+                    <Text style={[styles.cell, { width: columns[3].width }]}>{item.qty}</Text>
+                    <Text style={[styles.cell, { width: columns[4].width }]}>{item.model}</Text>
+                    <Text style={[styles.cell, { width: columns[5].width }]}>{item.color}</Text>
                   </TouchableOpacity>
                 ))
               ) : (
-                <Text style={[styles.emptyText, { width: 540 }]}>No data available</Text>
+                <Text style={[styles.emptyText, { width: totalTableWidth }]}>No data available</Text>
               )}
             </ScrollView>
           </View>
@@ -263,8 +275,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#E2E8F0"
   },
-  statLabel: { color: "#FFFFFF", fontSize: 11, fontWeight: "700", textTransform: "uppercase" },
-  statValue: { color: "#FFFFFF", fontSize: 12, fontWeight: "800" },
+  statLabel: { color: "#FFFFFF", fontSize: 13, fontWeight: "700", textTransform: "uppercase" },
+  statValue: { color: "#FFFFFF", fontSize: 13, fontWeight: "800" },
   tableCard: { flex: 1, backgroundColor: "#FFF", marginHorizontal: 16, borderRadius: 16, overflow: "hidden", elevation: 2, borderWidth: 1, borderColor: "#E2E8F0", marginBottom: -2 },
   tableHeader: { flexDirection: "row", backgroundColor: "#0052cc", paddingVertical: 10 },
   headerCell: { fontSize: 10, fontWeight: "800", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
@@ -276,5 +288,5 @@ const styles = StyleSheet.create({
   actionBtn: { flex: 1, height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
   btnPrimary: { backgroundColor: '#2563eb' },
   btnTextPrimary: { color: '#fff', fontSize: 15, fontWeight: '800' },
-  selectedRow: { backgroundColor: "#E0E7FF" },
+  selectedRow: { backgroundColor: "#ffc3c3ff" },
 });

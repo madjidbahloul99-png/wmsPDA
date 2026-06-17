@@ -13,10 +13,13 @@ import {
     Image,
     Dimensions,
     DeviceEventEmitter,
+    Animated,
 } from "react-native";
 import { useGlobal } from "../../GlobalContext.tsx";
 import { useFocusEffect } from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+
+const AnimatedView = Animated.View as any;
 
 interface BoxItem {
     id: string;
@@ -28,9 +31,9 @@ interface BoxItem {
 
 export default function InWarehouse({ navigation, route }: any) {
     const global = useGlobal();
-    const { gsURL, gs_factoryCode, gs_wareCode, gs_wareType, 
-        gs_classCode, gs_groupCode, gs_workdate, gs_userCode, gs_userName ,
-    operateUserCode, operateUserName, operateWareHouseCode, operateRandomNumber, operateSign, operateVersion,} = global;
+    const { gsURL, gs_factoryCode, gs_wareCode, gs_wareType,
+        gs_classCode, gs_groupCode, gs_workdate, gs_userCode, gs_userName,
+        operateUserCode, operateUserName, operateWareHouseCode, operateRandomNumber, operateSign, operateVersion, } = global;
     const BASE_URL = gsURL;
     const [token, setToken] = useState("");
 
@@ -43,6 +46,61 @@ export default function InWarehouse({ navigation, route }: any) {
     const snInputRef = useRef<TextInput>(null);
     const isScanning = useRef(false);
     const scanTimer = useRef<any>(null);
+    const borderAnim = useRef(new Animated.Value(0)).current;
+
+    const [scanState, setScanState] = useState<
+        "waiting" | "scanning" | "success" | "error"
+    >("waiting");
+
+    useEffect(() => {
+
+        let animation: Animated.CompositeAnimation | null = null;
+
+        if (scanState === "waiting") {
+
+            animation = Animated.loop(
+                Animated.sequence([
+                    Animated.timing(borderAnim, {
+                        toValue: 1,
+                        duration: 700,
+                        useNativeDriver: false,
+                    }),
+                    Animated.timing(borderAnim, {
+                        toValue: 0,
+                        duration: 700,
+                        useNativeDriver: false,
+                    }),
+                ])
+            );
+
+            animation.start();
+
+        } else {
+            borderAnim.setValue(1);
+        }
+
+        return () => {
+            animation?.stop();
+        };
+
+    }, [scanState]);
+
+    const animatedBorderColor = borderAnim.interpolate({
+        inputRange: [0, 1],
+        outputRange:
+            scanState === "waiting"
+                ? ["#0052cc", "#60a5fa"]
+                : scanState === "scanning"
+                    ? ["#f59e0b", "#fbbf24"]
+                    : scanState === "success"
+                        ? ["#16a34a", "#4ade80"]
+                        : ["#dc2626", "#f87171"],
+    });
+
+    const animatedBorderWidth = borderAnim.interpolate({
+        inputRange: [0, 1],
+        outputRange: [1, 4],
+    });
 
     useFocusEffect(
         useCallback(() => {
@@ -67,6 +125,7 @@ export default function InWarehouse({ navigation, route }: any) {
     );
 
     useEffect(() => {
+
         const loadToken = async () => {
             const t = await AsyncStorage.getItem("userToken");
             console.log("TOKEN IN inwh", t);
@@ -77,10 +136,6 @@ export default function InWarehouse({ navigation, route }: any) {
     }, []);
 
 
-
-
-
-
     const ensureFocus = () => {
         if (!showKeyboard) {
             snInputRef.current?.focus();
@@ -88,6 +143,7 @@ export default function InWarehouse({ navigation, route }: any) {
     };
 
     const handleScanWithValue = async (scanValue?: string) => {
+
         if (isScanning.current || loading) return;
 
         const currentSn = (scanValue || sn).toUpperCase().trim();
@@ -108,9 +164,10 @@ export default function InWarehouse({ navigation, route }: any) {
             const checkRes = await fetch(`${BASE_URL}/api/InBarcodeCheck`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, },
-                body: JSON.stringify({ 
+                body: JSON.stringify({
                     operateUserCode, operateUserName, operateWareHouseCode, operateRandomNumber, operateSign, operateVersion,
-                    factoryCode: gs_factoryCode, scanCode: currentSn }),
+                    factoryCode: gs_factoryCode, scanCode: currentSn
+                }),
             });
 
             if (checkRes.status === 401) {
@@ -119,14 +176,14 @@ export default function InWarehouse({ navigation, route }: any) {
             }
 
             if (checkRes.status === 403) {
-                Alert.alert("Access Denied", "You do not have permission.");
+                Alert.alert("Access Denied", "You do not have permission user here.");
                 return;
             }
             const checkResult = await checkRes.json();
 
             if (checkResult.code === 500) {
                 Alert.alert("Error", checkResult.message);
-                navigation.goBack();
+                //navigation.goBack();
                 return;
             }
 
@@ -134,6 +191,7 @@ export default function InWarehouse({ navigation, route }: any) {
             if (checkResult.message === "success" && checkResult.data) {
                 const data = checkResult.data;
                 if (data.isok === "1") {
+                    setScanState("success");
                     const pCode = data.palletCode;
                     const sType = data.scanType;
                     setPalletCode(pCode);
@@ -144,9 +202,12 @@ export default function InWarehouse({ navigation, route }: any) {
                         currentSn: currentSn
                     });
                 } else {
+                    setScanState("error");
+
                     Alert.alert("Error", data.retstr || "Unknown error");
                 }
             } else {
+                setScanState("error");
                 Alert.alert("Error", "Data handling exceptions, please check!");
             }
         } catch (err: any) {
@@ -208,6 +269,8 @@ export default function InWarehouse({ navigation, route }: any) {
                     }));
                     setBoxList(mapped);
                     setPalletCode(pCode);
+                    Alert.alert("✅ Success", "Pallet added to stock successfully.");
+                            
 
                 } else {
                     Alert.alert("Error", result.data[0].retstr || "Insert failed");
@@ -238,6 +301,7 @@ export default function InWarehouse({ navigation, route }: any) {
     };
 
     const handleSnChange = (text: string) => {
+        setScanState("scanning");
         if (text.endsWith('\n') || text.endsWith('\r')) {
             const cleanSn = text.toUpperCase().trim();
             if (cleanSn.length > 0) {
@@ -257,7 +321,7 @@ export default function InWarehouse({ navigation, route }: any) {
                 if (cleanSn.length > 0) {
                     handleScanWithValue(cleanSn);
                 }
-            }, 800); // Increased delay for PDA stability
+            }, 800);
         }
     };
 
@@ -270,12 +334,19 @@ export default function InWarehouse({ navigation, route }: any) {
         }
     };
 
-    const renderItem = ({ item }: { item: BoxItem }) => (
-        <View style={styles.tableRow}>
+    const renderItem = ({ item, index }: { item: BoxItem; index: number }) => (
+        <View
+            style={[
+                styles.tableRow,
+                index % 2 === 0
+                    ? { backgroundColor: "#FFFFFF" }
+                    : { backgroundColor: "#BAE6FD" }
+            ]}
+        >
             <Text style={[styles.cell, { width: 150 }]}>{item.boxCode}</Text>
             <Text style={[styles.cell, { width: 120 }]}>{item.model}</Text>
             <Text style={[styles.cell, { width: 100 }]}>{item.color}</Text>
-            <Text style={[styles.cell, { width: 60 }]}>{item.boxQty}</Text>
+            <Text style={[styles.cell, { width: 100 }]}>{item.boxQty}</Text>
         </View>
     );
 
@@ -300,43 +371,43 @@ export default function InWarehouse({ navigation, route }: any) {
 
             <View style={styles.content}>
                 <View style={styles.formCard}>
-                    <View style={{ flexDirection: 'row', gap: 10 }}>
-                        <View style={[styles.inputGroup, { flex: 1 }]}>
-                            <TextInput
-                                style={[styles.input, styles.disabledInput,]}
-                                value={palletCode}
-                                editable={false}
-                                placeholder="Pallet"
-                                placeholderTextColor="#FFFFFF"
-                            />
-                        </View>
-                        <View style={[styles.inputGroup, { flex: 1 }]}>
-                            <TextInput
-                                style={[styles.input, styles.disabledInput]}
-                                value={qty}
-                                editable={false}
-                                placeholder="QTY"
-                                placeholderTextColor="#FFFFFF"
-                            />
-                        </View>
+                    <View style={styles.infoRow}>
+                        <Text style={styles.leftLabel}>PALLET</Text>
+                        <Text style={styles.rightValue}>{palletCode || "-"}</Text>
+                    </View>
+
+                    <View style={styles.infoRow}>
+                        <Text style={styles.leftLabel}>QTY</Text>
+                        <Text style={styles.rightValue}>{qty || "0"}</Text>
                     </View>
 
                     <View style={styles.inputGroup}>
-
-                        <TextInput
-                            ref={snInputRef}
-                            style={[styles.input, gs_wareType !== "MainWarehouse" && styles.disabledInput]}
-                            value={sn}
-                            onChangeText={handleSnChange}
-                            onSubmitEditing={handleSnSubmit}
-                            placeholder="Barcode"
-                            autoCapitalize="characters"
-                            showSoftInputOnFocus={showKeyboard}
-                            blurOnSubmit={false}
-                            onBlur={ensureFocus}
-                            editable={gs_wareType === "MainWarehouse"}
-                            placeholderTextColor="#334155"
-                        />
+                        <AnimatedView style={{
+                            borderRadius: 10,
+                            borderWidth: animatedBorderWidth,
+                            borderColor: animatedBorderColor,
+                            backgroundColor: "#e2f0eeff",
+                            elevation: 32,
+                        }}>
+                            <TextInput
+                                ref={snInputRef}
+                                style={[
+                                    styles.input,
+                                    gs_wareType !== "MainWarehouse" && styles.disabledInput,
+                                    { borderWidth: 0, elevation: 0 } // Move border/elevation to parent Animated.View
+                                ]}
+                                value={sn}
+                                onChangeText={handleSnChange}
+                                onSubmitEditing={handleSnSubmit}
+                                placeholder="Barcode"
+                                autoCapitalize="characters"
+                                showSoftInputOnFocus={showKeyboard}
+                                blurOnSubmit={false}
+                                onBlur={ensureFocus}
+                                editable={gs_wareType === "MainWarehouse"}
+                                placeholderTextColor="#334155"
+                            />
+                        </AnimatedView>
                     </View>
                 </View>
 
@@ -347,7 +418,7 @@ export default function InWarehouse({ navigation, route }: any) {
                                 <Text style={[styles.headerCell, { width: 150 }]}>Box Code</Text>
                                 <Text style={[styles.headerCell, { width: 120 }]}>Model</Text>
                                 <Text style={[styles.headerCell, { width: 100 }]}>Color</Text>
-                                <Text style={[styles.headerCell, { width: 60 }]}>Qty</Text>
+                                <Text style={[styles.headerCell, { width: 100 }]}>Qty</Text>
                             </View>
                             <ScrollView style={{ flex: 1 }}>
                                 {boxList.length === 0 ? (
@@ -359,7 +430,7 @@ export default function InWarehouse({ navigation, route }: any) {
                                 ) : (
                                     boxList.map((item, index) => (
                                         <React.Fragment key={item.id || index}>
-                                            {renderItem({ item })}
+                                            {renderItem({ item, index })}
                                         </React.Fragment>
                                     ))
                                 )}
@@ -418,12 +489,36 @@ const styles = StyleSheet.create({
         borderColor: "#0052cc"
     },
     inputGroup: { marginBottom: 6 },
-    label: { fontSize: 10, fontWeight: "700", color: "#64748B", marginBottom: 4, textTransform: "uppercase" },
-    input: { backgroundColor: "#e2f0eeff", height: 40, borderRadius: 10, paddingHorizontal: 12, fontSize: 13, color: "#FFFFFF", fontWeight: "600", borderWidth: 1, borderColor: "#0052cc", elevation: 32, },
+    label: { fontSize: 10, fontWeight: "700", color: "#64748B", marginBottom: 4, textTransform: "uppercase", },
+    infoRow: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        backgroundColor: "#0052cc",
+        borderRadius: 10,
+        paddingHorizontal: 12,
+        height: 35,
+        marginBottom: 6,
+        borderWidth: 1,
+        borderColor: "#CBD5E1",
+    },
+    leftLabel: {
+        color: "#FFFFFF",
+        fontSize: 13,
+        fontWeight: "700",
+        textAlign: "left",
+    },
+    rightValue: {
+        color: "#FFFFFF",
+        fontSize: 13,
+        fontWeight: "900",
+        textAlign: "right",
+    },
+    input: { backgroundColor: "#e2f0eeff", height: 40, borderRadius: 10, paddingHorizontal: 12, fontSize: 14, color: "#334155", fontWeight: "600", borderWidth: 1, borderColor: "#0052cc", elevation: 32, },
     disabledInput: { backgroundColor: "#0052cc", color: "#FFFFFF" },
     tableCard: { flex: 1, backgroundColor: "#FFF", borderRadius: 16, overflow: "hidden", elevation: 32, borderWidth: 1, borderColor: "#0052cc", marginBottom: -4 },
     tableHeader: { flexDirection: "row", backgroundColor: "#0052cc", paddingVertical: 10 },
-    headerCell: { fontSize: 10, fontWeight: "800", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
+    headerCell: { fontSize: 11, fontWeight: "800", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
     tableRow: { flexDirection: "row", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#F1F5F9", alignItems: "center" },
     cell: { fontSize: 11, color: "#334155", textAlign: "center", fontWeight: "600" },
     footer: { borderTopWidth: 1, borderTopColor: '#e2e8f0', paddingTop: 2 },

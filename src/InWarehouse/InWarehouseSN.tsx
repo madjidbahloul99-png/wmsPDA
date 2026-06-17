@@ -109,7 +109,7 @@ export default function InWarehouseSN({ navigation, route }: any) {
                 }));
                 setSnList(mapped);
             } else {
-                Alert.alert("Notice", "There is no product in the Box!");
+                Alert.alert("Error", "There is no product in the Box!");
                 setSnList([]);
             }
         } catch (err: any) {
@@ -187,7 +187,7 @@ export default function InWarehouseSN({ navigation, route }: any) {
                                 <Text style={[styles.headerCell, { width: 150 }]}>IMEI3</Text>
                                 <Text style={[styles.headerCell, { width: 100 }]}>Model</Text>
                                 <Text style={[styles.headerCell, { width: 80 }]}>Color</Text>
-                                <Text style={[styles.headerCell, { width: 120 }]}>Date</Text>
+                                <Text style={[styles.headerCell, { width: 200 }]}>Date</Text>
                                 <Text style={[styles.headerCell, { width: 120 }]}>Order</Text>
                             </View>
                             <ScrollView style={{ flex: 1 }}>
@@ -196,8 +196,15 @@ export default function InWarehouseSN({ navigation, route }: any) {
                                 ) : (
                                     <FlatList
                                         data={snList}
-                                        renderItem={({ item }) => (
-                                            <View style={styles.tableRow}>
+                                        renderItem={({ item, index }) => (
+                                            <View
+                                                style={[
+                                                    styles.tableRow,
+                                                    index % 2 === 0
+                                                        ? { backgroundColor: "#FFFFFF" }
+                                                        : { backgroundColor: "#BAE6FD" }
+                                                ]}
+                                            >
                                                 <Text style={[styles.cell, { width: 50 }]}>{item.fxh}</Text>
                                                 <Text style={[styles.cell, { width: 150, color: "#0052cc" }]}>{item.sn}</Text>
                                                 <Text style={[styles.cell, { width: 150 }]}>{item.imei1}</Text>
@@ -205,7 +212,7 @@ export default function InWarehouseSN({ navigation, route }: any) {
                                                 <Text style={[styles.cell, { width: 150 }]}>{item.imei3}</Text>
                                                 <Text style={[styles.cell, { width: 100 }]}>{item.model}</Text>
                                                 <Text style={[styles.cell, { width: 80 }]}>{item.color}</Text>
-                                                <Text style={[styles.cell, { width: 120 }]}>{item.date}</Text>
+                                                <Text style={[styles.cell, { width: 200 }]}>{item.date}</Text>
                                                 <Text style={[styles.cell, { width: 120 }]}>{item.orderCode}</Text>
                                             </View>
                                         )}
@@ -259,13 +266,13 @@ const styles = StyleSheet.create({
         borderRadius: 8,
         borderWidth: 1,
         borderColor: "#CBD5E1",
-        height: 30,
+        height: 33,
     },
-    statLabel: { color: "#FFF", fontSize: 10, fontWeight: "700", textTransform: "uppercase" },
-    statValue: { color: "#FFF", fontSize: 11, fontWeight: "800" },
-    tableCard: { flex: 1, backgroundColor: "#FFF", borderRadius: 16, overflow: "hidden", elevation: 2, borderWidth: 1, borderColor: "#E2E8F0", marginBottom: 16 },
+    statLabel: { color: "#FFF", fontSize: 12, fontWeight: "700", textTransform: "uppercase" },
+    statValue: { color: "#FFF", fontSize: 12, fontWeight: "800" },
+    tableCard: { flex: 1, backgroundColor: "#FFF", borderRadius: 16, overflow: "hidden", elevation: 2, borderWidth: 1, borderColor: "#E2E8F0", marginBottom: 8 },
     tableHeader: { flexDirection: "row", backgroundColor: "#0052cc", paddingVertical: 10 },
-    headerCell: { fontSize: 10, fontWeight: "800", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
+    headerCell: { fontSize: 11, fontWeight: "800", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
     tableRow: { flexDirection: "row", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#F1F5F9", alignItems: "center" },
     cell: { fontSize: 11, color: "#334155", textAlign: "center", fontWeight: "600" },
     cellMain: { fontSize: 11, color: "#1E293B", fontWeight: "700", textAlign: "center" },

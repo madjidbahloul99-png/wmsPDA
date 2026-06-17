@@ -30,7 +30,7 @@ interface ConfirmItem {
 export default function InWarehouseConfirmBox({ navigation, route }: any) {
     const { palletCode, sType, currentSn, onConfirm } = route.params || {};
     const global = useGlobal();
-    const { gsURL, gs_factoryCode, gs_userName, gs_wareType ,
+    const { gsURL, gs_factoryCode, gs_userName, gs_wareType,
         operateUserCode, operateUserName, operateWareHouseCode, operateRandomNumber, operateSign, operateVersion,
     } = global;
     const BASE_URL = gsURL;
@@ -105,7 +105,7 @@ export default function InWarehouseConfirmBox({ navigation, route }: any) {
                 setDataList(mapped);
                 setTotalQty(total);
             } else {
-                Alert.alert("Notice", "There is no product in the Pallet!");
+                Alert.alert("Error", "There is no product in the Pallet!");
                 setDataList([]);
                 setTotalQty(0);
             }
@@ -177,9 +177,15 @@ export default function InWarehouseConfirmBox({ navigation, route }: any) {
         }
     };
 
-    const renderItem = ({ item }: { item: ConfirmItem }) => (
+    const renderItem = ({ item, index }: { item: ConfirmItem; index: number }) => (
+
         <TouchableOpacity
-            style={[styles.tableRow, selectedId === item.id && styles.selectedRow]}
+            style={[
+                styles.tableRow,
+                index % 2 === 0 ? { backgroundColor: "#FFFFFF" } : { backgroundColor: "#BAE6FD" },
+                selectedId === item.id && styles.selectedRow
+            ]}
+
             onPress={() => setSelectedId(item.id)}
             activeOpacity={0.7}
         >
@@ -190,7 +196,7 @@ export default function InWarehouseConfirmBox({ navigation, route }: any) {
             <Text style={[styles.cell, { width: 80 }]}>{item.color}</Text>
             <Text style={[styles.cell, { width: 120 }]}>{item.orderCode}</Text>
         </TouchableOpacity>
-    );
+    )
 
     return (
         <SafeAreaView style={styles.container}>
@@ -217,13 +223,18 @@ export default function InWarehouseConfirmBox({ navigation, route }: any) {
                         <Text style={styles.statLabel}>Total Qty</Text>
                         <Text style={styles.statValue}>{totalQty}</Text>
                     </View>
+
+                    <View style={styles.statBox}>
+                        <Text style={styles.statLabel}>Pallet Code</Text>
+                        <Text style={styles.statValue}>{palletCode}</Text>
+                    </View>
                 </View>
 
                 <View style={styles.tableCard}>
                     <ScrollView horizontal showsHorizontalScrollIndicator={true}>
                         <View>
                             <View style={styles.tableHeader}>
-                                <Text style={[styles.headerCell, { width: 50 }]}>FXH</Text>
+                                <Text style={[styles.headerCell, { width: 50 }]}>No</Text>
                                 <Text style={[styles.headerCell, { width: 150 }]}>Box Code</Text>
                                 <Text style={[styles.headerCell, { width: 60 }]}>Qty</Text>
                                 <Text style={[styles.headerCell, { width: 100 }]}>Model</Text>
@@ -256,7 +267,7 @@ export default function InWarehouseConfirmBox({ navigation, route }: any) {
                             style={[styles.actionBtn, styles.btnInfo, { flex: 1 }]}
                             onPress={handleSNDetails}
                         >
-                            <Text style={styles.btnTextPrimary}>SN Details</Text>
+                            <Text style={styles.btnTextPrimary1}>SN Details</Text>
                         </TouchableOpacity>
 
                         <TouchableOpacity
@@ -294,27 +305,27 @@ const styles = StyleSheet.create({
     headerRight: { flexDirection: "row", alignItems: "center" },
     userNameText: { color: "#FFFFFF", fontSize: scale(12), fontWeight: "700", marginRight: 1 },
     content: { flex: 1, padding: 16 },
-    statsCard: { flexDirection: 'row', gap: 10, marginBottom: 16 },
+    statsCard: { flexDirection: 'column', gap: 10, marginBottom: 16 },
     statBox: {
-        flex: 1,
         backgroundColor: "#0052cc",
-        paddingHorizontal: 16,
-        paddingVertical: 12,
+        paddingHorizontal: 12,
+        paddingVertical: 4,
         borderRadius: 12,
         elevation: 2,
         borderWidth: 1,
         borderColor: "#E2E8F0",
         flexDirection: 'row',
         justifyContent: 'space-between',
-        alignItems: 'center'
+        alignItems: 'center',
+        height: 40,
     },
-    statLabel: { color: "#FFF", fontSize: 10, fontWeight: "700", textTransform: "uppercase" },
+    statLabel: { color: "#FFF", fontSize: 12, fontWeight: "700", textTransform: "uppercase", paddingBottom: -10, textAlignVertical: "center" },
     statValue: { color: "#FFF", fontSize: 12, fontWeight: "800" },
-    tableCard: { flex: 1, backgroundColor: "#FFF", borderRadius: 16, overflow: "hidden", elevation: 2, borderWidth: 1, borderColor: "#E2E8F0", marginBottom: 16 },
+    tableCard: { flex: 1, backgroundColor: "#FFF", borderRadius: 16, overflow: "hidden", elevation: 2, borderWidth: 1, borderColor: "#E2E8F0", marginBottom: 16, marginTop: -8 },
     tableHeader: { flexDirection: "row", backgroundColor: "#0052cc", paddingVertical: 10 },
-    headerCell: { fontSize: 10, fontWeight: "800", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
+    headerCell: { fontSize: 11, fontWeight: "800", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
     tableRow: { flexDirection: "row", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#F1F5F9", alignItems: "center" },
-    selectedRow: { backgroundColor: "#E0F2FE" },
+    selectedRow: { backgroundColor: "#ffc3c3ff" },
     cell: { fontSize: 11, color: "#334155", textAlign: "center", fontWeight: "600" },
     cellMain: { fontSize: 11, color: "#1E293B", fontWeight: "700", textAlign: "center" },
     cellSub: { fontSize: 10, color: "#64748B", textAlign: "center" },
@@ -322,8 +333,9 @@ const styles = StyleSheet.create({
     buttonRow: { flexDirection: 'row', gap: 10 },
 
     btnPrimary: { backgroundColor: '#2563eb' },
-    btnInfo: { backgroundColor: '#2563eb' },
+    btnInfo: { backgroundColor: '#BAE6FD' },
     btnTextPrimary: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
+    btnTextPrimary1: { color: '#1E293B', fontSize: 15, fontWeight: '700' },
     emptyText: { textAlign: "center", padding: 40, color: "#94A3B8", fontStyle: "italic", width: 400 },
     actionBtn: {
         flex: 1,
@@ -331,6 +343,7 @@ const styles = StyleSheet.create({
         borderRadius: 10,
         justifyContent: 'center',
         alignItems: 'center'
-    }
+    },
+
 });
 

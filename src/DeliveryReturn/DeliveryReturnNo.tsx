@@ -23,7 +23,6 @@ interface DeliveryReturnItem {
     qty: number;
     inqty: number;
     cyqty: number;
-    fromWareHouse: string;
     toWareHouse: string;
     deliveryCode: string;
 }
@@ -32,14 +31,14 @@ export default function DeliveryReturnNo({ navigation }: any) {
     const global = useGlobal();
     const { gsURL, gs_factoryCode, gs_wareCode, gs_userName,
         operateUserCode, operateUserName, operateWareHouseCode, operateRandomNumber, operateSign, operateVersion,
-     } = global;
+    } = global;
     const BASE_URL = gsURL;
     const [token, setToken] = useState("");
 
     const [sn, setSn] = useState("");
     const [errorMsg, setErrorMsg] = useState("");
     const [items, setItems] = useState<DeliveryReturnItem[]>([]);
-    const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+    const [selectedItemIndex, setSelectedItemIndex] = useState<number | null>(null);
     const [loading, setLoading] = useState(false);
     const [f_systemDeliveryCode, setFSystemDeliveryCode] = useState("");
     const [showKeyboard, setShowKeyboard] = useState(false);
@@ -90,6 +89,11 @@ export default function DeliveryReturnNo({ navigation }: any) {
             }
 
             const result = await response.json();
+
+            if (result.code === 500) {
+                Alert.alert("Error", result.message);
+                return;
+            }
             const newItems: DeliveryReturnItem[] = [];
             let tock = "";
 
@@ -102,7 +106,6 @@ export default function DeliveryReturnNo({ navigation }: any) {
                         qty: parseInt(row.qty || 0),
                         inqty: parseInt(row.inqty || 0),
                         cyqty: parseInt(row.cyqty || 0),
-                        fromWareHouse: row.fromWarehouse,
                         toWareHouse: row.toWareHouse,
                         deliveryCode: row.deliveryCode,
                     });
@@ -115,12 +118,14 @@ export default function DeliveryReturnNo({ navigation }: any) {
             if (tock !== "" && tock !== gs_wareCode) {
                 setErrorMsg("To WareHouse Must be Login WareHouse " + gs_wareCode);
                 setItems([]);
+                setSn("");
                 setFSystemDeliveryCode("");
                 snRef.current?.focus();
                 return;
             }
 
             setFSystemDeliveryCode(deliveryCode);
+
 
         } catch (err: any) {
             setErrorMsg("Error: " + err.message);
@@ -148,16 +153,19 @@ export default function DeliveryReturnNo({ navigation }: any) {
         scanTimer.current = setTimeout(() => {
             if (text.trim().length > 0) {
                 handleSnSubmit(text.trim());
+
             }
-        }, 300);
+        }, 400);
+
     };
 
     const handleSnSubmit = (text?: string) => {
         const code = (text || sn).trim().toUpperCase();
         if (code.length > 0) {
-            setSn("");
+            //setSn("");
             if (scanTimer.current) clearTimeout(scanTimer.current);
             fetchDeliveryReturnModelList(code);
+
         }
     };
 
@@ -168,8 +176,8 @@ export default function DeliveryReturnNo({ navigation }: any) {
     };
 
     const handleChoice = () => {
-        if (selectedIndex !== null && items[selectedIndex]) {
-            const { deliveryCode, systemDeliveryCode, toWareHouse } = items[selectedIndex];
+        if (selectedItemIndex !== null && items[selectedItemIndex]) {
+            const { deliveryCode, systemDeliveryCode, toWareHouse } = items[selectedItemIndex];
             navigation.navigate('DeliveryReturn', {
                 deliveryCode,
                 systemDeliveryCode,
@@ -185,13 +193,17 @@ export default function DeliveryReturnNo({ navigation }: any) {
         if (item.cyqty > 0) {
             textColor = item.inqty > 0 ? "#2563EB" : "#EF4444";
         }
-        const isSelected = selectedIndex === index;
+        const isSelected = selectedItemIndex === index;
 
         return (
             <TouchableOpacity
                 key={item.deliveryCode + "_" + index}
-                style={[styles.tableRow, isSelected && styles.selectedRow]}
-                onPress={() => setSelectedIndex(index)}
+                style={[
+                    styles.tableRow,
+                    { backgroundColor: index % 2 === 0 ? "#FFFFFF" : "#BAE6FD" },
+                    isSelected && styles.selectedRow
+                ]}
+                onPress={() => setSelectedItemIndex(index)}
             >
                 <Text style={[styles.cell, { color: textColor, width: 140 }]}>{item.systemDeliveryCode}</Text>
                 <Text style={[styles.cell, { color: textColor, width: 200 }]}>{item.deliveryCode}</Text>
@@ -200,8 +212,7 @@ export default function DeliveryReturnNo({ navigation }: any) {
                 <Text style={[styles.cell, { color: textColor, width: 60 }]}>{item.qty}</Text>
                 <Text style={[styles.cell, { color: textColor, width: 60 }]}>{item.inqty}</Text>
                 <Text style={[styles.cell, { color: textColor, width: 60 }]}>{item.cyqty}</Text>
-                <Text style={[styles.cell, { color: textColor, width: 100 }]}>{item.fromWareHouse}</Text>
-                <Text style={[styles.cell, { color: textColor, width: 100 }]}>{item.toWareHouse}</Text>           
+                <Text style={[styles.cell, { color: textColor, width: 100 }]}>{item.toWareHouse}</Text>
             </TouchableOpacity>
         );
     };
@@ -234,7 +245,7 @@ export default function DeliveryReturnNo({ navigation }: any) {
                     style={styles.input}
                     value={sn}
                     onChangeText={handleSnChange}
-                    onSubmitEditing={() => handleSnSubmit()}
+                    //onSubmitEditing={() => handleSnSubmit()}
                     onKeyPress={handleKeyPress}
                     placeholder="BON NO"
                     autoCapitalize="characters"
@@ -254,8 +265,7 @@ export default function DeliveryReturnNo({ navigation }: any) {
                                 <Text style={[styles.headerCell, { width: 60 }]}>QTY</Text>
                                 <Text style={[styles.headerCell, { width: 60 }]}>In</Text>
                                 <Text style={[styles.headerCell, { width: 60 }]}>Diff</Text>
-                                <Text style={[styles.headerCell, { width: 100 }]}>From</Text>
-                                <Text style={[styles.headerCell, { width: 100 }]}>To</Text>                             
+                                <Text style={[styles.headerCell, { width: 100 }]}>To</Text>
                             </View>
                             <ScrollView style={{ flex: 1 }}>
                                 {items.length === 0 ? (
@@ -306,15 +316,15 @@ const styles = StyleSheet.create({
     userNameText: { color: "#FFFFFF", fontSize: scale(12), fontWeight: "700" },
     content: { flex: 1, padding: 16 },
     tableCard: { flex: 1, backgroundColor: "#FFF", borderRadius: 16, overflow: "hidden", elevation: 2, borderWidth: 1, borderColor: "#E2E8F0", marginBottom: 16 },
-    input: { backgroundColor: "#e2f0eeff", height: 40, borderRadius: 10, paddingHorizontal: 12, fontSize: 13, color: "#1E293B", elevation:32, fontWeight: "600", borderWidth: 1, borderColor: "#0052cc", marginBottom: 12 },
+    input: { backgroundColor: "#e2f0eeff", height: 40, borderRadius: 10, paddingHorizontal: 12, fontSize: 13, color: "#1E293B", elevation: 32, fontWeight: "600", borderWidth: 1, borderColor: "#0052cc", marginBottom: 12 },
     tableHeader: { flexDirection: "row", backgroundColor: "#0052cc", paddingVertical: 10 },
     tableRow: { flexDirection: "row", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#F1F5F9", alignItems: "center" },
     cell: { fontSize: 11, color: "#334155", textAlign: "center", fontWeight: "600" },
-    headerCell: { fontSize: 10, fontWeight: "800", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
+    headerCell: { fontSize: 12, fontWeight: "800", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
     emptyText: { textAlign: "center", padding: 40, color: "#94A3B8", fontStyle: "italic" },
     actions: { borderTopWidth: 1, borderTopColor: '#e2e8f0', paddingTop: 2 },
     primaryButton: { height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0052cc' },
     primaryButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
     errorText: { color: "#EF4444", fontSize: 12, marginBottom: 8, fontWeight: "700" },
-    selectedRow: { backgroundColor: "#E0E7FF" },
+    selectedRow: { backgroundColor: "#ffc3c3ff" },
 });

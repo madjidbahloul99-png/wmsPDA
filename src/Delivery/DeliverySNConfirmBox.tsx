@@ -87,6 +87,7 @@ export default function DeliverySNConfirmBox({ navigation, route }: any) {
             }
 
             const result = await response.json();
+            console.log("problem result", result);
 
             if (result.code === 500) {
                 Alert.alert("Error", result.message);
@@ -111,7 +112,8 @@ export default function DeliverySNConfirmBox({ navigation, route }: any) {
                 const total = list.reduce((sum, item) => sum + parseInt(item.qty || "0"), 0);
                 setTotalQty(total);
             } else {
-                Alert.alert("Error", result.message || `There is no product in the ${scanType}!`);
+                Alert.alert("Error", `There is no product in the ${scanType}!`);
+                navigation.goBack();
                 setTotalQty(0);
             }
         } catch (error) {
@@ -131,12 +133,6 @@ export default function DeliverySNConfirmBox({ navigation, route }: any) {
                     {
                         text: "Cancel",
                         style: "cancel",
-                        onPress: () => {
-                            DeviceEventEmitter.emit(
-                                'ON_DELIVERY_CONFIRM_CANCEL'
-                            );
-                            navigation.goBack();
-                        }
                     },
                     {
                         text: "Yes",
@@ -187,7 +183,16 @@ export default function DeliverySNConfirmBox({ navigation, route }: any) {
         return `${typeLabel}: ${palletCode || "—"} Total qty: ${totalQty}`;
     };
 
-    const tableHeaders = ["FXH", "Boxcode", "Qty", "Model", "Color", "Order"];
+    const columns = [
+        { label: "No", width: 40 },
+        { label: "Boxcode", width: 140 },
+        { label: "Qty", width: 70 },
+        { label: "Model", width: 130 },
+        { label: "Color", width: 110 },
+        { label: "Order", width: 160 },
+    ];
+
+    const totalTableWidth = columns.reduce((acc, col) => acc + col.width, 0);
 
     return (
         <SafeAreaView style={styles.container}>
@@ -243,11 +248,11 @@ export default function DeliverySNConfirmBox({ navigation, route }: any) {
             {/* List Card */}
             <View style={styles.tableCard}>
                 <ScrollView horizontal showsHorizontalScrollIndicator={true}>
-                    <View>
+                    <View style={{ width: totalTableWidth }}>
                         <View style={styles.tableHeader}>
-                            {tableHeaders.map((h) => (
-                                <Text key={h} style={[styles.headerCell, { width: 90 }]}>
-                                    {h}
+                            {columns.map((col) => (
+                                <Text key={col.label} style={[styles.headerCell, { width: col.width }]}>
+                                    {col.label}
                                 </Text>
                             ))}
                         </View>
@@ -259,20 +264,21 @@ export default function DeliverySNConfirmBox({ navigation, route }: any) {
                                         key={index}
                                         style={[
                                             styles.row,
+                                            { backgroundColor: index % 2 === 0 ? "#FFFFFF" : "#BAE6FD" },
                                             selectedIndex === index && styles.selectedRow
                                         ]}
                                         onPress={() => setSelectedIndex(index)}
                                     >
-                                        <Text style={[styles.cell, { width: 90 }]}>{item.fxh}</Text>
-                                        <Text style={[styles.cell, { width: 90 }]}>{item.boxCode}</Text>
-                                        <Text style={[styles.cell, { width: 90 }]}>{item.qty}</Text>
-                                        <Text style={[styles.cell, { width: 90 }]}>{item.model}</Text>
-                                        <Text style={[styles.cell, { width: 90 }]}>{item.color}</Text>
-                                        <Text style={[styles.cell, { width: 120 }]}>{item.orderCode}</Text>
+                                        <Text style={[styles.cell, { width: columns[0].width }]}>{item.fxh}</Text>
+                                        <Text style={[styles.cell, { width: columns[1].width }]}>{item.boxCode}</Text>
+                                        <Text style={[styles.cell, { width: columns[2].width }]}>{item.qty}</Text>
+                                        <Text style={[styles.cell, { width: columns[3].width }]}>{item.model}</Text>
+                                        <Text style={[styles.cell, { width: columns[4].width }]}>{item.color}</Text>
+                                        <Text style={[styles.cell, { width: columns[5].width }]}>{item.orderCode}</Text>
                                     </TouchableOpacity>
                                 ))
                             ) : (
-                                <Text style={[styles.emptyText, { width: 540 }]}>No data available</Text>
+                                <Text style={[styles.emptyText, { width: totalTableWidth }]}>No data available</Text>
                             )}
                         </ScrollView>
                     </View>
@@ -356,12 +362,12 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: "#E2E8F0"
     },
-    statLabel: { color: "#FFFFFF", fontSize: 11, fontWeight: "700", textTransform: "uppercase" },
-    statValue: { color: "#FFFFFF", fontSize: 12, fontWeight: "800" },
-    statInput: { color: "#FFFFFF", fontSize: 12, fontWeight: "800", padding: 0, height: 20, textAlign: 'right', flex: 1 },
+    statLabel: { color: "#FFFFFF", fontSize: 13, fontWeight: "700", textTransform: "uppercase" },
+    statValue: { color: "#FFFFFF", fontSize: 13, fontWeight: "800" },
+    statInput: { color: "#FFFFFF", fontSize: 13, fontWeight: "800", padding: 0, height: 20, textAlign: 'right', flex: 1 },
     tableCard: { flex: 1, backgroundColor: "#FFF", marginHorizontal: 16, borderRadius: 16, overflow: "hidden", elevation: 2, borderWidth: 1, borderColor: "#E2E8F0", marginBottom: -4 },
     tableHeader: { flexDirection: "row", backgroundColor: "#0052cc", paddingVertical: 10 },
-    headerCell: { fontSize: 10, fontWeight: "800", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
+    headerCell: { fontSize: 12, fontWeight: "800", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
     row: { flexDirection: "row", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#F1F5F9", alignItems: "center" },
     cell: { fontSize: 11, color: "#334155", textAlign: "center", fontWeight: "600" },
     emptyText: { textAlign: "center", color: "#94A3B8", marginTop: 40, fontStyle: "italic" },
@@ -369,8 +375,8 @@ const styles = StyleSheet.create({
     buttonRow: { flexDirection: 'row', gap: 12 },
     actionBtn: { flex: 1, height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
     btnPrimary: { backgroundColor: '#2563eb' },
-    btnSecondary: { backgroundColor: '#f1f5f9', borderWidth: 1, borderColor: '#e2e8f0' },
+    btnSecondary: { backgroundColor: '#BAE6FD', borderWidth: 1, borderColor: '#e2e8f0' },
     btnTextPrimary: { color: '#fff', fontSize: 15, fontWeight: '800' },
     btnTextSecondary: { color: '#475569', fontSize: 15, fontWeight: '700' },
-    selectedRow: { backgroundColor: "#E0E7FF" },
+    selectedRow: { backgroundColor: "#ffc3c3ff" },
 });

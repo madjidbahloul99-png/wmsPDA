@@ -189,7 +189,7 @@ export default function DistributorReturnNo({ navigation }: any) {
                                     </View>
                                 ) : (
                                     itemList.map((item, index) => (
-                                        <View key={index} style={styles.tableRow}>
+                                        <View key={index} style={[styles.tableRow, { backgroundColor: index % 2 === 0 ? "#FFFFFF" : "#BAE6FD" }]}>
                                             <Text style={[styles.cell, { width: 120, color: getItemColor(item) }]}>{f_orderId}</Text>
                                             <Text style={[styles.cell, { width: 130, color: getItemColor(item) }]}>{item.model}</Text>
                                             <Text style={[styles.cell, { width: 100, color: getItemColor(item) }]}>{item.color}</Text>

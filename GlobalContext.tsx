@@ -65,10 +65,6 @@ type GlobalContextType = {
   gs_workdate: string;
   setgs_workdate: (v: string) => void;
 
-  // IP
-  gs_IPAddress: string;
-  setgs_IPAddress: (v: string) => void;
-
   // Web config
   g_webUrl: string;
   setg_webUrl: (v: string) => void;
@@ -88,7 +84,8 @@ export const GlobalProvider = ({ children }: { children: React.ReactNode }) => {
 
 
 
-  const [gsURL, _setgsgsURL] = useState("http://192.168.137.32:7278");
+  const [gsURL, _setgsgsURL] = useState("https://zwmsapi.condor.dz");
+  //const [gsURL, _setgsgsURL] = useState("http://192.168.137.84:7278"); 
 
   // BaseSignInfo
   const [operateUserCode, _setOperateUserCode] = useState("");
@@ -124,8 +121,6 @@ export const GlobalProvider = ({ children }: { children: React.ReactNode }) => {
   // Workdate
   const [gs_workdate, _setWorkdate] = useState("");
 
-  // IP
-  const [gs_IPAddress, _setIPAddress] = useState("");
 
   // Web config
   const [g_webUrl, _setWebUrl] = useState(
@@ -193,9 +188,6 @@ export const GlobalProvider = ({ children }: { children: React.ReactNode }) => {
 
         gs_workdate,
         setgs_workdate: _setWorkdate,
-
-        gs_IPAddress,
-        setgs_IPAddress: _setIPAddress,
 
         g_webUrl,
         setg_webUrl: _setWebUrl,

@@ -57,10 +57,21 @@ export default function Disassembly({ navigation }: any) {
             const response = await fetch(`${BASE_URL}/api/BarcodeType`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-                body: JSON.stringify({ 
+                body: JSON.stringify({
                     operateUserCode, operateUserName, operateWareHouseCode, operateRandomNumber, operateSign, operateVersion,
-                    factoryCode: gs_factoryCode, barcode }),
+                    factoryCode: gs_factoryCode, barcode
+                }),
             });
+
+            if (response.status === 401) {
+                Alert.alert("Unauthorized", "Token expired or invalid.");
+                return;
+            }
+
+            if (response.status === 403) {
+                Alert.alert("Access Denied", "You do not have permission.");
+                return;
+            }
             const result = await response.json();
             console.log("scantype  ", result)
             if (result.message === "success" && result.data) {
@@ -122,6 +133,16 @@ export default function Disassembly({ navigation }: any) {
                     Authorization: `Bearer ${token}`
                 },
             });
+
+            if (response.status === 401) {
+                Alert.alert("Unauthorized", "Token expired or invalid.");
+                return;
+            }
+
+            if (response.status === 403) {
+                Alert.alert("Access Denied", "You do not have permission.");
+                return;
+            }
 
             const result = await response.json();
 
@@ -211,6 +232,16 @@ export default function Disassembly({ navigation }: any) {
                                     Authorization: `Bearer ${token}`
                                 },
                             });
+
+                            if (response.status === 401) {
+                                Alert.alert("Unauthorized", "Token expired or invalid.");
+                                return;
+                            }
+
+                            if (response.status === 403) {
+                                Alert.alert("Access Denied", "You do not have permission.");
+                                return;
+                            }
                             const result = await response.json();
 
                             if (result.message === "success") {
@@ -331,7 +362,11 @@ export default function Disassembly({ navigation }: any) {
                                     itemList.map((item, index) => (
                                         <TouchableOpacity
                                             key={index}
-                                            style={[styles.tableRow, selectedItemIndex === index && styles.selectedRow]}
+                                            style={[
+                                                styles.tableRow,
+                                                { backgroundColor: index % 2 === 0 ? "#FFFFFF" : "#BAE6FD" },
+                                                selectedItemIndex === index && styles.selectedRow
+                                            ]}
                                             onPress={() => setSelectedItemIndex(index)}
                                         >
                                             {scanType === "box" ? (
@@ -401,7 +436,7 @@ const styles = StyleSheet.create({
     headerCell: { fontSize: 10, fontWeight: "800", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
     tableRow: { flexDirection: "row", paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: "#F1F5F9", alignItems: "center" },
     cell: { fontSize: 11, color: "#334155", textAlign: "center", fontWeight: "600", paddingHorizontal: 4 },
-    selectedRow: { backgroundColor: '#FEE2E2' },
+    selectedRow: { backgroundColor: '#ffc3c3ff' },
     emptyText: { textAlign: "center", color: "#94A3B8", fontStyle: "italic" },
     footer: { marginTop: 8 },
     removeBtn: { backgroundColor: "#EF4444", padding: 12, borderRadius: 10, alignItems: "center", height: 44, elevation: 2 },

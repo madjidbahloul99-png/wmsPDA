@@ -293,7 +293,7 @@ export default function DistributorReturn({ navigation, route }: any) {
                                     </View>
                                 ) : (
                                     itemList.map((item, index) => (
-                                        <View key={index} style={styles.tableRow}>
+                                        <View key={index} style={[styles.tableRow, { backgroundColor: index % 2 === 0 ? "#FFFFFF" : "#BAE6FD" }]}>
                                             <Text style={[styles.cell, { width: 150 }]}>{item.boxCode}</Text>
                                             <Text style={[styles.cell, { width: 130 }]}>{item.model}</Text>
                                             <Text style={[styles.cell, { width: 100 }]}>{item.color}</Text>

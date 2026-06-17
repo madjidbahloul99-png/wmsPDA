@@ -41,6 +41,7 @@ export default function PalletSNDetails({ navigation, route }: any) {
     const [loading, setLoading] = useState(true);
     const [details, setDetails] = useState<SNDetail[]>([]);
     const [qtyTotal, setQtyTotal] = useState(0);
+    const [selectedItemIndex, setSelectedItemIndex] = useState<number | null>(null);
     const [model, setModel] = useState("");
     const [color, setColor] = useState("");
 
@@ -124,16 +125,24 @@ export default function PalletSNDetails({ navigation, route }: any) {
         }
     }, [fetchDetails, token]);
 
-    const renderItem = ({ item }: { item: SNDetail }) => (
-        <View style={styles.tableRow}>
+    const renderItem = ({ item, index }: { item: SNDetail; index: number }) => (
+        <TouchableOpacity
+            style={[
+                styles.tableRow,
+                { backgroundColor: index % 2 === 0 ? "#FFFFFF" : "#BAE6FD" },
+                selectedItemIndex === index && styles.selectedRow
+            ]}
+            onPress={() => setSelectedItemIndex(index)}
+            activeOpacity={0.7}
+        >
             <Text style={[styles.cell, { width: 50 }]}>{item.fxh}</Text>
             <Text style={[styles.cell, { width: 150 }]}>{item.SN}</Text>
             <Text style={[styles.cell, { width: 120 }]}>{item.imeiCode1}</Text>
             <Text style={[styles.cell, { width: 120 }]}>{item.imeiCode2}</Text>
             <Text style={[styles.cell, { width: 120 }]}>{item.imeiCode3}</Text>
             <Text style={[styles.cell, { width: 120 }]}>{item.orderCode}</Text>
-            <Text style={[styles.cell, { width: 120 }]}>{item.realdate}</Text>
-        </View>
+            <Text style={[styles.cell, { width: 150 }]}>{item.realdate}</Text>
+        </TouchableOpacity>
     );
 
     return (
@@ -176,7 +185,7 @@ export default function PalletSNDetails({ navigation, route }: any) {
                             <Text style={[styles.headerCell, { width: 120 }]}>IMEI2</Text>
                             <Text style={[styles.headerCell, { width: 120 }]}>IMEI3</Text>
                             <Text style={[styles.headerCell, { width: 120 }]}>Order</Text>
-                            <Text style={[styles.headerCell, { width: 120 }]}>Date</Text>
+                            <Text style={[styles.headerCell, { width: 150 }]}>Date</Text>
                         </View>
 
                         {loading ? (
@@ -187,7 +196,7 @@ export default function PalletSNDetails({ navigation, route }: any) {
                                 renderItem={renderItem}
                                 keyExtractor={(item) => item.id}
                                 contentContainerStyle={{ paddingBottom: 20 }}
-                                scrollEnabled={false}
+                                scrollEnabled={true}
                             />
                         )}
                     </View>
@@ -231,8 +240,8 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: "#E2E8F0"
     },
-    statLabel: { color: "#FFFFFF", fontSize: 10, fontWeight: "700", textTransform: "uppercase" },
-    statValue: { color: "#FFFFFF", fontSize: 11, fontWeight: "800" },
+    statLabel: { color: "#FFFFFF", fontSize: 13, fontWeight: "700", textTransform: "uppercase" },
+    statValue: { color: "#FFFFFF", fontSize: 13, fontWeight: "800" },
     modelInfoCard: {
         backgroundColor: "#FFF",
         padding: 12,
@@ -243,12 +252,13 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: "#E2E8F0"
     },
-    modelInfoLabel: { fontSize: 10, fontWeight: "700", color: "#64748B", marginBottom: 4, textTransform: "uppercase" },
+    modelInfoLabel: { fontSize: 13, fontWeight: "700", color: "#64748B", marginBottom: 4, textTransform: "uppercase" },
     modelInfoValue: { fontSize: 13, color: "#1E293B", fontWeight: "700" },
     tableCard: { flex: 1, backgroundColor: "#FFF", marginHorizontal: 16, borderRadius: 16, overflow: "hidden", elevation: 2, borderWidth: 1, borderColor: "#E2E8F0", marginBottom: 16 },
     tableHeader: { flexDirection: "row", backgroundColor: "#0052cc", paddingVertical: 10 },
-    headerCell: { fontSize: 10, fontWeight: "800", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
+    headerCell: { fontSize: 12, fontWeight: "800", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
     tableRow: { flexDirection: "row", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#F1F5F9", alignItems: "center" },
+    selectedRow: { backgroundColor: "#ffc3c3ff" },
     cell: { fontSize: 11, color: "#334155", textAlign: "center", fontWeight: "600" },
     footer: { padding: 16, borderTopWidth: 1, borderTopColor: '#e2e8f0' },
     actionBtn: { height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },

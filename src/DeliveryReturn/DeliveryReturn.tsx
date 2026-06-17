@@ -13,6 +13,7 @@ import {
     Image,
     Dimensions,
     DeviceEventEmitter,
+    Animated,
 } from "react-native";
 import { useGlobal } from "../../GlobalContext.tsx";
 import { useFocusEffect } from "@react-navigation/native";
@@ -25,6 +26,8 @@ interface BoxItem {
     color: string;
     boxQty: string;
 }
+
+const AnimatedView = Animated.View as any;
 
 export default function DeliveryReturn({ navigation, route }: any) {
     const { deliveryCode, systemDeliveryCode, tock } = route.params;
@@ -40,10 +43,58 @@ export default function DeliveryReturn({ navigation, route }: any) {
     const [qty, setQty] = useState("");
     const [loading, setLoading] = useState(false);
     const [boxList, setBoxList] = useState<BoxItem[]>([]);
+    const [selectedItemIndex, setSelectedItemIndex] = useState<number | null>(null);
     const [showKeyboard] = useState(false);
+    const [scanState, setScanState] = useState<
+        "waiting" | "scanning" | "success" | "error"
+    >("waiting");
     const snInputRef = useRef<TextInput>(null);
     const isScanning = useRef(false);
     const scanTimer = useRef<any>(null);
+    const borderAnim = useRef(new Animated.Value(0)).current;
+
+    useEffect(() => {
+        let animation: Animated.CompositeAnimation | null = null;
+        if (scanState === "waiting") {
+            animation = Animated.loop(
+                Animated.sequence([
+                    Animated.timing(borderAnim, {
+                        toValue: 1,
+                        duration: 700,
+                        useNativeDriver: false,
+                    }),
+                    Animated.timing(borderAnim, {
+                        toValue: 0,
+                        duration: 700,
+                        useNativeDriver: false,
+                    }),
+                ])
+            );
+            animation.start();
+        } else {
+            borderAnim.setValue(1);
+        }
+        return () => {
+            animation?.stop();
+        };
+    }, [scanState]);
+
+    const animatedBorderColor = borderAnim.interpolate({
+        inputRange: [0, 1],
+        outputRange:
+            scanState === "waiting"
+                ? ["#0052cc", "#60a5fa"]
+                : scanState === "scanning"
+                    ? ["#f59e0b", "#fbbf24"]
+                    : scanState === "success"
+                        ? ["#16a34a", "#4ade80"]
+                        : ["#dc2626", "#f87171"],
+    });
+
+    const animatedBorderWidth = borderAnim.interpolate({
+        inputRange: [0, 1],
+        outputRange: [1, 4],
+    });
 
     useEffect(() => {
         const loadToken = async () => {
@@ -81,6 +132,11 @@ export default function DeliveryReturn({ navigation, route }: any) {
                 }
 
                 const result = await response.json();
+                if (result.code === 500) {
+                    Alert.alert("Error", result.message);
+                    navigation.goBack();
+                    return;
+                }
                 console.log("deliverCHECK", result)
                 if (result.message === "success" && result.data) {
                     const data = result.data;
@@ -121,9 +177,10 @@ export default function DeliveryReturn({ navigation, route }: any) {
         const SN = (scanValue || sn).toUpperCase().trim();
         if (!SN) return;
 
+        setScanState("scanning");
         isScanning.current = true;
         setLoading(true);
-        setSn("");
+        //setSn("");
 
         try {
             // Correspond to C# getType(SN) which calls pub.BarcodeType
@@ -138,26 +195,36 @@ export default function DeliveryReturn({ navigation, route }: any) {
             });
 
             if (typeRes.status === 401) {
+                setScanState("error");
                 Alert.alert("Unauthorized", "Token expired or invalid.");
                 return;
             }
 
             const typeResult = await typeRes.json();
+
+            if (typeResult.code === 500) {
+                setScanState("error");
+                Alert.alert("Error", typeResult.message);
+                navigation.goBack();
+                return;
+            }
             console.log("deliverytypescan", typeResult)
             if (typeResult.message === "success" && typeResult.data) {
                 let scanType = (typeResult.data.scanType || "").toLowerCase();
                 if (scanType === "") { scanType = "pallet" }
 
                 if (scanType === "pallet" || scanType === "box") {
+                    setScanState("success");
                     navigation.navigate("DeliveryReturnSNConfirmBox", {
                         palletCode: SN,
-                        sType: scanType, // Passing lower case as used for comparison but can be mapped if needed
+                        sType: scanType,
                         currentSn: SN,
                         deliveryCode,
                         systemDeliveryCode,
                         tock
                     });
                 } else if (scanType === "sn") {
+                    setScanState("success");
                     navigation.navigate("DeliveryReturnSNConfirm", {
                         palletCode: "",
                         sType: scanType,
@@ -167,18 +234,20 @@ export default function DeliveryReturn({ navigation, route }: any) {
                         tock
                     });
                 } else {
-                    // C# behavior: just call palletDeal directly if type is different
                     processDeliveryReturnInsert(SN, scanType, SN);
                 }
             } else {
+                setScanState("error");
                 Alert.alert("Error", "Data handling exceptions, please check!");
             }
         } catch (err: any) {
+            setScanState("error");
             Alert.alert("Error", err.message);
         } finally {
             setLoading(false);
             isScanning.current = false;
         }
+        setSn("");
     };
 
     const processDeliveryReturnInsert = async (pCode: string, sType: string, originalSn: string) => {
@@ -203,19 +272,31 @@ export default function DeliveryReturn({ navigation, route }: any) {
             });
 
             if (response.status === 401) {
+                setScanState("error");
                 Alert.alert("Unauthorized", "Token expired or invalid.");
                 return;
             }
 
             if (response.status === 403) {
+                setScanState("error");
                 Alert.alert("Access Denied", "You do not have permission.");
                 return;
             }
 
+
             const result = await response.json();
+
+            if (result.code === 500) {
+                setScanState("error");
+                Alert.alert("Error", result.message);
+                navigation.goBack();
+                return;
+            }
+
             if (result.message === "success" && result.data && result.data.length > 0) {
                 const firstRow = result.data[0];
                 if (firstRow.isok === "1") {
+                    setScanState("success");
                     setQty(String(firstRow.totalQty || "0"));
                     const isfinish = String(firstRow.isfinish || "0");
 
@@ -230,19 +311,25 @@ export default function DeliveryReturn({ navigation, route }: any) {
                     setPalletCode(pCode);
 
                     if (isfinish === "1") {
-                        Alert.alert("Success", "The delivery of documents has been completed a warehouse!");
+                        Alert.alert("Message", "The delivery of documents has been completed a warehouse!");
                     }
                 } else {
+                    setScanState("error");
                     Alert.alert("Error", firstRow.retstr || "Insert failed");
                 }
             } else {
+                setScanState("error");
                 Alert.alert("Error", "There is no product in the Pallet!");
             }
         } catch (err: any) {
+            setScanState("error");
             Alert.alert("Error", err.message);
         } finally {
             setLoading(false);
-            setTimeout(() => snInputRef.current?.focus(), 100);
+            setTimeout(() => {
+                snInputRef.current?.focus();
+                setScanState("waiting");
+            }, 1000);
         }
     };
 
@@ -293,13 +380,22 @@ export default function DeliveryReturn({ navigation, route }: any) {
         }
     };
 
-    const renderItem = ({ item }: { item: BoxItem }) => (
-        <View style={styles.tableRow}>
+    const renderItem = ({ item, index }: { item: BoxItem, index: number }) => (
+        <TouchableOpacity
+            key={item.id || index}
+            style={[
+                styles.tableRow,
+                { backgroundColor: index % 2 === 0 ? "#FFFFFF" : "#BAE6FD" },
+                selectedItemIndex === index && styles.selectedRow
+            ]}
+            onPress={() => setSelectedItemIndex(index)}
+            activeOpacity={0.7}
+        >
             <Text style={[styles.cell, { width: 150 }]}>{item.boxCode}</Text>
             <Text style={[styles.cell, { width: 120 }]}>{item.model}</Text>
             <Text style={[styles.cell, { width: 100 }]}>{item.color}</Text>
             <Text style={[styles.cell, { width: 60 }]}>{item.boxQty}</Text>
-        </View>
+        </TouchableOpacity>
     );
 
     return (
@@ -328,24 +424,32 @@ export default function DeliveryReturn({ navigation, route }: any) {
                     </View>
 
                     <View style={styles.inputGroup}>
-                        <TextInput
-                            ref={snInputRef}
-                            style={styles.input}
-                            value={sn}
-                            onChangeText={handleSnChange}
-                            onSubmitEditing={handleSnSubmit}
-                            placeholder="Barcode"
-                            autoCapitalize="characters"
-                            autoCorrect={false}
-                            spellCheck={false}
-                            showSoftInputOnFocus={showKeyboard}
-                            blurOnSubmit={false}
-                            onBlur={ensureFocus}
-                            multiline={false}
-                            scrollEnabled={false}
-                            textAlignVertical="center"
-                        //contextMenuHidden={true}
-                        />
+                        <AnimatedView style={[
+                            styles.animatedInputContainer,
+                            {
+                                borderColor: animatedBorderColor,
+                                borderWidth: animatedBorderWidth,
+                            }
+                        ]}>
+                            <TextInput
+                                ref={snInputRef}
+                                style={styles.input}
+                                value={sn}
+                                onChangeText={handleSnChange}
+                                onSubmitEditing={handleSnSubmit}
+                                placeholder="Barcode"
+                                autoCapitalize="characters"
+                                autoCorrect={false}
+                                spellCheck={false}
+                                showSoftInputOnFocus={showKeyboard}
+                                blurOnSubmit={false}
+                                onBlur={ensureFocus}
+                                multiline={false}
+                                scrollEnabled={false}
+                                textAlignVertical="center"
+                            //contextMenuHidden={true}
+                            />
+                        </AnimatedView>
                     </View>
                 </View>
 
@@ -368,7 +472,7 @@ export default function DeliveryReturn({ navigation, route }: any) {
                                 ) : (
                                     boxList.map((item, index) => (
                                         <React.Fragment key={item.id || index}>
-                                            {renderItem({ item })}
+                                            {renderItem({ item, index })}
                                         </React.Fragment>
                                     ))
                                 )}
@@ -440,22 +544,25 @@ const styles = StyleSheet.create({
     input: {
         backgroundColor: "#e2f0eeff",
         height: 36,
-        borderRadius: 8,
         paddingHorizontal: 12,
         paddingVertical: 0,
-        fontSize: 13,
+        fontSize: 14,
         color: "#1E293B",
         fontWeight: "600",
-        borderWidth: 1,
-        borderColor: "#0052cc",
         textAlignVertical: 'center'
+    },
+    animatedInputContainer: {
+        borderRadius: 8,
+        overflow: 'hidden',
+        borderWidth: 1,
     },
     disabledInput: { backgroundColor: "#E2E8F0", color: "#64748B" },
     tableCard: { flex: 1, backgroundColor: "#FFF", borderRadius: 12, overflow: "hidden", elevation: 2, borderWidth: 1, borderColor: "#0052cc" },
     tableHeader: { flexDirection: "row", backgroundColor: "#0052cc", paddingVertical: 10 },
-    headerCell: { fontSize: 10, fontWeight: "800", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
+    headerCell: { fontSize: 11, fontWeight: "800", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
     tableRow: { flexDirection: "row", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#F1F5F9", alignItems: "center" },
     cell: { fontSize: 11, color: "#334155", textAlign: "center", fontWeight: "600" },
+    selectedRow: { backgroundColor: "#ffc3c3ff" },
     footer: { borderTopWidth: 1, borderTopColor: '#e2e8f0', paddingTop: 2 },
     actionBtn: { height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginTop: 12 },
     btnPrimary: { backgroundColor: '#0052cc' },

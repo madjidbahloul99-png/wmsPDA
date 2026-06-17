@@ -16,10 +16,13 @@ import {
     Dimensions,
     ScrollView,
     DeviceEventEmitter,
+    Animated,
 } from "react-native";
 import { useGlobal } from "../../GlobalContext.tsx";
 import { useFocusEffect } from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+
+const AnimatedView = Animated.View as any;
 
 interface BoxItem {
     id: string;
@@ -49,6 +52,55 @@ export default function AllocateRejectIn({ navigation }: any) {
     const snInputRef = useRef<TextInput>(null);
     const isScanning = useRef(false);
     const scanTimer = useRef<any>(null);
+    const borderAnim = useRef(new Animated.Value(0)).current;
+
+    const [scanState, setScanState] = useState<
+        "waiting" | "scanning" | "success" | "error">("waiting");
+
+    useEffect(() => {
+        let animation: Animated.CompositeAnimation | null = null;
+
+        if (scanState === "waiting") {
+            animation = Animated.loop(
+                Animated.sequence([
+                    Animated.timing(borderAnim, {
+                        toValue: 1,
+                        duration: 700,
+                        useNativeDriver: false,
+                    }),
+                    Animated.timing(borderAnim, {
+                        toValue: 0,
+                        duration: 700,
+                        useNativeDriver: false,
+                    }),
+                ])
+            );
+            animation.start();
+        } else {
+            borderAnim.setValue(1);
+        }
+
+        return () => {
+            animation?.stop();
+        };
+    }, [scanState]);
+
+    const animatedBorderColor = borderAnim.interpolate({
+        inputRange: [0, 1],
+        outputRange:
+            scanState === "waiting"
+                ? ["#0052cc", "#60a5fa"]
+                : scanState === "scanning"
+                    ? ["#f59e0b", "#fbbf24"]
+                    : scanState === "success"
+                        ? ["#16a34a", "#4ade80"]
+                        : ["#dc2626", "#f87171"],
+    });
+
+    const animatedBorderWidth = borderAnim.interpolate({
+        inputRange: [0, 1],
+        outputRange: [1, 4],
+    });
 
 
     useEffect(() => {
@@ -99,16 +151,19 @@ export default function AllocateRejectIn({ navigation }: any) {
             });
 
             if (typeRes.status === 401) {
+                setScanState("error");
                 Alert.alert("Unauthorized", "Token expired or invalid.");
                 return;
             }
 
             if (typeRes.status === 403) {
+                setScanState("error");
                 Alert.alert("Access Denied", "You do not have permission.");
                 return;
             }
             const typeResult = await typeRes.json();
             if (typeResult.code === 500) {
+                setScanState("error");
                 Alert.alert("Error", typeResult.message);
                 navigation.goBack();
                 return;
@@ -119,11 +174,12 @@ export default function AllocateRejectIn({ navigation }: any) {
             }
 
             //CHANGE IT TO SN
-            if (!scanType) {
-                scanType = "pallet";
+            if (!scanType ) {
+               scanType = "pallet";
             }
 
             if (scanType === "pallet" || scanType === "box") {
+                setScanState("success");
                 navigation.navigate("AllocateRejectInSNConfirmBox", {
                     barCode: currentSn,
                     scanType: scanType,
@@ -133,6 +189,7 @@ export default function AllocateRejectIn({ navigation }: any) {
                 setLoading(false);
                 return;
             } else if (scanType === "sn") {
+                setScanState("success");
                 navigation.navigate("AllocateRejectInSNConfirm", {
                     sn: currentSn,
                     scanType: scanType,
@@ -147,6 +204,7 @@ export default function AllocateRejectIn({ navigation }: any) {
             processPalletDeal(currentSn, scanType, allocateCode);
 
         } catch (err: any) {
+            setScanState("error");
             Alert.alert("Error", err.message);
             setLoading(false);
         } finally {
@@ -155,6 +213,11 @@ export default function AllocateRejectIn({ navigation }: any) {
     };
 
     const handleSnChange = (text: string) => {
+        if (text.trim() === "") {
+            setScanState("waiting");
+        } else {
+            setScanState("scanning");
+        }
         if (text.endsWith('\n') || text.endsWith('\r')) {
             const cleanSn = text.toUpperCase().trim();
             if (cleanSn.length > 0) {
@@ -210,17 +273,20 @@ export default function AllocateRejectIn({ navigation }: any) {
             });
 
             if (response.status === 401) {
+                setScanState("error");
                 Alert.alert("Unauthorized", "Token expired or invalid.");
                 return;
             }
 
             if (response.status === 403) {
+                setScanState("error");
                 Alert.alert("Access Denied", "You do not have permission.");
                 return;
             }
 
             const result = await response.json();
             if (result.code === 500) {
+                setScanState("error");
                 Alert.alert("Error", result.message);
                 navigation.goBack();
                 return;
@@ -228,6 +294,7 @@ export default function AllocateRejectIn({ navigation }: any) {
             console.log("rturn", result);
             if (result.message === "success" && result.data && result.data.length > 0) {
                 if (result.data[0].isOk === "1") {
+                    setScanState("success");
                     setQty(result.data[0].totalQty || "0");
 
                     const mapped = result.data.map((item: any, index: number) => {
@@ -245,12 +312,15 @@ export default function AllocateRejectIn({ navigation }: any) {
                     setBoxList(mapped);
                     Alert.alert("Success", "Operation completed successfully!");
                 } else {
+                    setScanState("error");
                     Alert.alert("Error", result.data[0].retStr);
                 }
             } else {
+                setScanState("error");
                 Alert.alert("Error", "There is no product in the Pallet!");
             }
         } catch (err: any) {
+            setScanState("error");
             Alert.alert("Error", err.message);
         } finally {
             setLoading(false);
@@ -284,8 +354,15 @@ export default function AllocateRejectIn({ navigation }: any) {
         navigation.goBack();
     };
 
-    const renderItem = ({ item }: { item: BoxItem }) => (
-        <View style={styles.tableRow}>
+    const renderItem = ({ item, index }: { item: BoxItem, index: number }) => (
+        <View
+            style={[
+                styles.tableRow,
+                index % 2 === 0
+                    ? { backgroundColor: "#FFFFFF" }
+                    : { backgroundColor: "#BAE6FD" }
+            ]}
+        >
             <Text style={[styles.cell, { width: 150 }]}>{item.boxCode}</Text>
             <Text style={[styles.cell, { width: 120 }]}>{item.model}</Text>
             <Text style={[styles.cell, { width: 100 }]}>{item.color}</Text>
@@ -323,20 +400,28 @@ export default function AllocateRejectIn({ navigation }: any) {
                     <Text style={styles.statLabel}>Total Qty</Text>
                     <Text style={styles.statValue}>{qty || "0"}</Text>
                 </View>
-                <TextInput
-                    ref={snInputRef}
-                    style={styles.input}
-                    value={sn}
-                    onChangeText={handleSnChange}
-                    placeholder="Barcode"
-                    placeholderTextColor="#334155"
-                    onSubmitEditing={handleSnSubmit}
-                    autoCapitalize="characters"
-                    autoCorrect={false}
-                    showSoftInputOnFocus={showKeyboard}
-                    blurOnSubmit={false}
-                    onBlur={ensureFocus}
-                />
+                <AnimatedView style={{
+                    borderRadius: 10,
+                    borderWidth: animatedBorderWidth,
+                    borderColor: animatedBorderColor,
+                    backgroundColor: "#e2f0eeff",
+                    elevation: 2,
+                }}>
+                    <TextInput
+                        ref={snInputRef}
+                        style={[styles.input, { borderWidth: 0, elevation: 0 }]}
+                        value={sn}
+                        onChangeText={handleSnChange}
+                        placeholder="Barcode"
+                        placeholderTextColor="#334155"
+                        onSubmitEditing={handleSnSubmit}
+                        autoCapitalize="characters"
+                        autoCorrect={false}
+                        showSoftInputOnFocus={showKeyboard}
+                        blurOnSubmit={false}
+                        onBlur={ensureFocus}
+                    />
+                </AnimatedView>
             </View>
 
             <View style={styles.tableCard}>
@@ -353,7 +438,7 @@ export default function AllocateRejectIn({ navigation }: any) {
 
                         <FlatList
                             data={boxList}
-                            renderItem={renderItem}
+                            renderItem={({ item, index }) => renderItem({ item, index })}
                             keyExtractor={(item) => item.id}
                             contentContainerStyle={styles.listContent}
                             ListEmptyComponent={() => (
@@ -429,7 +514,7 @@ const styles = StyleSheet.create({
     },
     statLabel: { color: "#FFFFFF", fontSize: 14, fontWeight: "700", textTransform: "uppercase" },
     statValue: { color: "#FFFFFF", fontSize: 14, fontWeight: "800" },
-    input: { height: 40, backgroundColor: "#e2f0eeff", borderRadius: 10, paddingHorizontal: 12, paddingVertical: 0, fontSize: 14, color: "#1E293B", borderWidth: 1, borderColor: "#0052cc" },
+    input: { height: 40, backgroundColor: "#e2f0eeff", borderRadius: 10, paddingHorizontal: 12, paddingVertical: 0, fontSize: 14, fontWeight:700, color: "#1E293B", borderWidth: 1, borderColor: "#0052cc" },
     tableCard: { flex: 1, backgroundColor: "#FFF", marginHorizontal: 8, borderRadius: 16, overflow: "hidden", elevation: 2, borderWidth: 1, borderColor: "#0052cc", marginBottom: -4 },
     tableHeader: { flexDirection: "row", backgroundColor: "#0052cc", paddingVertical: 10 },
     headerCell: { fontSize: 10, fontWeight: "800", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },

@@ -33,6 +33,7 @@ export default function SNReturn({ navigation }: any) {
     const [txtSN, setTxtSN] = useState("");
     const [f_returnCode, setFReturnCode] = useState("");
     const [itemList, setItemList] = useState<any[]>([]);
+    const [selectedItemIndex, setSelectedItemIndex] = useState<number | null>(null);
     const [label_error, setLabelError] = useState("");
     const scanTimer = useRef<any>(null);
     const inputRef = useRef<TextInput>(null);
@@ -61,7 +62,8 @@ export default function SNReturn({ navigation }: any) {
                 headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
                 body: JSON.stringify({
                     operateUserCode, operateUserName, operateWareHouseCode, operateRandomNumber, operateSign, operateVersion,
-                    factoryCode: gs_factoryCode, scanCode: SN }),
+                    factoryCode: gs_factoryCode, scanCode: SN
+                }),
             });
             const result = await response.json();
             if (result.message === "success" && result.data) {
@@ -78,12 +80,17 @@ export default function SNReturn({ navigation }: any) {
             const response = await fetch(`${BASE_URL}/api/SNReturn/GetNo`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-                body: JSON.stringify({ 
+                body: JSON.stringify({
                     operateUserCode, operateUserName, operateWareHouseCode, operateRandomNumber, operateSign, operateVersion,
-                    BillType: "RT" }),
+                    BillType: "RT"
+                }),
             });
 
             const result = await response.json();
+            if (result.code === 500) {
+                Alert.alert("Error", result.message);
+                return;
+            }
             console.log("BillTyperesult", result)
             if (result.message === "success" && result.data) {
                 return result.data.returnCode || result.data;
@@ -176,6 +183,10 @@ export default function SNReturn({ navigation }: any) {
             });
 
             const result = await response.json();
+            if (result.code === 500) {
+                Alert.alert("Error", result.message);
+                return;
+            }
 
             if (result.message === "success" && result.data) {
                 const data = result.data;
@@ -227,6 +238,11 @@ export default function SNReturn({ navigation }: any) {
                             });
 
                             const result = await response.json();
+                            if (result.code === 500) {
+                                Alert.alert("Error", result.message);
+
+                                return;
+                            }
                             if (result.message === "success") {
                                 // Clear state for next scan sequence
                                 setFReturnCode("");
@@ -266,7 +282,7 @@ export default function SNReturn({ navigation }: any) {
             <View style={styles.content}>
                 <View style={styles.inputSection}>
 
-                    
+
                     <View style={[styles.scanInputContainer, { marginBottom: 8 }]}>
                         <TextInput
                             ref={inputRef}
@@ -346,7 +362,16 @@ export default function SNReturn({ navigation }: any) {
                                     </View>
                                 ) : (
                                     itemList.map((item, index) => (
-                                        <View key={index} style={styles.tableRow}>
+                                        <TouchableOpacity
+                                            key={index}
+                                            style={[
+                                                styles.tableRow,
+                                                { backgroundColor: index % 2 === 0 ? "#FFFFFF" : "#BAE6FD" },
+                                                selectedItemIndex === index && styles.selectedRow
+                                            ]}
+                                            onPress={() => setSelectedItemIndex(index)}
+                                            activeOpacity={0.7}
+                                        >
                                             <Text style={[styles.cell, { width: 140 }]}>{item.sn}</Text>
                                             <Text style={[styles.cell, { width: 150 }]}>{item.boxCode}</Text>
                                             <Text style={[styles.cell, { width: 150 }]}>{item.palletCode}</Text>
@@ -356,7 +381,7 @@ export default function SNReturn({ navigation }: any) {
                                             <Text style={[styles.cell, { width: 130 }]}>{item.imeicode2}</Text>
                                             <Text style={[styles.cell, { width: 130 }]}>{item.imeicode3}</Text>
                                             <Text style={[styles.cell, { width: 150 }]}>{item.createDate}</Text>
-                                        </View>
+                                        </TouchableOpacity>
                                     ))
                                 )}
                             </ScrollView>
@@ -403,6 +428,7 @@ const styles = StyleSheet.create({
     headerCell: { fontSize: 10, fontWeight: "800", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
     tableRow: { flexDirection: "row", paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: "#F1F5F9", alignItems: "center" },
     cell: { fontSize: 11, color: "#334155", textAlign: "center", fontWeight: "600", paddingHorizontal: 4 },
+    selectedRow: { backgroundColor: "#ffc3c3ff" },
     emptyText: { textAlign: "center", color: "#94A3B8", fontStyle: "italic" },
     footer: { marginTop: 8 },
     qtyRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#FFF', padding: 10, borderRadius: 8, marginBottom: 8, borderWidth: 1, borderColor: '#E2E8F0' },

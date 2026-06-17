@@ -165,7 +165,8 @@ export default function AllocateRejectInSNConfirmBox({ navigation, route }: any)
         <TouchableOpacity
             style={[
                 styles.tableRow,
-                selectedRowIndex === index && { backgroundColor: '#E0E7FF' }
+                index % 2 === 0 ? { backgroundColor: "#FFFFFF" } : { backgroundColor: "#BAE6FD" },
+                selectedRowIndex === index && { backgroundColor: "#ffc3c3ff" }
             ]}
             onPress={() => setSelectedRowIndex(index)}
             activeOpacity={0.7}
@@ -211,8 +212,8 @@ export default function AllocateRejectInSNConfirmBox({ navigation, route }: any)
                 ) : null}
                 {systemBill ? (
                     <View style={[styles.statBox, { backgroundColor: '#E0E7FF' }]}>
-                        <Text style={[styles.statLabel, { color: '#4338CA' }]}>SAP:</Text>
-                        <Text style={{ color: '#4338CA', fontSize: 13 }}>{systemBill}</Text>
+                        <Text style={[styles.statLabel, { color: '#4338CA',fontWeight:800,fontSize:13 }]}>SAP:</Text>
+                        <Text style={{ color: '#4338CA', fontSize: 13 ,fontWeight:800}}>{systemBill}</Text>
                     </View>
                 ) : null}
             </View>
@@ -221,7 +222,7 @@ export default function AllocateRejectInSNConfirmBox({ navigation, route }: any)
                 <ScrollView horizontal showsHorizontalScrollIndicator={true}>
                     <View>
                         <View style={styles.tableHeader}>
-                            <Text style={[styles.headerCell, { width: 50 }]}>FXH</Text>
+                            <Text style={[styles.headerCell, { width: 50 }]}>No</Text>
                             <Text style={[styles.headerCell, { width: 150 }]}>Box Code</Text>
                             <Text style={[styles.headerCell, { width: 60 }]}>Qty</Text>
                             <Text style={[styles.headerCell, { width: 120 }]}>Model</Text>
@@ -340,8 +341,8 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: "#E2E8F0"
     },
-    statLabel: { color: "#FFFFFF", fontSize: 11, fontWeight: "700", textTransform: "uppercase" },
-    statValue: { color: "#FFFFFF", fontSize: 12, fontWeight: "800" },
+    statLabel: { color: "#FFFFFF", fontSize: 13, fontWeight: "700", textTransform: "uppercase" },
+    statValue: { color: "#FFFFFF", fontSize: 13, fontWeight: "800" },
     tableCard: { flex: 1, backgroundColor: "#FFF", marginHorizontal: 16, borderRadius: 16, overflow: "hidden", elevation: 2, borderWidth: 1, borderColor: "#E2E8F0", marginBottom: -4 },
     tableHeader: { flexDirection: "row", backgroundColor: "#0052cc", paddingVertical: 10 },
     headerCell: { fontSize: 10, fontWeight: "800", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
@@ -353,7 +354,7 @@ const styles = StyleSheet.create({
     buttonRow: { flexDirection: 'row', gap: 12 },
     actionBtn: { flex: 1, height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
     btnPrimary: { backgroundColor: '#2563eb' },
-    btnSecondary: { backgroundColor: '#f1f5f9', borderWidth: 1, borderColor: '#e2e8f0' },
+    btnSecondary: { backgroundColor: '#BAE6FD', borderWidth: 1, borderColor: '#e2e8f0' },
     btnTextPrimary: { color: '#fff', fontSize: 15, fontWeight: '800' },
     btnTextSecondary: { color: '#475569', fontSize: 15, fontWeight: '700' },
 });

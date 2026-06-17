@@ -46,6 +46,7 @@ export default function DeliverySNConfirm({ navigation, route }: any) {
     const [boxCode, setBoxCode] = useState(initialBoxCode || "");
     const [model, setModel] = useState("");
     const [color, setColor] = useState("");
+    const [qty, setQty] = useState("0");
     const [title, setTitle] = useState("");
 
     useEffect(() => {
@@ -129,11 +130,13 @@ export default function DeliverySNConfirm({ navigation, route }: any) {
                 setModel(list[0].model);
                 setColor(list[0].color);
 
+                setQty(list.length.toString());
                 // Final title logic: Pallet:P Box:B Model Color
                 //const baseTitle = `Pallet: ${currentPallet} Box: ${currentBox}`;
                 //setTitle(`${baseTitle} ${list[0].model} ${list[0].color}`);
             } else {
-                Alert.alert("Error", result.message || "There is no product in the Pallet!");
+                Alert.alert("Error", `There is no product for the ${scanType}!`);
+                navigation.goBack();
             }
         } catch (error) {
             console.error(error);
@@ -161,7 +164,7 @@ export default function DeliverySNConfirm({ navigation, route }: any) {
                     text: "Yes",
                     onPress: () => {
                         DeviceEventEmitter.emit(
-                            "ON_DELIVERY_CONFIRM",
+                            "ON_DELIVERY_CONFIRM_OK",
                             {
                                 barCode: SN,
                                 scanType
@@ -178,7 +181,7 @@ export default function DeliverySNConfirm({ navigation, route }: any) {
         navigation.goBack();
     };
 
-    const tableHeaders = ["FXH", "SN", "IMEI 1", "IMEI 2", "IMEI 3", "Date", "Order"];
+    const tableHeaders = ["No", "SN", "IMEI 1", "IMEI 2", "IMEI 3", "Date", "Order"];
 
     return (
         <SafeAreaView style={styles.container}>
@@ -203,34 +206,48 @@ export default function DeliverySNConfirm({ navigation, route }: any) {
             </View>
 
             <View style={styles.statsCard}>
-                {scanType === "sn" ? (
-                    <View style={styles.statBox}>
-                        <Text style={styles.statLabel}>SN</Text>
-                        <TextInput
-                            style={styles.statInput}
-                            value={SN}
-                            editable={false}
-                            placeholder="-"
-                        />
-                    </View>
-                ) : (
+
+                <View style={styles.statBox}>
+                    <Text style={styles.statLabel}>Pallet</Text>
+                    <TextInput
+                        style={styles.statInput}
+                        value={palletCode}
+                        onChangeText={setPalletCode}
+                        placeholder="-"
+                    />
+                </View>
+
+                <View style={styles.statBox}>
+                    <Text style={styles.statLabel}>Box</Text>
+                    <TextInput
+                        style={styles.statInput}
+                        value={boxCode}
+                        onChangeText={setBoxCode}
+                        placeholder="-"
+                    />
+                </View>
+
+                <View style={styles.statBox}>
+                    <Text style={styles.statLabel}>Total Qty</Text>
+                    <TextInput
+                        style={styles.statInput}
+                        value={qty}
+                        editable={false}
+                    />
+                </View>
+
+
+                {/* Add QTY input */}
+                {scanType == "sn" && (
                     <>
-                        <View style={styles.statBox}>
-                            <Text style={styles.statLabel}>Pallet</Text>
-                            <TextInput
-                                style={styles.statInput}
-                                value={palletCode}
-                                onChangeText={setPalletCode}
-                                placeholder="-"
-                            />
-                        </View>
+
 
                         <View style={styles.statBox}>
-                            <Text style={styles.statLabel}>Box</Text>
+                            <Text style={styles.statLabel}>SN</Text>
                             <TextInput
                                 style={styles.statInput}
-                                value={boxCode}
-                                onChangeText={setBoxCode}
+                                value={SN}
+                                editable={false}
                                 placeholder="-"
                             />
                         </View>
@@ -244,28 +261,30 @@ export default function DeliverySNConfirm({ navigation, route }: any) {
                 <ScrollView horizontal showsHorizontalScrollIndicator={true}>
                     <View>
                         <View style={styles.tableHeader}>
-                            {tableHeaders.map((h) => (
-                                <Text key={h} style={[styles.headerCell, { width: 120 }]}>
-                                    {h}
-                                </Text>
-                            ))}
+                            <Text style={[styles.headerCell, { width: 60 }]}>No</Text>
+                            <Text style={[styles.headerCell, { width: 150 }]}>SN</Text>
+                            <Text style={[styles.headerCell, { width: 140 }]}>IMEI 1</Text>
+                            <Text style={[styles.headerCell, { width: 140 }]}>IMEI 2</Text>
+                            <Text style={[styles.headerCell, { width: 140 }]}>IMEI 3</Text>
+                            <Text style={[styles.headerCell, { width: 150 }]}>Date</Text>
+                            <Text style={[styles.headerCell, { width: 120 }]}>Order</Text>
                         </View>
 
                         <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator>
                             {details.length > 0 ? (
                                 details.map((item, index) => (
-                                    <View key={index} style={styles.row}>
-                                        <Text style={[styles.cell, { width: 120 }]}>{item.fxh}</Text>
-                                        <Text style={[styles.cell, { width: 120 }]}>{item.sn}</Text>
-                                        <Text style={[styles.cell, { width: 120 }]}>{item.imeiCode1}</Text>
-                                        <Text style={[styles.cell, { width: 120 }]}>{item.imeiCode2}</Text>
-                                        <Text style={[styles.cell, { width: 120 }]}>{item.imeiCode3}</Text>
-                                        <Text style={[styles.cell, { width: 120 }]}>{item.realdate}</Text>
+                                    <View key={index} style={[styles.row, { backgroundColor: index % 2 === 0 ? "#FFFFFF" : "#BAE6FD" }]}>
+                                        <Text style={[styles.cell, { width: 60 }]}>{item.fxh}</Text>
+                                        <Text style={[styles.cell, { width: 150 }]}>{item.sn}</Text>
+                                        <Text style={[styles.cell, { width: 140 }]}>{item.imeiCode1}</Text>
+                                        <Text style={[styles.cell, { width: 140 }]}>{item.imeiCode2}</Text>
+                                        <Text style={[styles.cell, { width: 140 }]}>{item.imeiCode3}</Text>
+                                        <Text style={[styles.cell, { width: 150 }]}>{item.realdate}</Text>
                                         <Text style={[styles.cell, { width: 120 }]}>{item.orderCode}</Text>
                                     </View>
                                 ))
                             ) : (
-                                <Text style={[styles.emptyText, { width: 700 }]}>No data available</Text>
+                                <Text style={[styles.emptyText, { width: 810 }]}>No data available</Text>
                             )}
                         </ScrollView>
                     </View>
@@ -342,16 +361,16 @@ const styles = StyleSheet.create({
         borderColor: "#E2E8F0",
 
     },
-    statLabel: { color: "#FFFFFF", fontSize: 11, fontWeight: "700", textTransform: "uppercase" },
-    statValue: { color: "#FFFFFF", fontSize: 11, fontWeight: "800" },
-    statInput: { color: "#FFFFFF", fontSize: 11, fontWeight: "800", padding: 0, height: 25, textAlign: 'right', flex: 1 },
+    statLabel: { color: "#FFFFFF", fontSize: 13, fontWeight: "700", textTransform: "uppercase" },
+    statValue: { color: "#FFFFFF", fontSize: 13, fontWeight: "800" },
+    statInput: { color: "#FFFFFF", fontSize: 13, fontWeight: "800", padding: 0, height: 25, textAlign: 'right', flex: 1 },
     tagRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 16, marginBottom: 16 },
     tagCard: { flex: 1, backgroundColor: "#F1F5F9", padding: 8, borderRadius: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
     tagLabel: { color: "#64748B", fontSize: 10, fontWeight: "700", marginRight: 4 },
     tagValue: { color: "#1E293B", fontSize: 10, fontWeight: "800" },
-    tableCard: { flex: 1, backgroundColor: "#FFF", marginHorizontal: 16, borderRadius: 16, overflow: "hidden", elevation: 2, borderWidth: 1, borderColor: "#E2E8F0", marginBottom: -6 },
+    tableCard: { flex: 1, backgroundColor: "#FFF", marginHorizontal: 16, borderRadius: 16, overflow: "hidden", elevation: 2, borderWidth: 1, borderColor: "#E2E8F0", marginBottom: 0 },
     tableHeader: { flexDirection: "row", backgroundColor: "#0052cc", paddingVertical: 10 },
-    headerCell: { fontSize: 10, fontWeight: "800", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
+    headerCell: { fontSize: 11, fontWeight: "800", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
     row: { flexDirection: "row", paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: "#F1F5F9", alignItems: "center" },
     cell: { fontSize: 11, color: "#334155", textAlign: "center", fontWeight: "600" },
     emptyText: { textAlign: "center", color: "#94A3B8", marginTop: 40, fontStyle: "italic" },

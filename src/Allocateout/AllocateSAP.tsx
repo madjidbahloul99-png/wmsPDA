@@ -32,7 +32,7 @@ export default function AllocateSAP({ navigation }: any) {
   const global = useGlobal();
   const { gsURL, gs_factoryCode, gs_wareCode, gs_userCode, gs_userName,
     operateUserCode, operateUserName, operateWareHouseCode, operateRandomNumber, operateSign, operateVersion,
-   } = global;
+  } = global;
   const BASE_URL = gsURL;
   const [token, setToken] = useState("");
 
@@ -57,7 +57,6 @@ export default function AllocateSAP({ navigation }: any) {
   useEffect(() => {
     const loadToken = async () => {
       const t = await AsyncStorage.getItem("userToken");
-      console.log("TOKEN IN Allocateout", t);
       if (t) setToken(t);
     };
 
@@ -180,7 +179,7 @@ export default function AllocateSAP({ navigation }: any) {
       } else {
         setDepotNo("");
         setModelInput("");
-        depotRef.current?.focus();
+        //depotRef.current?.focus();
       }
     } catch (err: any) {
       setErrorMsg("Plan Error: " + err.message);
@@ -191,8 +190,22 @@ export default function AllocateSAP({ navigation }: any) {
 
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
+
+      setTimeout(() => {
+        bonRef.current?.focus();
+      }, 100);
+
+    });
+
+    return unsubscribe;
+  }, [navigation]);
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+
       if (currentBonNo) {
         fetchAllocatePlan(currentBonNo);
+        setBonNo("");
       }
     });
 
@@ -219,16 +232,20 @@ export default function AllocateSAP({ navigation }: any) {
       if (sn.length > 0) {
         fetchAllocatePlan(sn);
       }
-    }, 200);
+    }, 300);
+
   };
 
   const handleChoice = () => {
     if (selectedIndex === null) {
-      setErrorMsg("Please select an item first");
+      Alert.alert("Warning", "Please select an item first");
       return;
     }
 
-    const allocateCode = items[selectedIndex].allocateCode;
+    const selectedItem = items[selectedIndex];
+
+    const allocateCode = selectedItem.allocateCode;
+
     navigation.navigate("AllocateFrm", { allocateCode });
   };
 
@@ -246,7 +263,11 @@ export default function AllocateSAP({ navigation }: any) {
     return (
       <TouchableOpacity
         key={index}
-        style={[styles.tableRow, isSelected && styles.selectedRow]}
+        style={[
+          styles.tableRow,
+          index % 2 === 0 ? { backgroundColor: "#FFFFFF" } : { backgroundColor: "#BAE6FD" },
+          isSelected && styles.selectedRow
+        ]}
         onPress={() => setSelectedIndex(index)}
       >
         <Text style={[styles.cell, { color: textColor, width: 120 }]}>{item.bonNo}</Text>
@@ -289,9 +310,9 @@ export default function AllocateSAP({ navigation }: any) {
             <TextInput
               ref={bonRef}
               style={styles.input1}
-              defaultValue=""
+              value={bonNo}
               onChangeText={handleBonChange}
-              onSubmitEditing={handleBonSubmit}
+              //onSubmitEditing={handleBonSubmit}
               placeholder=" BON NO"
               autoCapitalize="characters"
               placeholderTextColor="#334155"
@@ -315,6 +336,7 @@ export default function AllocateSAP({ navigation }: any) {
               blurOnSubmit={false}
               onBlur={ensureFocus}
               scrollEnabled={false}
+              editable={false}
 
             />
           </View>
@@ -405,11 +427,12 @@ const styles = StyleSheet.create({
   card: { backgroundColor: "#FFF", marginHorizontal: -8, borderRadius: 16, paddingBottom: 8, padding: 12, marginBottom: 8, elevation: 2, borderWidth: 1, borderColor: "#0052cc" },
   inputGroup: { marginBottom: 4 },
   input: { backgroundColor: "#0052cc", height: 40, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 0, fontSize: 13, color: "#e2f0eeff", fontWeight: "600", borderWidth: 1, borderColor: "#CBD5E1" },
-  inputGroup1: { marginBottom: 4 },
-  input1: { backgroundColor: "#e2f0eeff", height: 40, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 0, fontSize: 13, color: "#334155", fontWeight: "600", borderWidth: 1, borderColor: "#0052cc" },
+  inputGroup1: { marginBottom: 8 },
+  input1: { backgroundColor: "#e2f0eeff", height: 40, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 0, 
+  fontSize: 13, color: "#334155", fontWeight: "600", borderWidth: 1, borderColor: "#0052cc" },
   tableCard: { flex: 1, backgroundColor: "#FFF", marginHorizontal: -8, borderRadius: 16, overflow: "hidden", elevation: 2, borderWidth: 1, borderColor: "#0052cc", marginBottom: 8 },
   tableHeader: { flexDirection: "row", backgroundColor: "#0052cc", paddingVertical: 10 },
-  headerCell: { fontSize: 10, fontWeight: "800", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
+  headerCell: { fontSize: 11, fontWeight: "800", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
   tableRow: { flexDirection: "row", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#F1F5F9", alignItems: "center" },
   cell: { fontSize: 11, color: "#334155", textAlign: "center", fontWeight: "600" },
   emptyText: { textAlign: "center", padding: 40, color: "#94A3B8", fontStyle: "italic", width: 830 },
@@ -417,7 +440,7 @@ const styles = StyleSheet.create({
   primaryButton: { height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0052cc' },
   primaryButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
   errorText: { color: "#EF4444", fontSize: 12, marginBottom: 8, fontWeight: "700" },
-  selectedRow: { backgroundColor: "#E0E7FF" },
+  selectedRow: { backgroundColor: "#ffc3c3ff" },
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(255,255,255,0.7)",

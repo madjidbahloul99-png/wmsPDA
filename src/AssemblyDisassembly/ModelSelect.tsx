@@ -23,8 +23,8 @@ const { width } = Dimensions.get("window");
 export default function ModelSelect({ navigation, route }: any) {
     const onSelect = route?.params?.onSelect;
     const global = useGlobal();
-    const { gsURL, gs_userName 
-        
+    const { gsURL, gs_userName
+
     } = global;
     const BASE_URL = gsURL;
 
@@ -59,6 +59,11 @@ export default function ModelSelect({ navigation, route }: any) {
                 return;
             }
 
+            if (response.status === 403) {
+                Alert.alert("Access Denied", "You do not have permission.");
+                return;
+            }
+
             const result = await response.json();
 
             if (result.message === "success" && result.data) {
@@ -90,10 +95,11 @@ export default function ModelSelect({ navigation, route }: any) {
         }
     };
 
-    const renderItem = ({ item }: { item: any }) => (
+    const renderItem = ({ item, index }: { item: any, index: number }) => (
         <TouchableOpacity
             style={[
                 styles.tableRow,
+                { backgroundColor: index % 2 === 0 ? "#FFFFFF" : "#BAE6FD" },
                 selectedModel === item.model && styles.selectedRow
             ]}
             onPress={() => setSelectedModel(item.model)}
@@ -178,7 +184,7 @@ export default function ModelSelect({ navigation, route }: any) {
                             ) : (
                                 <FlatList
                                     data={filteredList}
-                                    renderItem={renderItem}
+                                    renderItem={({ item, index }) => renderItem({ item, index })}
                                     keyExtractor={(item, index) => index.toString()}
                                     ListHeaderComponent={ListHeader}
                                     stickyHeaderIndices={[0]}
@@ -223,8 +229,8 @@ const styles = StyleSheet.create({
         padding: 10,
         borderRadius: 8,
 
-        flexDirection: 'row',          
-        justifyContent: 'space-between', 
+        flexDirection: 'row',
+        justifyContent: 'space-between',
         alignItems: 'center'
     },
 
@@ -247,9 +253,9 @@ const styles = StyleSheet.create({
     tableRow: { flexDirection: "row", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#F1F5F9", alignItems: "center" },
     cell: { fontSize: 13, color: "#334155", textAlign: "center", fontWeight: "600" },
     emptyText: { textAlign: "center", padding: 40, color: "#94A3B8", fontStyle: "italic" },
-    selectedRow: { backgroundColor: '#E0E7FF' },
+    selectedRow: { backgroundColor: '#ffc3c3ff' },
     footer: { marginTop: 16 },
-    confirmBtn: { backgroundColor: "#0052cc", padding: 8, borderRadius: 12, alignItems: "center", elevation: 2,height:40 },
+    confirmBtn: { backgroundColor: "#0052cc", padding: 8, borderRadius: 12, alignItems: "center", elevation: 2, height: 40 },
     confirmBtnText: { color: "#FFF", fontWeight: "900", fontSize: 14 },
     disabledBtn: { backgroundColor: "#0052cc" },
 });

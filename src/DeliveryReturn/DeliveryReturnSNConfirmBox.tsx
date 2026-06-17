@@ -19,13 +19,13 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 export default function DeliveryReturnSNConfirmBox({ navigation, route }: any) {
     const { palletCode, sType, currentSn, deliveryCode, systemDeliveryCode, tock } = route.params;
     const global = useGlobal();
-    const { gsURL, gs_factoryCode, gs_wareCode, gs_userName ,operateUserCode, operateUserName, operateWareHouseCode, operateRandomNumber, operateSign, operateVersion,} = global;
+    const { gsURL, gs_factoryCode, gs_wareCode, gs_userName, operateUserCode, operateUserName, operateWareHouseCode, operateRandomNumber, operateSign, operateVersion, } = global;
     const BASE_URL = gsURL;
     const [token, setToken] = useState("");
 
     const [loading, setLoading] = useState(false);
     const [palletData, setPalletData] = useState<any[]>([]);
-    const [selectedId, setSelectedId] = useState<string | null>(null);
+    const [selectedItemIndex, setSelectedItemIndex] = useState<number | null>(null);
 
     const totalQty = palletData.reduce((acc, item) => acc + (Number(item.qty) || 0), 0);
 
@@ -60,10 +60,25 @@ export default function DeliveryReturnSNConfirmBox({ navigation, route }: any) {
                     return;
                 }
 
+                if (response.status === 403) {
+                    Alert.alert("Access Denied", "You do not have permission.");
+                    return;
+                }
+
                 const result = await response.json();
+
+                if (result.code === 500) {
+                    Alert.alert("Error", result.message);
+                    navigation.goBack();
+                    return;
+                }
                 console.log("confirmbox", result)
-                if (result.message === "success" && result.data) {
+                if (result.message === "success" && result.data.length > 0) {
                     setPalletData(result.data);
+                } else {
+                    Alert.alert("Error", "There is no product in the Pallet!");
+                    navigation.goBack();
+
                 }
             } catch (err: any) {
                 Alert.alert("Error", err.message);
@@ -93,12 +108,12 @@ export default function DeliveryReturnSNConfirmBox({ navigation, route }: any) {
     };
 
     const handleBoxDetail = () => {
-        if (selectedId === null) {
+        if (selectedItemIndex === null) {
             Alert.alert("Notice", "Please select a row first!");
             return;
         }
 
-        const selectedItem = palletData.find((_, index) => index.toString() === selectedId);
+        const selectedItem = palletData[selectedItemIndex];
         if (selectedItem) {
             navigation.navigate("DeliveryReturnSNConfirm", {
                 palletCode,
@@ -162,8 +177,12 @@ export default function DeliveryReturnSNConfirmBox({ navigation, route }: any) {
                                     palletData.map((item, index) => (
                                         <TouchableOpacity
                                             key={index}
-                                            style={[styles.tableRow, selectedId === index.toString() && styles.selectedRow]}
-                                            onPress={() => setSelectedId(index.toString())}
+                                            style={[
+                                                styles.tableRow,
+                                                { backgroundColor: index % 2 === 0 ? "#FFFFFF" : "#BAE6FD" },
+                                                selectedItemIndex === index && styles.selectedRow
+                                            ]}
+                                            onPress={() => setSelectedItemIndex(index)}
                                             activeOpacity={0.8}
                                         >
                                             <Text style={[styles.cell, { width: 150 }]}>{item.boxCode}</Text>
@@ -217,7 +236,7 @@ const styles = StyleSheet.create({
         marginBottom: 8,
         borderWidth: 1,
         borderColor: "#CBD5E1",
-        marginHorizontal:-4
+        marginHorizontal: -4
     },
     infoLabel: {
         fontSize: 11,
@@ -234,7 +253,7 @@ const styles = StyleSheet.create({
     tableHeader: { flexDirection: "row", backgroundColor: "#0052cc", paddingVertical: 10 },
     headerCell: { fontSize: 10, fontWeight: "800", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
     tableRow: { flexDirection: "row", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#F1F5F9", alignItems: "center" },
-    selectedRow: { backgroundColor: "#E0E7FF" },
+    selectedRow: { backgroundColor: "#ffc3c3ff" },
     cell: { fontSize: 11, color: "#334155", textAlign: "center", fontWeight: "600" },
     emptyText: { textAlign: "center", padding: 40, color: "#94A3B8", fontStyle: "italic", width: 550 },
     actions: {

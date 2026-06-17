@@ -45,6 +45,7 @@ export default function PalletSearch({ navigation }: any) {
     const [selectedItem, setSelectedItem] = useState<PalletBoxItem | null>(null);
 
     const snInputRef = useRef<TextInput>(null);
+    const scanTimer = useRef<any>(null);
 
     useEffect(() => {
         const loadToken = async () => {
@@ -66,9 +67,33 @@ export default function PalletSearch({ navigation }: any) {
         }
     };
 
-    const handleScan = async () => {
-        if (!sn.trim()) return;
-        const inputSn = sn.toUpperCase().trim();
+    const handleBarcodeChange = (text: string) => {
+        setSn(text);
+        clearTimeout(scanTimer.current);
+
+        if (text.endsWith("\n") || text.endsWith("\r")) {
+            const cleanCode = text.trim();
+            if (cleanCode.length > 0) {
+                setSn(cleanCode);
+                handleScan(cleanCode);
+            }
+            return;
+        }
+
+        scanTimer.current = setTimeout(() => {
+            const cleanCode = text.trim();
+            if (cleanCode.length > 0) {
+                handleScan(cleanCode);
+            }
+        }, 500);
+    };
+
+    const handleScan = async (manualCode?: string) => {
+        const codeToProcess = typeof manualCode === "string" ? manualCode : sn;
+        if (!codeToProcess.trim()) return;
+
+        clearTimeout(scanTimer.current);
+        const inputSn = codeToProcess.toUpperCase().trim();
         setSn("");
         setLoading(true);
 
@@ -190,11 +215,15 @@ export default function PalletSearch({ navigation }: any) {
         }
     };
 
-    const renderItem = ({ item }: { item: PalletBoxItem }) => {
+    const renderItem = ({ item, index }: { item: PalletBoxItem; index: number }) => {
         const isSelected = selectedItem?.id === item.id;
         return (
             <TouchableOpacity
-                style={[styles.tableRow, isSelected && styles.selectedRow]}
+                style={[
+                    styles.tableRow,
+                    { backgroundColor: index % 2 === 0 ? "#FFFFFF" : "#BAE6FD" },
+                    isSelected && styles.selectedRow
+                ]}
                 onPress={() => setSelectedItem(item)}
             >
                 <Text style={[styles.cell, { width: 50 }]}>{item.fxh}</Text>
@@ -239,10 +268,10 @@ export default function PalletSearch({ navigation }: any) {
                     ref={snInputRef}
                     style={styles.input}
                     value={sn}
-                    onChangeText={setSn}
+                    onChangeText={handleBarcodeChange}
                     placeholder="Pallet/Box"
                     placeholderTextColor="#334155"
-                    onSubmitEditing={handleScan}
+                    //onSubmitEditing={() => handleScan()}
                     autoCapitalize="characters"
                     autoCorrect={false}
                     showSoftInputOnFocus={showKeyboard}
@@ -272,7 +301,7 @@ export default function PalletSearch({ navigation }: any) {
                                 renderItem={renderItem}
                                 keyExtractor={(item) => item.id}
                                 contentContainerStyle={{ paddingBottom: 20 }}
-                                scrollEnabled={false}
+                                scrollEnabled={true}
                                 ListEmptyComponent={
                                     !loading ? (
                                         <View style={styles.emptyState}>
@@ -335,23 +364,23 @@ const styles = StyleSheet.create({
         justifyContent: "space-between",
         alignItems: "center",
         backgroundColor: "#0052cc",
-        paddingHorizontal: 16,
-        paddingVertical: 12,
+        paddingHorizontal: 12,
+        paddingVertical: 4,
         borderRadius: 12,
         elevation: 2,
         borderWidth: 1,
         borderColor: "#E2E8F0"
     },
-    statLabel: { color: "#FFFFFF", fontSize: 12, fontWeight: "700", textTransform: "uppercase" },
-    statValue: { color: "#FFFFFF", fontSize: 12, fontWeight: "800" },
+    statLabel: { color: "#FFFFFF", fontSize: 13, fontWeight: "700", textTransform: "uppercase" },
+    statValue: { color: "#FFFFFF", fontSize: 13, fontWeight: "800" },
     inputContainer: { paddingHorizontal: 16, marginBottom: 8 },
     label: { fontSize: 10, fontWeight: "700", color: "#64748B", marginBottom: 4, textTransform: "uppercase" },
     input: { backgroundColor: "#e2f0eeff", height: 40, borderRadius: 10, paddingHorizontal: 12, fontSize: 13, color: "#1E293B", fontWeight: "600", borderWidth: 1, borderColor: "#0052cc" },
     tableCard: { flex: 1, backgroundColor: "#FFF", marginHorizontal: 16, borderRadius: 16, overflow: "hidden", elevation: 2, borderWidth: 1, borderColor: "#E2E8F0", marginBottom: -4 },
     tableHeader: { flexDirection: "row", backgroundColor: "#0052cc", paddingVertical: 10 },
-    headerCell: { fontSize: 10, fontWeight: "800", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
+    headerCell: { fontSize: 12, fontWeight: "800", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
     tableRow: { flexDirection: "row", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#F1F5F9", alignItems: "center" },
-    selectedRow: { backgroundColor: "#E0F2FE" },
+    selectedRow: { backgroundColor: "#ffc3c3ff" },
     cell: { fontSize: 11, color: "#334155", textAlign: "center", fontWeight: "600" },
     cellMain: { fontSize: 11, color: "#1E293B", fontWeight: "700", textAlign: "center" },
     cellSub: { fontSize: 10, color: "#64748B", textAlign: "center" },

@@ -12,9 +12,12 @@ import {
     Image,
     Dimensions,
     DeviceEventEmitter,
+    Animated,
 } from "react-native";
 import { useGlobal } from "../../GlobalContext";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+
+const AnimatedView = Animated.View as any;
 
 type RowType = {
     boxCode: string;
@@ -44,6 +47,56 @@ export default function AllocateInFrm({ navigation, route }: any) {
     const snRef = useRef<TextInput>(null);
     const isScanning = useRef(false);
     const scanTimer = useRef<any>(null);
+    const borderAnim = useRef(new Animated.Value(0)).current;
+
+    const [scanState, setScanState] = useState<
+        "waiting" | "scanning" | "success" | "error"
+    >("waiting");
+
+    useEffect(() => {
+        let animation: Animated.CompositeAnimation | null = null;
+
+        if (scanState === "waiting") {
+            animation = Animated.loop(
+                Animated.sequence([
+                    Animated.timing(borderAnim, {
+                        toValue: 1,
+                        duration: 700,
+                        useNativeDriver: false,
+                    }),
+                    Animated.timing(borderAnim, {
+                        toValue: 0,
+                        duration: 700,
+                        useNativeDriver: false,
+                    }),
+                ])
+            );
+            animation.start();
+        } else {
+            borderAnim.setValue(1);
+        }
+
+        return () => {
+            animation?.stop();
+        };
+    }, [scanState]);
+
+    const animatedBorderColor = borderAnim.interpolate({
+        inputRange: [0, 1],
+        outputRange:
+            scanState === "waiting"
+                ? ["#0052cc", "#60a5fa"]
+                : scanState === "scanning"
+                    ? ["#f59e0b", "#fbbf24"]
+                    : scanState === "success"
+                        ? ["#16a34a", "#4ade80"]
+                        : ["#dc2626", "#f87171"],
+    });
+
+    const animatedBorderWidth = borderAnim.interpolate({
+        inputRange: [0, 1],
+        outputRange: [1, 4],
+    });
 
     const ensureFocus = () => {
         if (snRef.current) {
@@ -98,9 +151,10 @@ export default function AllocateInFrm({ navigation, route }: any) {
                 const row = Array.isArray(result.data)
                     ? result.data[0]
                     : result.data;
-                //change it after to 1
+               
                 if (row.isok === "1") {
                     setToCk(row.fromckName || "");
+                    
                 } else {
                     Alert.alert("Error", row.retstr || "Check failed");
                     navigation.goBack();
@@ -197,6 +251,7 @@ export default function AllocateInFrm({ navigation, route }: any) {
             const result = await response.json();
 
             if (result.code === 500) {
+                setScanState("error");
                 Alert.alert("Error", result.message);
                 navigation.goBack();
                 return;
@@ -205,6 +260,7 @@ export default function AllocateInFrm({ navigation, route }: any) {
             if (result.message === 'success' && result.data) {
                 const firstRow = result.data[0];
                 if (firstRow.isok === "1") {
+                    setScanState("success");
                     setTotalQty(firstRow.totalQty || "0");
                     const newRows = result.data.map((r: any) => ({
                         boxCode: r.boxCode,
@@ -214,15 +270,18 @@ export default function AllocateInFrm({ navigation, route }: any) {
                     }));
                     setRows(newRows);
                     if (firstRow.isfinish === "1") {
-                        Alert.alert("Success", "The allocation of documents has been completed a warehouse!");
+                        Alert.alert("Message", "The allocation of documents has been completed a warehouse!");
                     }
                 } else {
+                    setScanState("error");
                     setErrorMsg(firstRow.retstr);
                 }
             } else {
+                setScanState("error");
                 setErrorMsg("There is no product in the Pallet!");
             }
         } catch (err: any) {
+            setScanState("error");
             setErrorMsg(err.message);
         } finally {
             setLoading(false);
@@ -251,22 +310,23 @@ export default function AllocateInFrm({ navigation, route }: any) {
 
         isScanning.current = true;
         setLoading(true);
-        setSn("");
 
         try {
             let scanType = await getType(barcode);
             //delet it after both
-            if (scanType == "") { scanType = "sn"; }
+            //if (scanType == "") { scanType = "sn"; }
             if (barcode == "P0844230016") { scanType = "pallet"; }
             setLoading(false);
 
             if (scanType === "pallet" || scanType === "box") {
+                setScanState("success");
                 navigation.navigate("AllocateInSNConfirmBox", {
                     allocateCode,
                     barCode: barcode,
                     scanType
                 });
             } else if (scanType === "sn") {
+                setScanState("success");
                 navigation.navigate("AllocateInSNConfirm", {
                     allocateCode,
                     palletCode: "",
@@ -276,9 +336,12 @@ export default function AllocateInFrm({ navigation, route }: any) {
                     showConfirm: true
                 });
             } else {
+                setScanState("error");
                 palletDeal(barcode, scanType);
+
             }
         } catch (err: any) {
+            setScanState("error");
             Alert.alert("Error", err.message);
             setLoading(false);
         } finally {
@@ -288,6 +351,11 @@ export default function AllocateInFrm({ navigation, route }: any) {
     };
 
     const handleSnChange = (text: string) => {
+        if (text.trim() === "") {
+            setScanState("waiting");
+        } else {
+            setScanState("scanning");
+        }
         if (text.endsWith('\n') || text.endsWith('\r')) {
             const cleanSn = text.toUpperCase().trim();
             if (cleanSn.length > 0) {
@@ -321,7 +389,15 @@ export default function AllocateInFrm({ navigation, route }: any) {
     };
 
     const renderItem = ({ item, index }: { item: RowType; index: number }) => (
-        <View key={index} style={styles.row}>
+        <View
+            key={index}
+            style={[
+                styles.row,
+                index % 2 === 0
+                    ? { backgroundColor: "#FFFFFF" }
+                    : { backgroundColor: "#BAE6FD" }
+            ]}
+        >
             <Text style={[styles.cell, { width: 120 }]}>{item.boxCode}</Text>
             <Text style={[styles.cell, { width: 120 }]}>{item.model}</Text>
             <Text style={[styles.cell, { width: 100 }]}>{item.color}</Text>
@@ -358,39 +434,47 @@ export default function AllocateInFrm({ navigation, route }: any) {
                 <View style={styles.card}>
                     <View style={{ marginBottom: 8 }}>
                         <View style={[styles.input, { backgroundColor: '#0052cc', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 4, marginBottom: 4 }]}>
-                            <Text style={[styles.label, { marginBottom: 0, fontSize: 10, color: "#FFF" }]}>TO</Text>
-                            <Text style={{ fontSize: 11, color: "#FFF", fontWeight: "700" }}>{toCk}</Text>
+                            <Text style={[styles.label, { marginBottom: 0, fontSize: 13, color: "#FFF" }]}>TO</Text>
+                            <Text style={{ fontSize: 13, color: "#FFF", fontWeight: "700" }}>{toCk}</Text>
                         </View>
 
                         <View style={[styles.input, { backgroundColor: '#0052cc', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 4 }]}>
-                            <Text style={[styles.label, { marginBottom: 0, fontSize: 10, color: "#FFF" }]}>QTY</Text>
-                            <Text style={{ fontSize: 11, color: "#FFF", fontWeight: "700" }}>{totalQty}</Text>
+                            <Text style={[styles.label, { marginBottom: 0, fontSize: 13, color: "#FFF" }]}>QTY</Text>
+                            <Text style={{ fontSize: 13, color: "#FFF", fontWeight: "700" }}>{totalQty}</Text>
                         </View>
                     </View>
 
                     <View style={styles.inputGroup}>
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }} >
                         </View>
-                        <TextInput
-                            ref={snRef}
-                            style={styles.input}
-                            value={sn}
-                            onChangeText={handleSnChange}
-                            onSubmitEditing={handleSnSubmitInternal}
-                            placeholder="Barcode"
-                            placeholderTextColor="#334155"
-                            autoCapitalize="characters"
-                            showSoftInputOnFocus={showKeyboard}
-                            blurOnSubmit={false}
-                            onBlur={ensureFocus}
-                        />
+                        <AnimatedView style={{
+                            borderRadius: 10,
+                            borderWidth: animatedBorderWidth,
+                            borderColor: animatedBorderColor,
+                            backgroundColor: "#e2f0eeff",
+                            elevation: 2,
+                        }}>
+                            <TextInput
+                                ref={snRef}
+                                style={[styles.input, { borderWidth: 0, elevation: 0 }]}
+                                value={sn}
+                                onChangeText={handleSnChange}
+                                onSubmitEditing={handleSnSubmitInternal}
+                                placeholder="Barcode"
+                                placeholderTextColor="#334155"
+                                autoCapitalize="characters"
+                                showSoftInputOnFocus={showKeyboard}
+                                blurOnSubmit={false}
+                                onBlur={ensureFocus}
+                            />
+                        </AnimatedView>
                     </View>
                     {errorMsg ? <Text style={styles.errorText}>{errorMsg}</Text> : null}
                 </View>
 
                 <View style={styles.tableCard}>
                     <ScrollView horizontal showsHorizontalScrollIndicator={true}>
-                        <View>
+                        <View style={{ minWidth: width }}>
                             <View style={styles.tableHeader}>
                                 <Text style={[styles.headerCell, { width: 120 }]}>Box Code</Text>
                                 <Text style={[styles.headerCell, { width: 120 }]}>Model</Text>
@@ -468,10 +552,10 @@ const styles = StyleSheet.create({
     cardTitle: { fontSize: 13, fontWeight: "900", color: "#475569", marginBottom: 12, textTransform: "uppercase" },
     inputGroup: { marginBottom: 4 },
     label: { fontSize: 11, fontWeight: "700", color: "#64748B", marginBottom: 4, textTransform: "uppercase" },
-    input: { backgroundColor: "#e2f0eeff", padding: 3, borderRadius: 10, fontSize: 12, color: "#1E293B", borderWidth: 1, borderColor: "#0052cc", height: 32 },
+    input: { backgroundColor: "#e2f0eeff", padding: 3, paddingLeft: 8, borderRadius: 10, fontSize: 15, color: "#1E293B", borderWidth: 1, borderColor: "#0052cc", height: 35 },
     disabledInput: { backgroundColor: "#E2E8F0", color: "#64748B" },
     tableHeader: { flexDirection: "row", backgroundColor: "#0052cc", paddingVertical: 10 },
-    headerCell: { fontSize: 10, fontWeight: "800", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
+    headerCell: { fontSize: 12, fontWeight: "800", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
     row: { flexDirection: "row", paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: "#F1F5F9" },
     cell: { fontSize: 11, color: "#334155", textAlign: "center", fontWeight: "600" },
     emptyText: { textAlign: "center", color: "#94A3B8", marginTop: 40, fontStyle: "italic" },

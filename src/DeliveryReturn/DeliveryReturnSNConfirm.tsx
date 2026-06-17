@@ -19,13 +19,14 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 export default function DeliveryReturnSNConfirm({ navigation, route }: any) {
     const { palletCode, sType, currentSn, deliveryCode, systemDeliveryCode, tock, boxCode, showConfirm = true } = route.params;
     const global = useGlobal();
-    const { gsURL, gs_factoryCode, gs_wareCode, gs_userName ,
-        operateUserCode, operateUserName, operateWareHouseCode, operateRandomNumber, operateSign, operateVersion,} = global;
+    const { gsURL, gs_factoryCode, gs_wareCode, gs_userName,
+        operateUserCode, operateUserName, operateWareHouseCode, operateRandomNumber, operateSign, operateVersion, } = global;
     const BASE_URL = gsURL;
     const [token, setToken] = useState("");
 
     const [loading, setLoading] = useState(false);
     const [snData, setSnData] = useState<any[]>([]);
+    const [selectedItemIndex, setSelectedItemIndex] = useState<number | null>(null);
 
     const totalQty = snData.length;
 
@@ -61,12 +62,26 @@ export default function DeliveryReturnSNConfirm({ navigation, route }: any) {
                     Alert.alert("Unauthorized", "Token expired or invalid.");
                     return;
                 }
+                if (response.status === 403) {
+                    Alert.alert("Access Denied", "You do not have permission.");
+                    return;
+                }
 
 
                 const result = await response.json();
+
+                if (result.code === 500) {
+                    Alert.alert("Error", result.message);
+                    navigation.goBack();
+                    return;
+                }
                 console.log("confirmsn", result)
-                if (result.message === "success" && result.data) {
+                if (result.message === "success" && result.data.length > 0) {
                     setSnData(result.data);
+                } else {
+                    Alert.alert("Error", "There is no product in the box!");
+                    navigation.goBack();
+
                 }
             } catch (err: any) {
                 Alert.alert("Error", err.message);
@@ -145,7 +160,7 @@ export default function DeliveryReturnSNConfirm({ navigation, route }: any) {
                                 <Text style={[styles.headerCell, { width: 120 }]}>IMEI1</Text>
                                 <Text style={[styles.headerCell, { width: 120 }]}>IMEI2</Text>
                                 <Text style={[styles.headerCell, { width: 120 }]}>IMEI3</Text>
-                                <Text style={[styles.headerCell, { width: 120 }]}>Scan Time</Text>
+                                <Text style={[styles.headerCell, { width: 150 }]}>Scan Time</Text>
                                 <Text style={[styles.headerCell, { width: 120 }]}>Oreder No</Text>
                             </View>
                             <ScrollView style={{ flex: 1 }}>
@@ -155,14 +170,23 @@ export default function DeliveryReturnSNConfirm({ navigation, route }: any) {
                                     <Text style={styles.emptyText}>No data found</Text>
                                 ) : (
                                     snData.map((item, index) => (
-                                        <View key={index} style={styles.tableRow}>
-                                            <Text style={[styles.cell, { width: 150,color:"#0052cc" }]}>{item.sn}</Text>
+                                        <TouchableOpacity
+                                            key={index}
+                                            style={[
+                                                styles.tableRow,
+                                                { backgroundColor: index % 2 === 0 ? "#FFFFFF" : "#BAE6FD" },
+                                                selectedItemIndex === index && styles.selectedRow
+                                            ]}
+                                            onPress={() => setSelectedItemIndex(index)}
+                                            activeOpacity={0.7}
+                                        >
+                                            <Text style={[styles.cell, { width: 150, color: "#0052cc" }]}>{item.sn}</Text>
                                             <Text style={[styles.cell, { width: 120 }]}>{item.imeiCode1}</Text>
                                             <Text style={[styles.cell, { width: 120 }]}>{item.imeiCode2}</Text>
                                             <Text style={[styles.cell, { width: 120 }]}>{item.imeiCode3}</Text>
-                                            <Text style={[styles.cell, { width: 120 }]}>{item.realDate}</Text>
+                                            <Text style={[styles.cell, { width: 150 }]}>{item.realDate}</Text>
                                             <Text style={[styles.cell, { width: 120 }]}>{item.orderCode}</Text>
-                                        </View>
+                                        </TouchableOpacity>
                                     ))
                                 ) || <Text style={styles.emptyText}>No items</Text>}
                             </ScrollView>
@@ -206,7 +230,7 @@ const styles = StyleSheet.create({
         marginBottom: 8,
         borderWidth: 1,
         borderColor: "#CBD5E1",
-        marginHorizontal:-4
+        marginHorizontal: -4
     },
     infoLabel: {
         fontSize: 11,
@@ -224,6 +248,7 @@ const styles = StyleSheet.create({
     headerCell: { fontSize: 10, fontWeight: "800", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
     tableRow: { flexDirection: "row", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#F1F5F9", alignItems: "center" },
     cell: { fontSize: 11, color: "#334155", textAlign: "center", fontWeight: "600" },
+    selectedRow: { backgroundColor: "#ffc3c3ff" },
     emptyText: { textAlign: "center", padding: 40, color: "#94A3B8", fontStyle: "italic", width: 610 },
     actions: { marginTop: 12, gap: 10 },
     actionBtn: { height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },

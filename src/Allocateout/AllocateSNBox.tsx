@@ -96,7 +96,8 @@ export default function AllocateSNBox({ navigation, route }: any) {
         }));
         setItems(mappedData);
       } else {
-        Alert.alert("Message", result.message || "There is no product in the Pallet!");
+        Alert.alert("Error", "There is no product in the Pallet!");
+        navigation.goBack();
       }
     } catch (error) {
       Alert.alert("Error", "Failed to load box details");
@@ -128,12 +129,13 @@ export default function AllocateSNBox({ navigation, route }: any) {
       onPress={() => setSelectedItem(item)}
       style={[
         styles.row,
+        index % 2 === 0 ? { backgroundColor: "#FFFFFF" } : { backgroundColor: "#BAE6FD" },
         selectedItem?.id === item.id && styles.selectedRow,
       ]}
     >
       <Text style={[styles.cell, { width: 40 }]}>{index + 1}</Text>
-      <Text style={[styles.cell, { width: 100 }]}>{item.palletCode}</Text>
-      <Text style={[styles.cell, { width: 100 }]}>{item.boxCode}</Text>
+      <Text style={[styles.cell, { width: 150 }]}>{item.palletCode}</Text>
+      <Text style={[styles.cell, { width: 150 }]}>{item.boxCode}</Text>
       <Text style={[styles.cell, { width: 50 }]}>{item.qty}</Text>
       <Text style={[styles.cell, { width: 120 }]}>{item.model}</Text>
       <Text style={[styles.cell, { width: 100 }]}>{item.color}</Text>
@@ -168,7 +170,7 @@ export default function AllocateSNBox({ navigation, route }: any) {
       <View style={styles.content}>
         <View style={styles.statsCard}>
           <View style={styles.statBox}>
-            <Text style={styles.statLabel}>Total Quantity</Text>
+            <Text style={styles.statLabel}>Total Qty</Text>
             <Text style={[styles.statValue, { color: '#FFFFFF' }]}>{totalQty}</Text>
           </View>
         </View>
@@ -182,8 +184,8 @@ export default function AllocateSNBox({ navigation, route }: any) {
               ListHeaderComponent={
                 <View style={styles.tableHeader}>
                   <Text style={[styles.headerCell, { width: 40 }]}>No</Text>
-                  <Text style={[styles.headerCell, { width: 100 }]}>Pallet</Text>
-                  <Text style={[styles.headerCell, { width: 100 }]}>Box</Text>
+                  <Text style={[styles.headerCell, { width: 150 }]}>Pallet</Text>
+                  <Text style={[styles.headerCell, { width: 150 }]}>Box</Text>
                   <Text style={[styles.headerCell, { width: 50 }]}>Qty</Text>
                   <Text style={[styles.headerCell, { width: 120 }]}>Model</Text>
                   <Text style={[styles.headerCell, { width: 100 }]}>Color</Text>
@@ -267,13 +269,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#E2E8F0"
   },
-  statLabel: { color: "#FFFFFF", fontSize: 11, fontWeight: "700", textTransform: "uppercase" },
-  statValue: { color: "#FFFFFF", fontSize: 12, fontWeight: "800" },
+  statLabel: { color: "#FFFFFF", fontSize: 13, fontWeight: "700", textTransform: "uppercase" },
+  statValue: { color: "#FFFFFF", fontSize: 13, fontWeight: "800" },
   tableHeader: { flexDirection: "row", backgroundColor: "#0052cc", paddingVertical: 10, borderRadius: 8, marginBottom: 8 },
-  headerCell: { fontSize: 10, fontWeight: "900", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
-  row: { flexDirection: "row", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#F1F5F9", backgroundColor: "#FFF", borderRadius: 8, marginBottom: 4 },
+  headerCell: { fontSize: 12, fontWeight: "900", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
+  row: { flexDirection: "row", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#F1F5F9", borderRadius: 8, marginBottom: 4 },
   cell: { fontSize: 11, color: "#334155", textAlign: "center", fontWeight: "600" },
-  selectedRow: { backgroundColor: "#E0E7FF", borderColor: "#4F46E5", borderWidth: 1 },
+  selectedRow: { backgroundColor: "#ffc3c3ff", borderColor: "#4F46E5", borderWidth: 1 },
   emptyContainer: { padding: 40, alignItems: "center" },
   emptyText: { color: "#94A3B8", fontWeight: "600", fontSize: 14 },
   actions: { marginTop: 16 },

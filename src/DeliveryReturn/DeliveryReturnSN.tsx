@@ -18,7 +18,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 export default function DeliveryReturnSN({ navigation, route }: any) {
     const { palletCode, boxCode, deliveryCode } = route.params;
     const global = useGlobal();
-    const { gsURL, gs_factoryCode, gs_userName, gs_wareCode ,
+    const { gsURL, gs_factoryCode, gs_userName, gs_wareCode,
         operateUserCode, operateUserName, operateWareHouseCode, operateRandomNumber, operateSign, operateVersion,
     } = global;
     const BASE_URL = gsURL;
@@ -26,6 +26,7 @@ export default function DeliveryReturnSN({ navigation, route }: any) {
 
     const [loading, setLoading] = useState(false);
     const [snData, setSnData] = useState<any[]>([]);
+    const [selectedItemIndex, setSelectedItemIndex] = useState<number | null>(null);
 
     const totalQty = snData.length;
 
@@ -69,8 +70,13 @@ export default function DeliveryReturnSN({ navigation, route }: any) {
 
                 const result = await response.json();
                 console.log("SN details ", result)
-                if (result.message === "success" && result.data) {
+                if (result.message === "success" && result.data && result.data.length > 0) {
                     setSnData(result.data);
+                }
+                else {
+                    Alert.alert("Error", "There is no product in the box!");
+                    navigation.goBack();
+
                 }
             } catch (err: any) {
                 Alert.alert("Error", err.message);
@@ -125,7 +131,7 @@ export default function DeliveryReturnSN({ navigation, route }: any) {
                                 <Text style={[styles.headerCell, { width: 150 }]}>IMEI1</Text>
                                 <Text style={[styles.headerCell, { width: 150 }]}>IMEI2</Text>
                                 <Text style={[styles.headerCell, { width: 150 }]}>IMEI3</Text>
-                                <Text style={[styles.headerCell, { width: 120 }]}>Storage Time</Text>
+                                <Text style={[styles.headerCell, { width: 150 }]}>Storage Time</Text>
                             </View>
                             <ScrollView style={{ flex: 1 }}>
                                 {loading ? (
@@ -134,13 +140,22 @@ export default function DeliveryReturnSN({ navigation, route }: any) {
                                     <Text style={styles.emptyText}>No data found</Text>
                                 ) : (
                                     snData.map((item, index) => (
-                                        <View key={index} style={styles.tableRow}>
+                                        <TouchableOpacity
+                                            key={index}
+                                            style={[
+                                                styles.tableRow,
+                                                { backgroundColor: index % 2 === 0 ? "#FFFFFF" : "#BAE6FD" },
+                                                selectedItemIndex === index && styles.selectedRow
+                                            ]}
+                                            onPress={() => setSelectedItemIndex(index)}
+                                            activeOpacity={0.7}
+                                        >
                                             <Text style={[styles.cell, { width: 150 }]}>{item.sn}</Text>
                                             <Text style={[styles.cell, { width: 150 }]}>{item.imeiCode1}</Text>
                                             <Text style={[styles.cell, { width: 150 }]}>{item.imeiCode2}</Text>
                                             <Text style={[styles.cell, { width: 150 }]}>{item.imeiCode3}</Text>
-                                            <Text style={[styles.cell, { width: 120 }]}>{item.createDate}</Text>
-                                        </View>
+                                            <Text style={[styles.cell, { width: 150 }]}>{item.createDate}</Text>
+                                        </TouchableOpacity>
                                     ))
                                 )}
                             </ScrollView>
@@ -164,7 +179,7 @@ const styles = StyleSheet.create({
     headerRight: { flexDirection: "row", alignItems: "center" },
     userNameText: { color: "#FFFFFF", fontSize: scale(12), fontWeight: "700" },
     content: { flex: 1, padding: 12 },
-    formCard: { marginBottom:8},
+    formCard: { marginBottom: 8 },
     compactBox: {
         flexDirection: 'row',
         justifyContent: 'space-between',
@@ -193,5 +208,6 @@ const styles = StyleSheet.create({
     headerCell: { fontSize: 10, fontWeight: "800", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
     tableRow: { flexDirection: "row", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#F1F5F9", alignItems: "center" },
     cell: { fontSize: 11, color: "#334155", textAlign: "center", fontWeight: "600" },
+    selectedRow: { backgroundColor: "#ffc3c3ff" },
     emptyText: { textAlign: "center", padding: 40, color: "#94A3B8", fontStyle: "italic", width: 910 },
 });
