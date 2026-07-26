@@ -13,7 +13,7 @@ import {
   Dimensions,
   ScrollView,
 } from "react-native";
-import { useGlobal } from "../../GlobalContext.tsx";
+import { useGlobal } from "../../GlobalStrContext.tsx";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 interface SNItem {

@@ -1,284 +1,249 @@
 import React, { useState, useEffect } from "react";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
-    View,
-    Text,
-    StyleSheet,
-    TouchableOpacity,
-    ActivityIndicator,
-    StatusBar,
-    FlatList,
-    Alert,
-    Image,
-    Dimensions,
-    ScrollView,
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ActivityIndicator,
+  StatusBar,
+  ScrollView,
+  Image,
+  Dimensions,
+  Alert,
 } from "react-native";
-import { useGlobal } from "../../GlobalContext.tsx";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useGlobalStr } from "../../GlobalStrContext";
+import * as pubfunction from "../pubfunction";
+import * as soapClient from "./soapClient";
 
-interface BoxItem {
-    id: string;
-    fxh: string;
-    boxCode: string;
-    qty: string;
-    model: string;
-    color: string;
-    orderCode: string;
+interface BoxDetailsItem {
+  id: string;
+  fxh: string;
+  boxCode: string;
+  qty: string;
+  model: string;
+  color: string;
+  orderCode: string;
 }
 
 export default function InWarehouseSNBox({ navigation, route }: any) {
-    const { palletCode } = route.params;
-    const global = useGlobal();
-    const { gsURL, gs_factoryCode, gs_wareCode, gs_userName, gs_wareType,
-        operateUserCode, operateUserName, operateWareHouseCode, operateRandomNumber, operateSign, operateVersion,
-     } = global;
-    const BASE_URL = gsURL;
-    const [token, setToken] = useState("");
+  const { palletCode } = route.params || {};
+  const {
+    gs_MESBaseURL,
+    gs_factoryCodeMES,
+    gs_wareCode,
+    gs_wareType,
+    gs_userName,
+    gs_userCode,
+  } = useGlobalStr();
 
-    const [loading, setLoading] = useState(true);
-    const [boxList, setBoxList] = useState<BoxItem[]>([]);
-    const [totalQty, setTotalQty] = useState(0);
-    const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [dataList, setDataList] = useState<BoxDetailsItem[]>([]);
+  const [totalQty, setTotalQty] = useState(0);
+  const [selectedItem, setSelectedItem] = useState<BoxDetailsItem | null>(null);
 
-    useEffect(() => {
-        const loadToken = async () => {
-            const t = await AsyncStorage.getItem("userToken");
-            console.log("TOKEN IN ", t);
-            if (t) setToken(t);
-        };
+  const fetchDetails = async () => {
+    setLoading(true);
+    try {
+      const data = await soapClient.InPalletSNBox(
+        gs_MESBaseURL,
+        gs_factoryCodeMES || "001",
+        gs_wareCode,
+        palletCode
+      );
 
-        loadToken();
-    }, []);
-
-
-    useEffect(() => {
-        if (token) {
-            if (gs_wareType !== "MainWarehouse") {
-                Alert.alert("Error", "Only the main warehouse can be put in storage!");
-                navigation.goBack();
-                return;
-            }
-            fetchBoxes();
+      if (data && data.length > 0) {
+        if (data[0].isok === "0") {
+          pubfunction.ShowError(data[0].retstr || "There is no product in the Pallet!");
+          setDataList([]);
+          setTotalQty(0);
+          return;
         }
-    }, [token]);
 
-    const fetchBoxes = async () => {
-        setLoading(true);
-        try {
-            const response = await fetch(`${BASE_URL}/api/InPalletSNBox`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, },
-                body: JSON.stringify({
-                    operateUserCode, operateUserName, operateWareHouseCode, operateRandomNumber, operateSign, operateVersion,
-                    factoryCode: gs_factoryCode,
-                    wareHouseCode: gs_wareCode,
-                    palletCode: palletCode,
-                }),
-            });
+        const productRows = data.filter((item: any) => item.boxCode || item.scanBarcodeLarge || item.SN);
 
-            if (response.status === 401) {
-                Alert.alert("Unauthorized", "Token expired or invalid.");
-                return;
-            }
-
-            if (response.status === 403) {
-                Alert.alert("Access Denied", "You do not have permission.");
-                return;
-            }
-
-
-            const result = await response.json();
-            if (result.code === 500) {
-                Alert.alert("Error", result.message);
-                navigation.goBack();
-                return;
-            }
-            console.log(result);
-            if (result.message === "success" && result.data) {
-                let total = 0;
-                const mapped = result.data.map((item: any, index: number) => {
-                    const q = parseInt(item.qty || "0");
-                    total += q;
-                    return {
-                        id: index.toString(),
-                        fxh: item.fxh,
-                        boxCode: item.boxCode || item.scanBarcodeLarge,
-                        model: item.model,
-                        color: item.color,
-                        qty: item.qty || item.boxQty,
-                        orderCode: item.orderCode,
-                    };
-                });
-                setBoxList(mapped);
-                setTotalQty(total);
-            } else {
-                Alert.alert("Error", "There is no product in the Pallet!");
-                setBoxList([]);
-                setTotalQty(0);
-            }
-        } catch (err: any) {
-            Alert.alert("Error", err.message);
-        } finally {
-            setLoading(false);
+        if (productRows.length > 0) {
+          let total = 0;
+          const mapped = productRows.map((item: any, index: number) => {
+            const q = parseInt(item.qty || "0");
+            total += q;
+            return {
+              id: index.toString(),
+              fxh: item.fxh || String(index + 1),
+              boxCode: item.boxCode || item.scanBarcodeLarge || "",
+              qty: String(item.qty || item.boxQty || "0"),
+              model: item.model || "",
+              color: item.color || "",
+              orderCode: item.orderCode || "",
+            };
+          });
+          setDataList(mapped);
+          setTotalQty(total);
+        } else {
+          pubfunction.ShowError("There is no product in the Pallet!");
+          setDataList([]);
+          setTotalQty(0);
         }
-    };
+      } else {
+        pubfunction.ShowError("There is no product in the Pallet!");
+        setDataList([]);
+        setTotalQty(0);
+      }
+    } catch (err: any) {
+      pubfunction.ShowError("Fetch details failed");
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    const handleReturn = () => {
-        navigation.goBack();
-    };
+  useEffect(() => {
+    if (gs_wareType !== "MainWarehouse") {
+      pubfunction.ShowError("Only the main warehouse can be put in storage!");
+      navigation.goBack();
+      return;
+    }
+    fetchDetails();
+  }, [palletCode]);
 
-    const handleDetails = () => {
-        if (!selectedId) {
-            Alert.alert("Notice", "Please select a box from the list.");
-            return;
-        }
-        const selectedItem = boxList.find(item => item.id === selectedId);
-        if (selectedItem) {
-            navigation.navigate("InWarehouseSN", {
-                palletCode: palletCode,
-                boxCode: selectedItem.boxCode,
-                showConfirm: false
-            });
-        }
-    };
+  const handleReturn = () => {
+    navigation.goBack();
+  };
 
+  const renderRow = (item: BoxDetailsItem, index: number) => {
+    const isSelected = selectedItem?.boxCode === item.boxCode;
     return (
-        <SafeAreaView style={styles.container}>
-            <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
-            <View style={styles.header}>
-                <View style={styles.headerLeft}>
-                    <TouchableOpacity onPress={handleReturn} activeOpacity={0.7}>
-                        <Image
-                            source={require("../../assets/logo/left.png")}
-                            style={styles.returnLogo}
-                            resizeMode="contain"
-                        />
-                    </TouchableOpacity>
-                    <Text style={styles.headerTitle}>Box Details</Text>
-                </View>
-                <View style={styles.headerRight}>
-                    <Text style={styles.userNameText}>{gs_userName}</Text>
-                </View>
-            </View>
-
-            <View style={styles.content}>
-                <View style={styles.statsCard}>
-                    <View style={styles.statBox}>
-                        <Text style={styles.statLabel}>Total Qty</Text>
-                        <Text style={styles.statValue}>{totalQty}</Text>
-                    </View>
-                       <View style={styles.statBox}>
-                        <Text style={styles.statLabel}>Pallet Code</Text>
-                        <Text style={styles.statValue}>{palletCode}</Text>
-                    </View>
-                </View>
-
-                <View style={styles.tableCard}>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={true}>
-                        <View>
-                            <View style={styles.tableHeader}>
-                                <Text style={[styles.headerCell, { width: 50 }]}>No</Text>
-                                <Text style={[styles.headerCell, { width: 150 }]}>Box Code</Text>
-                                <Text style={[styles.headerCell, { width: 60 }]}>Qty</Text>
-                                <Text style={[styles.headerCell, { width: 100 }]}>Model</Text>
-                                <Text style={[styles.headerCell, { width: 80 }]}>Color</Text>
-                                <Text style={[styles.headerCell, { width: 120 }]}>Order</Text>
-                            </View>
-                            <ScrollView style={{ flex: 1 }}>
-                                {loading ? (
-                                    <ActivityIndicator size="large" color="#0052cc" style={{ marginTop: 40 }} />
-                                ) : (
-                                    <FlatList
-                                        data={boxList}
-                                        renderItem={({ item, index }) => (
-                                            <TouchableOpacity
-                                                style={[
-                                                    styles.tableRow,
-                                                    index % 2 === 0 ? { backgroundColor: "#FFFFFF" } : { backgroundColor: "#BAE6FD" },
-                                                    selectedId === item.id && styles.selectedRow
-                                                ]}
-                                                onPress={() => setSelectedId(item.id)}
-                                                activeOpacity={0.7}
-                                            >
-                                                <Text style={[styles.cell, { width: 50, }]}>{item.fxh}</Text>
-                                                <Text style={[styles.cell, { width: 150, color: "#0052cc" }]}>{item.boxCode}</Text>
-                                                <Text style={[styles.cell, { width: 60 }]}>{item.qty}</Text>
-                                                <Text style={[styles.cell, { width: 100 }]}>{item.model}</Text>
-                                                <Text style={[styles.cell, { width: 80 }]}>{item.color}</Text>
-                                                <Text style={[styles.cell, { width: 120 }]}>{item.orderCode}</Text>
-                                            </TouchableOpacity>
-                                        )}
-                                        keyExtractor={(item) => item.id}
-                                        scrollEnabled={false}
-                                        ListEmptyComponent={() => (
-                                            <Text style={styles.emptyText}>No boxes found for this pallet.</Text>
-                                        )}
-                                    />
-                                )}
-                            </ScrollView>
-                        </View>
-                    </ScrollView>
-                </View>
-
-                <View style={styles.footer}>
-                    <TouchableOpacity style={[styles.actionBtn, styles.btnPrimary]} onPress={handleDetails}>
-                        <Text style={styles.btnTextPrimary}>Details</Text>
-                    </TouchableOpacity>
-                </View>
-            </View>
-        </SafeAreaView>
+      <TouchableOpacity
+        key={item.id || index}
+        activeOpacity={0.8}
+        onPress={() => setSelectedItem(item)}
+        style={[
+          styles.tableRow,
+          isSelected ? { backgroundColor: "#93C5FD" } : (index % 2 === 0 ? { backgroundColor: "#FFFFFF" } : { backgroundColor: "#F1F5F9" })
+        ]}
+      >
+        <Text style={[styles.cell, { width: 50 }]}>{item.fxh}</Text>
+        <Text style={[styles.cell, { width: 120 }]}>{item.boxCode}</Text>
+        <Text style={[styles.cell, { width: 50 }]}>{item.qty}</Text>
+        <Text style={[styles.cell, { width: 110 }]}>{item.model}</Text>
+        <Text style={[styles.cell, { width: 90 }]}>{item.color}</Text>
+        <Text style={[styles.cell, { width: 100 }]}>{item.orderCode}</Text>
+      </TouchableOpacity>
     );
+  };
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
+
+      {/* Header */}
+      <View style={styles.header}>
+        <View style={styles.headerLeft}>
+          <TouchableOpacity onPress={handleReturn} activeOpacity={0.7}>
+            <Image
+              source={require("../../assets/logo/left.png")}
+              style={styles.returnLogo}
+              resizeMode="contain"
+            />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>box details</Text>
+        </View>
+        <View style={styles.headerRight}>
+          <Text style={styles.userNameText}>{gs_userName || gs_userCode}</Text>
+        </View>
+      </View>
+
+      <View style={styles.content}>
+        {/* Pallet Code Box */}
+        <View style={styles.totalQtyBox}>
+          <Text style={styles.totalQtyLabel}>Pallet:</Text>
+          <Text style={styles.totalQtyValue}>{palletCode}</Text>
+        </View>
+
+        {/* Total Qty Box */}
+        <View style={styles.totalQtyBox}>
+          <Text style={styles.totalQtyLabel}>Total Qty:</Text>
+          <Text style={styles.totalQtyValue}>{totalQty}</Text>
+        </View>
+
+        <View style={styles.tableCard}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={true}>
+            <View>
+              <View style={styles.tableHeader}>
+                <Text style={[styles.headerCell, { width: 50 }]}>Index</Text>
+                <Text style={[styles.headerCell, { width: 120 }]}>Box Code</Text>
+                <Text style={[styles.headerCell, { width: 50 }]}>Qty</Text>
+                <Text style={[styles.headerCell, { width: 110 }]}>Model</Text>
+                <Text style={[styles.headerCell, { width: 90 }]}>Color</Text>
+                <Text style={[styles.headerCell, { width: 100 }]}>Order</Text>
+              </View>
+              <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={true}>
+                {loading ? (
+                  <ActivityIndicator size="large" color="#0052cc" style={{ marginTop: 40 }} />
+                ) : dataList.length === 0 ? (
+                  <Text style={styles.emptyText}>No boxes found on this pallet.</Text>
+                ) : (
+                  dataList.map((item, index) => renderRow(item, index))
+                )}
+              </ScrollView>
+            </View>
+          </ScrollView>
+        </View>
+
+        {/* Action Buttons */}
+        <View style={styles.footer}>
+          <TouchableOpacity
+            style={[styles.btn, styles.btnDetails]}
+            onPress={() => {
+              if (selectedItem) {
+                navigation.navigate("InWarehouseSN", {
+                  palletCode: palletCode,
+                  boxCode: selectedItem.boxCode
+                });
+              } else {
+                Alert.alert("Notice", "Please select a Box from the list first.");
+              }
+            }}
+          >
+            <Text style={styles.btnText}>SN Details</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </SafeAreaView>
+  );
 }
 
 const { width } = Dimensions.get("window");
-const isSmallDevice = width < 360;
 const scale = (size: number) => (width / 375) * size;
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: "#F8FAFC" },
-    header: {
-        backgroundColor: "#0052cc",
-        paddingHorizontal: width * 0.05,
-        height: scale(56),
-        flexDirection: "row",
-        justifyContent: "space-between",
-        alignItems: "center",
-        elevation: 4,
-    },
-    headerLeft: { flexDirection: "row", alignItems: "center" },
-    returnLogo: { width: scale(24), height: scale(24), marginRight: 10, tintColor: "#FFFFFF" },
-    headerTitle: { color: "#FFFFFF", fontSize: isSmallDevice ? scale(14) : scale(16), fontWeight: "900" },
-    headerRight: { flexDirection: "row", alignItems: "center" },
-    userNameText: { color: "#FFFFFF", fontSize: scale(12), fontWeight: "700", marginRight: 1 },
-    content: { flex: 1, padding: 16 },
-    statsCard: { flexDirection: 'column', gap: 10, marginBottom: 12 },
-    statBox: {
-        backgroundColor: "#0052cc",
-        paddingHorizontal: 12,
-        paddingVertical: 4,
-        borderRadius: 12,
-        elevation: 2,
-        borderWidth: 1,
-        borderColor: "#E2E8F0",
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        height:40
-    },
-    statLabel: { color: "#FFF", fontSize: 12, fontWeight: "700", textTransform: "uppercase" },
-    statValue: { color: "#FFF", fontSize: 12, fontWeight: "800" },
-    tableCard: { flex: 1, backgroundColor: "#FFF", borderRadius: 16, overflow: "hidden", elevation: 2, borderWidth: 1, borderColor: "#E2E8F0", marginBottom: 4 },
-    tableHeader: { flexDirection: "row", backgroundColor: "#0052cc", paddingVertical: 10 },
-    headerCell: { fontSize: 11, fontWeight: "800", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
-    tableRow: { flexDirection: "row", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#F1F5F9", alignItems: "center" },
-    selectedRow: { backgroundColor: "#ffc3c3ff" },
-    cell: { fontSize: 11, color: "#334155", textAlign: "center", fontWeight: "600" },
-    cellMain: { fontSize: 11, color: "#1E293B", fontWeight: "700", textAlign: "center" },
-    cellSub: { fontSize: 10, color: "#64748B", textAlign: "center" },
-    footer: { borderTopWidth: 1, borderTopColor: '#e2e8f0', paddingTop: 16 },
-    actionBtn: { height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
-    btnPrimary: { backgroundColor: '#0052cc' },
-    btnTextPrimary: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
-    emptyText: { textAlign: "center", padding: 40, color: "#94A3B8", fontStyle: "italic", width: 400 },
+  container: { flex: 1, backgroundColor: "#F8FAFC" },
+  header: {
+    backgroundColor: "#0052cc",
+    paddingHorizontal: width * 0.05,
+    height: scale(56),
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    elevation: 4,
+  },
+  headerLeft: { flexDirection: "row", alignItems: "center" },
+  headerRight: { flexDirection: "row", alignItems: "center" },
+  returnLogo: { width: scale(23), height: scale(23), marginRight: 10, tintColor: "#FFFFFF" },
+  headerTitle: { color: "#FFFFFF", fontSize: scale(14), fontWeight: "900" },
+  userNameText: { color: "#FFFFFF", fontSize: scale(12), fontWeight: "700" },
+  totalQtyBox: { backgroundColor: "#0052cc", padding: 12, borderRadius: 8, flexDirection: "row", justifyContent: "space-between", marginBottom: 12 },
+  totalQtyLabel: { color: "#FFFFFF", fontSize: 14, fontWeight: "700" },
+  totalQtyValue: { color: "#FFFFFF", fontSize: 14, fontWeight: "900" },
+  content: { flex: 1, padding: 16 },
+  tableCard: { flex: 1, backgroundColor: "#FFF", borderRadius: 16, overflow: "hidden", elevation: 3, borderWidth: 1, borderColor: "#0052cc", marginBottom: 12 },
+  tableHeader: { flexDirection: "row", backgroundColor: "#0052cc", paddingVertical: 10 },
+  headerCell: { fontSize: 11, fontWeight: "800", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
+  tableRow: { flexDirection: "row", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#E2E8F0", alignItems: "center" },
+  cell: { fontSize: 11, color: "#1E293B", textAlign: "center", fontWeight: "600" },
+  emptyText: { textAlign: "center", padding: 40, color: "#94A3B8", fontStyle: "italic", width: 400 },
+  footer: { flexDirection: "row", borderTopWidth: 1, borderTopColor: '#E2E8F0', paddingTop: 12 },
+  btn: { flex: 1, height: 44, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginHorizontal: 4, elevation: 1 },
+  btnPrior: { backgroundColor: '#64748B' },
+  btnDetails: { backgroundColor: '#0052cc' },
+  btnText: { color: '#FFFFFF', fontSize: 13, fontWeight: '900' },
 });
-

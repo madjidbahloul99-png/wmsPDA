@@ -15,9 +15,9 @@ import {
     DeviceEventEmitter,
     Animated,
 } from "react-native";
-import { useGlobal } from "../../GlobalContext.tsx";
-import { useFocusEffect } from "@react-navigation/native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useGlobalStr } from "../../GlobalStrContext";
+import * as pubfunction from "../pubfunction";
+import * as soapClient from "./soapClient";
 
 const AnimatedView = Animated.View as any;
 
@@ -29,35 +29,41 @@ interface BoxItem {
     boxQty: string;
 }
 
-export default function InWarehouse({ navigation, route }: any) {
-    const global = useGlobal();
-    const { gsURL, gs_factoryCode, gs_wareCode, gs_wareType,
-        gs_classCode, gs_groupCode, gs_workdate, gs_userCode, gs_userName,
-        operateUserCode, operateUserName, operateWareHouseCode, operateRandomNumber, operateSign, operateVersion, } = global;
-    const BASE_URL = gsURL;
-    const [token, setToken] = useState("");
+export default function InWarehouse({ navigation }: any) {
+    const {
+        gs_MESBaseURL,
+        gs_factoryCodeMES,
+        gs_wareCode,
+        gs_wareType,
+        gs_classCode,
+        gs_groupCode,
+        gs_workdate,
+        gs_userCode,
+        gs_userName,
+        gs_PasswordSalt,
+    } = useGlobalStr();
 
     const [sn, setSn] = useState("");
     const [palletCode, setPalletCode] = useState("");
     const [qty, setQty] = useState("");
     const [loading, setLoading] = useState(false);
     const [boxList, setBoxList] = useState<BoxItem[]>([]);
-    const [showKeyboard] = useState(false);
     const snInputRef = useRef<TextInput>(null);
     const isScanning = useRef(false);
     const scanTimer = useRef<any>(null);
     const borderAnim = useRef(new Animated.Value(0)).current;
 
+     const [showKeyboard, setShowKeyboard] = useState(false);
+     const [inputEnabled, setInputEnabled] = useState(true);
+
     const [scanState, setScanState] = useState<
         "waiting" | "scanning" | "success" | "error"
     >("waiting");
 
+    // Pulse animation for keying scan
     useEffect(() => {
-
         let animation: Animated.CompositeAnimation | null = null;
-
         if (scanState === "waiting") {
-
             animation = Animated.loop(
                 Animated.sequence([
                     Animated.timing(borderAnim, {
@@ -72,17 +78,13 @@ export default function InWarehouse({ navigation, route }: any) {
                     }),
                 ])
             );
-
             animation.start();
-
         } else {
             borderAnim.setValue(1);
         }
-
         return () => {
             animation?.stop();
         };
-
     }, [scanState]);
 
     const animatedBorderColor = borderAnim.interpolate({
@@ -102,56 +104,54 @@ export default function InWarehouse({ navigation, route }: any) {
         outputRange: [1, 4],
     });
 
-    useFocusEffect(
-        useCallback(() => {
-            if (gs_wareType !== "MainWarehouse") {
-                Alert.alert(
-                    "Restricted Access",
-                    "Only the main warehouse can be put in storage!",
-                    [
-                        {
-                            text: "OK",
-                            onPress: () => {
-                                navigation.goBack();
-                            },
-                        },
-                    ]
-                );
-                return;
-            } else {
-                setTimeout(() => snInputRef.current?.focus(), 500);
-            }
-        }, [gs_wareType])
-    );
-
+    // Verify WareType has "MainWarehouse" authority, else fallback
     useEffect(() => {
-
-        const loadToken = async () => {
-            const t = await AsyncStorage.getItem("userToken");
-            console.log("TOKEN IN inwh", t);
-            if (t) setToken(t);
-        };
-
-        loadToken();
-    }, []);
-
+        if (gs_wareType !== "MainWarehouse") {
+            Alert.alert(
+                "Restricted Access",
+                "Only the main warehouse can be put in storage!",
+                [
+                    {
+                        text: "OK",
+                        onPress: () => {
+                            navigation.goBack();
+                        },
+                    },
+                ]
+            );
+        } else {
+            const checkConnection = async () => {
+                setLoading(true);
+                try {
+                    await soapClient.HelloWorld(gs_MESBaseURL);
+                    console.log("gs_MESBaseURL",gs_MESBaseURL)
+                    setInputEnabled(true);
+                    setTimeout(() => snInputRef.current?.focus(), 500);
+                } catch (err) {
+                    pubfunction.ShowError("Connect error,Please change URL link!");
+                    //setInputEnabled(false);
+                } finally {
+                    setLoading(false);
+                }
+            };
+            checkConnection();
+        }
+    }, [gs_wareType, gs_MESBaseURL]);
 
     const ensureFocus = () => {
-        if (!showKeyboard) {
+        if (inputEnabled && gs_wareType === "MainWarehouse") {
             snInputRef.current?.focus();
         }
     };
 
     const handleScanWithValue = async (scanValue?: string) => {
-
-        if (isScanning.current || loading) return;
+        if (!inputEnabled || isScanning.current || loading) return;
 
         const currentSn = (scanValue || sn).toUpperCase().trim();
         if (!currentSn) return;
 
         isScanning.current = true;
         setLoading(true);
-        setSn("");
 
         if (gs_wareType !== "MainWarehouse") {
             Alert.alert("Error", "Only the main warehouse can be put in storage!");
@@ -161,106 +161,78 @@ export default function InWarehouse({ navigation, route }: any) {
         }
 
         try {
-            const checkRes = await fetch(`${BASE_URL}/api/InBarcodeCheck`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, },
-                body: JSON.stringify({
-                    operateUserCode, operateUserName, operateWareHouseCode, operateRandomNumber, operateSign, operateVersion,
-                    factoryCode: gs_factoryCode, scanCode: currentSn
-                }),
-            });
+            setScanState("scanning");
 
-            if (checkRes.status === 401) {
-                Alert.alert("Unauthorized", "Token expired or invalid.");
-                return;
-            }
+            const rows = await soapClient.InBarcodeCheck(
+                gs_MESBaseURL,
+                gs_factoryCodeMES || "001",
+                currentSn
+            );
 
-            if (checkRes.status === 403) {
-                Alert.alert("Access Denied", "You do not have permission user here.");
-                return;
-            }
-            const checkResult = await checkRes.json();
+            console.log("rows",rows)
 
-            if (checkResult.code === 500) {
-                Alert.alert("Error", checkResult.message);
-                //navigation.goBack();
-                return;
-            }
+            if (rows && rows.length > 0) {
+                const checkResult = {
+                    isok: rows[0].isok,
+                    palletCode: rows[0].palletCode,
+                    scanType: rows[0].scanType,
+                    retstr: rows[0].retstr
+                };
 
-            console.log(checkResult);
-            if (checkResult.message === "success" && checkResult.data) {
-                const data = checkResult.data;
-                if (data.isok === "1") {
+                if (checkResult.isok === "1") {
                     setScanState("success");
-                    const pCode = data.palletCode;
-                    const sType = data.scanType;
+                    const pCode = checkResult.palletCode;
+                    const sType = checkResult.scanType;
                     setPalletCode(pCode);
 
+                    // Navigate to confirmation dialog box screen
                     navigation.navigate("InWarehouseConfirmBox", {
                         palletCode: pCode,
                         sType: sType,
                         currentSn: currentSn
                     });
+                    setSn(""); // Clear the scan input immediately on successful check before navigating
                 } else {
                     setScanState("error");
-
-                    Alert.alert("Error", data.retstr || "Unknown error");
+                    pubfunction.ShowError(checkResult.retstr || "Connect error,Please change URL link!");
+                    setSn(""); // Clear the scan input on failure
                 }
             } else {
                 setScanState("error");
-                Alert.alert("Error", "Data handling exceptions, please check!");
+                pubfunction.ShowError("here Data handling exceptions, please check!");
+                setSn(""); // Clear the scan input on failure
             }
         } catch (err: any) {
-            Alert.alert("Error", err.message);
+            setScanState("error");
+            pubfunction.ShowError("Connect error, Please change URL link!");
+            setSn(""); // Clear the scan input on failure
         } finally {
             setLoading(false);
             isScanning.current = false;
         }
     };
 
+    // Called when dialog confirms InPalletInsert
     const processPalletInsert = async (pCode: string, sType: string, originalSn: string) => {
-        console.log("processPalletInsert called with:", pCode, sType, originalSn);
         setLoading(true);
         try {
-            const response = await fetch(`${BASE_URL}/api/InPalletInsert`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, },
-                body: JSON.stringify({
-                    operateUserCode, operateUserName, operateWareHouseCode, operateRandomNumber, operateSign, operateVersion,
-                    factoryCode: gs_factoryCode,
-                    wareHouseCode: gs_wareCode,
-                    scanType: sType,
-                    palletCode: pCode,
-                    scanBarCode: originalSn,
-                    classesCode: gs_classCode,
-                    groupCode: gs_groupCode,
-                    workdate: gs_workdate,
-                    createUser: gs_userCode,
-                }),
-            });
+            const data = await soapClient.InPalletInsert(
+                gs_MESBaseURL,
+                gs_factoryCodeMES || "001",
+                gs_wareCode,
+                sType,
+                pCode,
+                originalSn,
+                gs_classCode,
+                gs_groupCode,
+                gs_workdate,
+                gs_userCode
+            );
 
-            if (response.status === 401) {
-                Alert.alert("Unauthorized", "Token expired or invalid.");
-                return;
-            }
-
-            if (response.status === 403) {
-                Alert.alert("Access Denied", "You do not have permission.");
-                return;
-            }
-
-            const result = await response.json();
-
-            if (result.code === 500) {
-                Alert.alert("Error", result.message);
-                navigation.goBack();
-                return;
-            }
-            console.log(result);
-            if (result.message === "success" && result.data && result.data.length > 0) {
-                if (result.data[0].isok === "1") {
-                    setQty(String(result.data[0].totalQty || result.data[0].qty || "0"));
-                    const mapped = result.data.map((item: any, index: number) => ({
+            if (data && data.length > 0) {
+                if (data[0].isok === "1") {
+                    setQty(String(data[0].totalQty || ""));
+                    const mapped = data.map((item: any, index: number) => ({
                         id: index.toString(),
                         boxCode: item.scanBarcodeLarge,
                         model: item.model,
@@ -269,32 +241,28 @@ export default function InWarehouse({ navigation, route }: any) {
                     }));
                     setBoxList(mapped);
                     setPalletCode(pCode);
-                    Alert.alert("✅ Success", "Pallet added to stock successfully.");
-                            
-
                 } else {
-                    Alert.alert("Error", result.data[0].retstr || "Insert failed");
+                    pubfunction.ShowError(data[0].retstr || "Insert failed");
                 }
             } else {
-                Alert.alert("Error", "There is no product in the Pallet!");
+                pubfunction.ShowError("There is no product in the Pallet!");
             }
         } catch (err: any) {
-            Alert.alert("Error", err.message);
+            pubfunction.ShowError("Insert failed");
         } finally {
+            setSn(""); // Clear the scan input on confirmation completion (success or failure)
             setLoading(false);
             setTimeout(() => snInputRef.current?.focus(), 100);
         }
     };
 
+    // Setup confirmed event listener
     useEffect(() => {
-        if (token) {
-            const sub = DeviceEventEmitter.addListener('ON_IN_WAREHOUSE_CONFIRM', (data) => {
-                console.log("Received ON_IN_WAREHOUSE_CONFIRM event:", data);
-                processPalletInsert(data.palletCode, data.sType, data.currentSn);
-            });
-            return () => sub.remove();
-        }
-    }, [processPalletInsert, token]);
+        const sub = DeviceEventEmitter.addListener('ON_IN_WAREHOUSE_CONFIRM', (data) => {
+            processPalletInsert(data.palletCode, data.sType, data.currentSn);
+        });
+        return () => sub.remove();
+    }, [gs_wareCode, gs_classCode, gs_groupCode, gs_workdate, gs_userCode]);
 
     const handleReturn = () => {
         navigation.goBack();
@@ -312,7 +280,6 @@ export default function InWarehouse({ navigation, route }: any) {
         }
 
         setSn(text);
-
         clearTimeout(scanTimer.current);
 
         if (text.trim().length > 0) {
@@ -321,7 +288,7 @@ export default function InWarehouse({ navigation, route }: any) {
                 if (cleanSn.length > 0) {
                     handleScanWithValue(cleanSn);
                 }
-            }, 800);
+            }, 600);
         }
     };
 
@@ -346,13 +313,15 @@ export default function InWarehouse({ navigation, route }: any) {
             <Text style={[styles.cell, { width: 150 }]}>{item.boxCode}</Text>
             <Text style={[styles.cell, { width: 120 }]}>{item.model}</Text>
             <Text style={[styles.cell, { width: 100 }]}>{item.color}</Text>
-            <Text style={[styles.cell, { width: 100 }]}>{item.boxQty}</Text>
+            <Text style={[styles.cell, { width: 80 }]}>{item.boxQty}</Text>
         </View>
     );
 
     return (
         <SafeAreaView style={styles.container}>
             <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
+
+            {/* Header */}
             <View style={styles.header}>
                 <View style={styles.headerLeft}>
                     <TouchableOpacity onPress={handleReturn} activeOpacity={0.7}>
@@ -362,10 +331,10 @@ export default function InWarehouse({ navigation, route }: any) {
                             resizeMode="contain"
                         />
                     </TouchableOpacity>
-                    <Text style={styles.headerTitle}>Warehouse Scanning</Text>
+                    <Text style={styles.headerTitle}>In Warehouse: {gs_wareCode}</Text>
                 </View>
                 <View style={styles.headerRight}>
-                    <Text style={styles.userNameText}>{gs_userName}</Text>
+                    <Text style={styles.userNameText}>{ gs_userName || gs_userCode}</Text>
                 </View>
             </View>
 
@@ -387,25 +356,25 @@ export default function InWarehouse({ navigation, route }: any) {
                             borderWidth: animatedBorderWidth,
                             borderColor: animatedBorderColor,
                             backgroundColor: "#e2f0eeff",
-                            elevation: 32,
+                            elevation: 4,
                         }}>
                             <TextInput
                                 ref={snInputRef}
                                 style={[
                                     styles.input,
-                                    gs_wareType !== "MainWarehouse" && styles.disabledInput,
-                                    { borderWidth: 0, elevation: 0 } // Move border/elevation to parent Animated.View
+                                    (gs_wareType !== "MainWarehouse" || !inputEnabled) && styles.disabledInput,
+                                    { borderWidth: 0, elevation: 0 }
                                 ]}
                                 value={sn}
                                 onChangeText={handleSnChange}
-                                onSubmitEditing={handleSnSubmit}
-                                placeholder="Barcode"
+                               // onSubmitEditing={handleSnSubmit}
+                                placeholder="Scan / Input Barcode"
                                 autoCapitalize="characters"
-                                showSoftInputOnFocus={showKeyboard}
                                 blurOnSubmit={false}
                                 onBlur={ensureFocus}
-                                editable={gs_wareType === "MainWarehouse"}
-                                placeholderTextColor="#334155"
+                                editable={gs_wareType === "MainWarehouse" && inputEnabled}
+                                placeholderTextColor="#64748B"
+                                showSoftInputOnFocus={showKeyboard}
                             />
                         </AnimatedView>
                     </View>
@@ -418,14 +387,14 @@ export default function InWarehouse({ navigation, route }: any) {
                                 <Text style={[styles.headerCell, { width: 150 }]}>Box Code</Text>
                                 <Text style={[styles.headerCell, { width: 120 }]}>Model</Text>
                                 <Text style={[styles.headerCell, { width: 100 }]}>Color</Text>
-                                <Text style={[styles.headerCell, { width: 100 }]}>Qty</Text>
+                                <Text style={[styles.headerCell, { width: 80 }]}>Qty</Text>
                             </View>
-                            <ScrollView style={{ flex: 1 }}>
+                            <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={true}>
                                 {boxList.length === 0 ? (
                                     loading ? (
                                         <ActivityIndicator size="large" color="#0052cc" style={{ marginTop: 40 }} />
                                     ) : (
-                                        <Text style={styles.emptyText}>Waiting for scanning...</Text>
+                                        <Text style={styles.emptyText}>Waiting for barcode input...</Text>
                                     )
                                 ) : (
                                     boxList.map((item, index) => (
@@ -450,7 +419,7 @@ export default function InWarehouse({ navigation, route }: any) {
                             }
                         }}
                     >
-                        <Text style={styles.btnTextPrimary}>SN Details</Text>
+                        <Text style={styles.btnTextPrimary}>Barcode  Details</Text>
                     </TouchableOpacity>
                 </View>
             </View>
@@ -474,22 +443,21 @@ const styles = StyleSheet.create({
         elevation: 4,
     },
     headerLeft: { flexDirection: "row", alignItems: "center" },
-    returnLogo: { width: scale(24), height: scale(24), marginRight: 10, tintColor: "#FFFFFF" },
-    headerTitle: { color: "#FFFFFF", fontSize: isSmallDevice ? scale(14) : scale(16), fontWeight: "900" },
+    returnLogo: { width: scale(23), height: scale(23), marginRight: 10, tintColor: "#FFFFFF" },
+    headerTitle: { color: "#FFFFFF", fontSize: isSmallDevice ? scale(13) : scale(15), fontWeight: "900" },
     headerRight: { flexDirection: "row", alignItems: "center" },
-    userNameText: { color: "#FFFFFF", fontSize: scale(12), fontWeight: "700", marginRight: 1 },
+    userNameText: { color: "#FFFFFF", fontSize: scale(11), fontWeight: "700" },
     content: { flex: 1, padding: 16 },
     formCard: {
         backgroundColor: "#FFF",
         padding: 12,
         borderRadius: 16,
         marginBottom: 12,
-        elevation: 32,
+        elevation: 3,
         borderWidth: 1,
         borderColor: "#0052cc"
     },
-    inputGroup: { marginBottom: 6 },
-    label: { fontSize: 10, fontWeight: "700", color: "#64748B", marginBottom: 4, textTransform: "uppercase", },
+    inputGroup: { marginTop: 6 },
     infoRow: {
         flexDirection: "row",
         justifyContent: "space-between",
@@ -497,33 +465,70 @@ const styles = StyleSheet.create({
         backgroundColor: "#0052cc",
         borderRadius: 10,
         paddingHorizontal: 12,
-        height: 35,
+        height: 38,
         marginBottom: 6,
         borderWidth: 1,
         borderColor: "#CBD5E1",
     },
     leftLabel: {
         color: "#FFFFFF",
-        fontSize: 13,
+        fontSize: 12,
         fontWeight: "700",
-        textAlign: "left",
     },
     rightValue: {
         color: "#FFFFFF",
         fontSize: 13,
         fontWeight: "900",
-        textAlign: "right",
     },
-    input: { backgroundColor: "#e2f0eeff", height: 40, borderRadius: 10, paddingHorizontal: 12, fontSize: 14, color: "#334155", fontWeight: "600", borderWidth: 1, borderColor: "#0052cc", elevation: 32, },
-    disabledInput: { backgroundColor: "#0052cc", color: "#FFFFFF" },
-    tableCard: { flex: 1, backgroundColor: "#FFF", borderRadius: 16, overflow: "hidden", elevation: 32, borderWidth: 1, borderColor: "#0052cc", marginBottom: -4 },
+    input: { backgroundColor: "#e2f0eeff", height: 42, borderRadius: 10, paddingHorizontal: 15, fontSize: 13, color: "#1E293B", fontWeight: "700" },
+    disabledInput: { backgroundColor: "#CBD5E1", color: "#64748B" },
+    tableCard: { flex: 1, backgroundColor: "#FFF", borderRadius: 16, overflow: "hidden", elevation: 3, borderWidth: 1, borderColor: "#0052cc", marginBottom: 12 },
     tableHeader: { flexDirection: "row", backgroundColor: "#0052cc", paddingVertical: 10 },
     headerCell: { fontSize: 11, fontWeight: "800", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
     tableRow: { flexDirection: "row", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#F1F5F9", alignItems: "center" },
     cell: { fontSize: 11, color: "#334155", textAlign: "center", fontWeight: "600" },
-    footer: { borderTopWidth: 1, borderTopColor: '#e2e8f0', paddingTop: 2 },
-    actionBtn: { height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginTop: 12, marginBottom: -6 },
+    footer: { borderTopWidth: 1, borderTopColor: '#e2e8f0', paddingTop: 8 },
+    actionBtn: { height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
     btnPrimary: { backgroundColor: '#0052cc' },
-    btnTextPrimary: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
-    emptyText: { textAlign: "center", padding: 40, color: "#94A3B8", fontStyle: "italic", width: 400 },
+    btnTextPrimary: { color: '#FFFFFF', fontSize: 14, fontWeight: '900' },
+    emptyText: { textAlign: "center", padding: 40, color: "#94A3B8", fontStyle: "italic", width: 350 },
 });
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

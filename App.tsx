@@ -1,11 +1,12 @@
 import React from "react";
-import { GlobalProvider } from "./GlobalContext";
+import { GlobalStrProvider } from "./GlobalStrContext";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
 import Login from "./src/Login";
 import SplashScreen from "./src/SplashScreen";
 import Menu from "./src/Menu";
+
 //InWharHouse
 import InWarehouse from "./src/InWarehouse/InWarehouse";
 import InWarehouseConfirmBox from "./src/InWarehouse/InWarehouseConfirmBox";
@@ -13,38 +14,36 @@ import InWarehouseSNBox from "./src/InWarehouse/InWarehouseSNBox";
 import InWarehouseSNConfirm from "./src/InWarehouse/InWarehouseSNConfirm";
 import InWarehouseSN from "./src/InWarehouse/InWarehouseSN";
 
+//InWareHouseChina
+import InWareHouseChina from "./src/inWareHouseChina/InWareHouseChina";
+import InWareHouseChinaSNConfirmBox from "./src/inWareHouseChina/InWareHouseChinaSNConfirmBox";
+import InWareHouseChinaSNBox from "./src/inWareHouseChina/InWareHouseChinaSNBox";
+
+
 //DeliverySAP
 import DeliverySAP from "./src/Delivery/DeliverySAP";
-import DeliveryFrm from "./src/Delivery/DeliveryFrm";
-import DeliverySNConfirmBox from "./src/Delivery/DeliverySNConfirmBox";
 import DeliverySNConfirm from "./src/Delivery/DeliverySNConfirm";
 import DeliverySNBox from "./src/Delivery/DeliverySNBox";
 import DeliverySN from "./src/Delivery/DeliverySN";
 
-//AllocateoutSAP
-import AllocateSAP from "./src/Allocateout/AllocateSAP";
-import AllocateFrm from "./src/Allocateout/AllocateFrm";
-import AllocateSNConfirmBox from "./src/Allocateout/AllocateSNConfirmBox";
-import AllocateSNConfirm from "./src/Allocateout/AllocateSNConfirm";
-import AllocateSNBox from "./src/Allocateout/AllocateSNBox";
-import AllocateSN from "./src/Allocateout/AllocateSN";
-
 //AllocateIn
-import AllocateInNO from "./src/AllocateIN/AllocateInNo";
-import AllocateInFrm from "./src/AllocateIN/AllocateInFrm";
-import AllocateInSNConfirmBox from "./src/AllocateIN/AllocateInSNConfirmBox";
-import AllocateInSNConfirm from "./src/AllocateIN/AllocateInSNConfirm";
-import AllocateInSNBox from "./src/AllocateIN/AllocateInSNBox";
-import AllocateInSN from "./src/AllocateIN/AllocateInSN";
+import AllocateInNONewSap from "./src/AllocateIN/AllocateInNONewSap";
+import AllocateInNewSap from "./src/AllocateIN/AllocateInNewSap";
+import AllocateInSNConfirmBoxNew from "./src/AllocateIN/AllocateInSNConfirmBoxNew";
+
+
+
+//AllocateoutSAP
+import AllocateOutNONewSap from "./src/Allocateout/AllocateOutNONewSap";
+import AllocateOutNewSap from "./src/Allocateout/AllocateOutNewSap";
+import AllocateOutSNConfirmBoxNew from "./src/Allocateout/AllocateOutSNConfirmBoxNew";
 
 //AllocateRejectIn
-import AllocateRejectIn from "./src/AllocateRejectIn/AllocateRejectIn";
-import AllocateRejectInSNConfirmBox from "./src/AllocateRejectIn/AllocateRejectInSNConfirmBox";
-import AllocateRejectInSNConfirm from "./src/AllocateRejectIn/AllocateRejectInSNConfirm";
+import AllocateRejectInOldWMS from "./src/AllocateRejectIn/AllocateRejectInOldWMS";
+import AllocateRejectInSNConfirmOldWMS from "./src/AllocateRejectIn/AllocateRejectInSNConfirmOldWMS";
 
 //PalletSearch
 import PalletSearch from "./src/PalletSearch/PalletSearch";
-import PalletSNDetails from "./src/PalletSearch/PalletSNDetails";
 
 
 //PalletnotIn
@@ -52,32 +51,32 @@ import PalletNotIn from "./src/PalletNotIn/PalletNotIn";
 import PalletNotInBox from "./src/PalletNotIn/PalletNotInBox";
 import PalletNotInSN from "./src/PalletNotIn/PalletNotInSN";
 
-//Inventory
-import PD from "./src/Inventory/PD";
+//DFCInventory
+import DFCInventory from "./src/InventoryDFC/DFCInventory";
+import DFCInventoryQty from "./src/InventoryDFC/DFCInventoryQty";
+import DFCInventoryArea from "./src/InventoryDFC/DFCInventoryArea";
+
+//DFCInventory
+import GDSInventory from "./src/InventoryGDS/GDSInventory";
+import GDSInventoryNew from "./src/InventoryGDS/GDSInventoryNew";
+import GDSInventorySNConfirmBoxNew from "./src/InventoryGDS/GDSInventorySNConfirmBoxNew";
+
 
 //DeliveryReturn
-import DeliveryReturnNo from "./src/DeliveryReturn/DeliveryReturnNo";
-import DeliveryReturn from "./src/DeliveryReturn/DeliveryReturn";
-import DeliveryReturnSNConfirmBox from "./src/DeliveryReturn/DeliveryReturnSNConfirmBox";
-import DeliveryReturnSNConfirm from "./src/DeliveryReturn/DeliveryReturnSNConfirm";
-import DeliveryReturnSNBox from "./src/DeliveryReturn/DeliveryReturnSNBox";
-import DeliveryReturnSN from "./src/DeliveryReturn/DeliveryReturnSN";
+import DeliveryReturnNONewSap from "./src/DeliveryReturn/DeliveryReturnNONewSap";
+import DeliveryReturnNewSap from "./src/DeliveryReturn/DeliveryReturnNewSap";
+import DeliveryReturnSNConfirmBoxNew from "./src/DeliveryReturn/DeliveryReturnSNConfirmBoxNew";
 
 
-//AssemblyDisassembly
-import Assembly from "./src/AssemblyDisassembly/Assembly";
-import Disassembly from "./src/AssemblyDisassembly/Disassembly";
-import ModelSelect from "./src/AssemblyDisassembly/ModelSelect";
+
 
 //DistributorReturn
-import DistributorReturnNo from "./src/DistributorReturn/DistributorReturnNo";
-import DistributorReturn from "./src/DistributorReturn/DistributorReturn";
-import DistributorReturnSNConfirm from "./src/DistributorReturn/DistributorReturnSNConfirm";
-import DistributorReturnSN from "./src/DistributorReturn/DistributorReturnSN";
+import DistributorReturnNONewSap from "./src/DistributorReturn/DistributorReturnNONewSap";
+import DistributorReturnNewSap from "./src/DistributorReturn/DistributorReturnNewSap";
+import DistributorReturnSNConfirmBoxNew from "./src/DistributorReturn/DistributorReturnSNConfirmBoxNew";
 
-//SNReturn
 
-import SNReturn from "./src/SNReturn/SNReturn";
+
 
 
 
@@ -88,7 +87,7 @@ const Stack = createNativeStackNavigator();
 
 export default function App() {
   return (
-    <GlobalProvider>
+    <GlobalStrProvider>
       <NavigationContainer>
         <Stack.Navigator
           initialRouteName="SplashScreen"
@@ -107,64 +106,61 @@ export default function App() {
           <Stack.Screen name="InWarehouseSN" component={InWarehouseSN} />
 
 
+          <Stack.Screen name="InWareHouseChina" component={InWareHouseChina} />
+          <Stack.Screen name="InWareHouseChinaSNConfirmBox" component={InWareHouseChinaSNConfirmBox} />
+          <Stack.Screen name="InWareHouseChinaSNBox" component={InWareHouseChinaSNBox} />
+
+
           <Stack.Screen name="DeliverySAP" component={DeliverySAP} />
-          <Stack.Screen name="DeliveryFrm" component={DeliveryFrm} />
-          <Stack.Screen name="DeliverySNConfirmBox" component={DeliverySNConfirmBox} />
           <Stack.Screen name="DeliverySNConfirm" component={DeliverySNConfirm} />
           <Stack.Screen name="DeliverySNBox" component={DeliverySNBox} />
           <Stack.Screen name="DeliverySN" component={DeliverySN} />
 
-          <Stack.Screen name="AllocateSAP" component={AllocateSAP} />
-          <Stack.Screen name="AllocateFrm" component={AllocateFrm} />
-          <Stack.Screen name="AllocateSNConfirmBox" component={AllocateSNConfirmBox} />
-          <Stack.Screen name="AllocateSNConfirm" component={AllocateSNConfirm} />
-          <Stack.Screen name="AllocateSNBox" component={AllocateSNBox} />
-          <Stack.Screen name="AllocateSN" component={AllocateSN} />
+          <Stack.Screen name="DeliveryReturnNONewSap" component={DeliveryReturnNONewSap} />
+          <Stack.Screen name="DeliveryReturnNewSap" component={DeliveryReturnNewSap} />
+          <Stack.Screen name="DeliveryReturnSNConfirmBoxNew" component={DeliveryReturnSNConfirmBoxNew} />
 
-          <Stack.Screen name="AllocateInNO" component={AllocateInNO} />
-          <Stack.Screen name="AllocateInFrm" component={AllocateInFrm} />
-          <Stack.Screen name="AllocateInSNConfirmBox" component={AllocateInSNConfirmBox} />
-          <Stack.Screen name="AllocateInSNConfirm" component={AllocateInSNConfirm} />
-          <Stack.Screen name="AllocateInSNBox" component={AllocateInSNBox} />
-          <Stack.Screen name="AllocateInSN" component={AllocateInSN} />
+          <Stack.Screen name="AllocateOutNONewSap" component={AllocateOutNONewSap} />
+          <Stack.Screen name="AllocateOutNewSap" component={AllocateOutNewSap} />
+          <Stack.Screen name="AllocateOutSNConfirmBoxNew" component={AllocateOutSNConfirmBoxNew} />
 
-          <Stack.Screen name="AllocateRejectIn" component={AllocateRejectIn} />
-          <Stack.Screen name="AllocateRejectInSNConfirmBox" component={AllocateRejectInSNConfirmBox} />
-          <Stack.Screen name="AllocateRejectInSNConfirm" component={AllocateRejectInSNConfirm} />
+          <Stack.Screen name="AllocateInNONewSap" component={AllocateInNONewSap} />
+          <Stack.Screen name="AllocateInNewSap" component={AllocateInNewSap} />
+          <Stack.Screen name="AllocateInSNConfirmBoxNew" component={AllocateInSNConfirmBoxNew} />
+
+
+          <Stack.Screen name="AllocateRejectInOldWMS" component={AllocateRejectInOldWMS} />
+          <Stack.Screen name="AllocateRejectInSNConfirmOldWMS" component={AllocateRejectInSNConfirmOldWMS} />
+
 
           <Stack.Screen name="PalletSearch" component={PalletSearch} />
-          <Stack.Screen name="PalletSNDetails" component={PalletSNDetails} />
+
 
           <Stack.Screen name="PalletNotIn" component={PalletNotIn} />
           <Stack.Screen name="PalletNotInBox" component={PalletNotInBox} />
           <Stack.Screen name="PalletNotInSN" component={PalletNotInSN} />
 
-          <Stack.Screen name="PD" component={PD} />
-
-          <Stack.Screen name="DeliveryReturnNo" component={DeliveryReturnNo} />
-          <Stack.Screen name="DeliveryReturn" component={DeliveryReturn} />
-          <Stack.Screen name="DeliveryReturnSNConfirmBox" component={DeliveryReturnSNConfirmBox} />
-          <Stack.Screen name="DeliveryReturnSNConfirm" component={DeliveryReturnSNConfirm} />
-          <Stack.Screen name="DeliveryReturnSNBox" component={DeliveryReturnSNBox} />
-          <Stack.Screen name="DeliveryReturnSN" component={DeliveryReturnSN} />
 
 
-          <Stack.Screen name="Assembly" component={Assembly} />
-          <Stack.Screen name="Disassembly" component={Disassembly} />
-          <Stack.Screen name="ModelSelect" component={ModelSelect} />
+
+          <Stack.Screen name="DFCInventory" component={DFCInventory} />
+          <Stack.Screen name="DFCInventoryQty" component={DFCInventoryQty} />
+          <Stack.Screen name="DFCInventoryArea" component={DFCInventoryArea} />
+
+          <Stack.Screen name="GDSInventory" component={GDSInventory} />
+          <Stack.Screen name="GDSInventoryNew" component={GDSInventoryNew} />
+          <Stack.Screen name="GDSInventorySNConfirmBoxNew" component={GDSInventorySNConfirmBoxNew} />
+
+          <Stack.Screen name="DistributorReturnNONewSap" component={DistributorReturnNONewSap} />
+          <Stack.Screen name="DistributorReturnNewSap" component={DistributorReturnNewSap} />
+          <Stack.Screen name="DistributorReturnSNConfirmBoxNew" component={DistributorReturnSNConfirmBoxNew} />
 
 
-          <Stack.Screen name="DistributorReturnNo" component={DistributorReturnNo} />
-          <Stack.Screen name="DistributorReturn" component={DistributorReturn} />
-          <Stack.Screen name="DistributorReturnSNConfirm" component={DistributorReturnSNConfirm} />
-          <Stack.Screen name="DistributorReturnSN" component={DistributorReturnSN} />
-
-          <Stack.Screen name="SNReturn" component={SNReturn} />
 
 
 
         </Stack.Navigator>
       </NavigationContainer>
-    </GlobalProvider>
+    </GlobalStrProvider>
   );
 }

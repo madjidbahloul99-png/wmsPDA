@@ -18,44 +18,99 @@ import {
     Platform,
     Modal,
     FlatList,
-    BackHandler,
     Alert,
     TextInput,
     Dimensions,
     ActivityIndicator,
     Image,
-    Linking
+    Linking,
+    BackHandler
 } from "react-native";
-import { useGlobal } from "../GlobalContext";
-
+import { useGlobalStr } from "../GlobalStrContext";
+import * as pubfunction from "./pubfunction";
+import * as RNNetInfo from "react-native-network-info";
 
 // Import assets
-import eyeIcon from "../assets/logo/eye.png";
-import eyeCrossedIcon from "../assets/logo/eye-crossed.png";
 import calendarIcon from "../assets/logo/calendar-day.png";
 import userIcon from "../assets/logo/user.png";
 import lockIcon from "../assets/logo/lock.png";
 import warehouseIcon from "../assets/logo/warehouse.png";
-import settingsIcon from "../assets/logo/settings.png";
 import condorLogo from "../assets/logo/condor_logo.png";
-import { User } from "lucide-react-native";
 
-
-/* =====================
-   Types
-===================== */
 type WarehouseItem = {
-    wareHouseCode: string;
-    wareHouseName: string;
+    id: string;
+    text: string;
+    otherInfo?: string;
+    factoryCode?: string;
+    mes3g?: string;
+    mesLan?: string;
 };
 
 type ClassItem = {
-    ClassCode: string;
-    ClassName: string;
+    id: string;
+    text: string;
 };
 
 type CustomInputRef = {
     focus: () => void;
+};
+
+/**
+ * Global general normalization function for keyboard wedge-emulated scanners.
+ * On AZERTY/QWERTY scanners, rapid keyboard emulation timing often leads to shift-state race conditions.
+ * Typically, trailing special characters (like * , - + / = ! ; :) and numeric blocks (like 1, 2, 3) 
+ * get transposed when they are typed back-to-back at very high speeds.
+ * For example, "123**" (typed on AZERTY requiring Shift and then releasing Shift) might get registered as "**123"
+ * or vice versa, because the shift down/up events get interleaved with the keys.
+ * This global helper detects these trailing transpositions and recovers the correct order.
+ */
+export const normalizeWedgePassword = (pass: string): string => {
+    if (!pass) return "";
+
+    // 1. Swap trailing AZERTY unshifted characters (*, -, +, /, =, !, ,, ;, :) and digit blocks
+    // e.g. "**123" -> "123**"
+    const patternEndSymbolDigit = /([*\-+/=!,,;: ]+)([0-9]+)$/;
+    if (patternEndSymbolDigit.test(pass)) {
+        return pass.replace(patternEndSymbolDigit, "$2$1");
+    }
+
+    // 2. Clear any stray carriage returns or other common wedge artifacts
+    return pass.replace(/[\r\n]/g, "").trim();
+};
+
+export const getNormalizedPasswordCandidates = (pass: string): string[] => {
+    if (!pass) return [""];
+    const candidates = [pass];
+
+    const corrected1 = normalizeWedgePassword(pass);
+    if (corrected1 && !candidates.includes(corrected1)) {
+        candidates.push(corrected1);
+    }
+
+    // Secondary candidate: Swap any trailing non-alphanumeric special characters with the last digits block
+    const patternGeneralSymbolsDigits = /([!@#$%^&*()_+=\-[\]{};':",./<>?|]+)([0-9]+)$/;
+    if (patternGeneralSymbolsDigits.test(pass)) {
+        const matched = pass.match(patternGeneralSymbolsDigits);
+        if (matched) {
+            const symbols = matched[1];
+            const digits = matched[2];
+            // If symbols start with `@` (like "@**123"), keep it intact and only swap the trailing layout parts
+            if (symbols.startsWith("@") && symbols.length > 1) {
+                const subSymbols = symbols.substring(1);
+                const correctedValue = pass.slice(0, -matched[0].length) + "@" + digits + subSymbols;
+                if (!candidates.includes(correctedValue)) {
+                    candidates.push(correctedValue);
+                }
+            } else {
+                const correctedValue = pass.replace(patternGeneralSymbolsDigits, "$2$1");
+                if (!candidates.includes(correctedValue)) {
+                    candidates.push(correctedValue);
+                }
+            }
+        }
+    }
+
+    return candidates;
 };
 
 /* =====================
@@ -75,18 +130,36 @@ const CustomInput = forwardRef<CustomInputRef, any>(
             onSubmitEditing,
             showSoftInput = false,
             onBlur,
+            onFocus,
             icon,
         },
         ref
     ) => {
         const [showModal, setShowModal] = useState(false);
         const [isFocused, setIsFocused] = useState(false);
-        const [showPassword, setShowPassword] = useState(false);
-        const [showKeyboard, setShowKeyboard] = useState(false);
         const hiddenInputRef = useRef<TextInput>(null);
 
+        const defaultInputRef = useRef<TextInput>(null);
+        const resolvedRef = inputRef || defaultInputRef;
+        const localValueRef = useRef(value || "");
+
+        useEffect(() => {
+            if (value !== localValueRef.current) {
+                localValueRef.current = value || "";
+                if (resolvedRef && 'current' in resolvedRef && resolvedRef.current) {
+                    resolvedRef.current.setNativeProps({ text: value || "" });
+                }
+            }
+        }, [value, resolvedRef]);
+
         useImperativeHandle(ref, () => ({
-            focus: () => hiddenInputRef.current?.focus(),
+            focus: () => {
+                if (isSelect) {
+                    hiddenInputRef.current?.focus();
+                } else {
+                    resolvedRef?.current?.focus();
+                }
+            },
         }));
 
         const handleSelect = (item: any) => {
@@ -113,15 +186,22 @@ const CustomInput = forwardRef<CustomInputRef, any>(
                     >
                         {icon && <Image source={icon} style={styles.inputIcon} />}
                         <TextInput
-                            ref={inputRef}
+                            ref={resolvedRef}
                             value={value}
-                            onChangeText={onChangeText}
+                            defaultValue={value}
+                            onChangeText={(text) => {
+                                localValueRef.current = text;
+                                if (onChangeText) onChangeText(text);
+                            }}
                             placeholder={placeholder}
                             placeholderTextColor="#94a3b8"
                             style={styles.input}
-                            secureTextEntry={isPassword && !showPassword}
-                            onFocus={() => setIsFocused(true)}
-                            onBlur={(e) => {
+                            secureTextEntry={isPassword}
+                            onFocus={() => {
+                                setIsFocused(true);
+                                if (onFocus) onFocus();
+                            }}
+                            onBlur={() => {
                                 setIsFocused(false);
                                 if (onBlur) onBlur();
                             }}
@@ -133,15 +213,6 @@ const CustomInput = forwardRef<CustomInputRef, any>(
                             autoCorrect={false}
                             spellCheck={false}
                         />
-
-                        {isPassword && (
-                            <TouchableOpacity onPress={() => setShowPassword(showPassword)}>
-                                <Image
-                                    source={eyeCrossedIcon}
-                                    style={styles.eyeIcon}
-                                />
-                            </TouchableOpacity>
-                        )}
                     </View>
                 )}
 
@@ -156,7 +227,7 @@ const CustomInput = forwardRef<CustomInputRef, any>(
                                 <FlatList
                                     data={options}
                                     keyExtractor={(item: any) =>
-                                        item.ClassCode ?? item.wareHouseCode ?? item
+                                        item.id ?? item
                                     }
                                     renderItem={({ item }) => (
                                         <TouchableOpacity
@@ -164,7 +235,7 @@ const CustomInput = forwardRef<CustomInputRef, any>(
                                             onPress={() => handleSelect(item)}
                                         >
                                             <Text style={styles.optionText}>
-                                                {item.ClassName ?? item.wareHouseName ?? item}
+                                                {item.text ?? item}
                                             </Text>
                                         </TouchableOpacity>
                                     )}
@@ -187,181 +258,47 @@ const CustomInput = forwardRef<CustomInputRef, any>(
 );
 
 /* =====================
-   Login Screen
+   Login Screen Identical
 ===================== */
 export default function Login({ navigation }: any) {
     const {
-        gsURL, setgs_gsURL,
-        setOperateUserCode,
-        setOperateUserName,
-        setOperateWareHouseCode,
-        setOperateRandomNumber, setOperateSign,
-        operateUserCode, operateUserName, operateWareHouseCode, operateRandomNumber, operateSign, operateVersion
-    } = useGlobal();
+        gs_BaseURL, setgs_BaseURL,
+        gs_BaseURL_WEB,
+        gs_PADURL, setgs_PADURL,
+        gs_PADURL_WEB,
+        gs_PasswordSalt,
+        gs_randomNumber,
+        gs_version,
+        g_isRealUrl,
+        setgs_wareCode, setgs_wareName, setgs_wareType,
+        setgs_factoryCode, setgs_factoryCodeMES,
+        setgs_classCode, setgs_className,
+        setgs_workdate,
+        setgs_groupCode, setgs_groupName,
+        gs_userCode, setgs_userCode,
+        gs_userName, setgs_userName,
+        setgs_remark,
+        setgs_IPAddress, setgs_MESBaseURL
+    } = useGlobalStr();
 
-
-    const [userCode, setUserCode] = useState("");
-    const [password, setPassword] = useState("");
-    const [serverPassword, setServerPassword] = useState("");
-    const [originalQRUser, setOriginalQRUser] = useState("");
-    const [originalQRPassword, setOriginalQRPassword] = useState("");
-    const [displayUserCode, setDisplayUserCode] = useState("");
+    const [userVal, setUserVal] = useState("");
+    const [passwordVal, setPasswordVal] = useState("");
+    const [displayUserVal, setDisplayUserVal] = useState("");
     const scanTimer = useRef<any>(null);
-
-    const [classOptions, setClassOptions] = useState<ClassItem[]>(
-        []
-    );
-
-
-    const scanBuffer = useRef("");
-    const lastKeyTime = useRef(0);
-
-    /* =====================
-       Password Compare Helper
-    ===================== */
-
-    const passwordsMatch = (input: string, server: string): boolean => {
-        const normalize = (str: string) =>
-            str.replace(/\\/g, "")  
-                .replace(/[\r\n]/g, "") 
-                .trim();
-
-        return normalize(input) === normalize(server);
-    };
-
-    const checkUpdate = async (url?: string) => {
-        const finalURL = url || gsURL;
-
-        try {
-            const res = await fetch(`${finalURL}/api/update/latest`);
-            const json = await res.json();
-
-            console.log("UPDATE API:", json);
-
-            if (json.Code === 500) {
-                Alert.alert("Error", json.Message);
-                return;
-            }
-
-            const serverVersion = json.data.version;
-            const apkUrl = json.data.url;
-            const required = json.data.required;
-
-            const currentVersion = operateVersion;
-
-            if (currentVersion !== serverVersion) {
-                if (required) {
-                    Alert.alert(
-                        "Mise à jour obligatoire",
-                        `Version ${serverVersion} disponible`,
-                        [
-                            {
-                                text: "Installer",
-                                onPress: () => Linking.openURL(apkUrl)
-                            }
-                        ],
-                        { cancelable: false }
-                    );
-                } else {
-                    Alert.alert(
-                        "Mise à jour disponible",
-                        `Version ${serverVersion} disponible`,
-                        [
-                            { text: "Plus tard", style: "cancel" },
-                            {
-                                text: "Installer",
-                                onPress: () => Linking.openURL(apkUrl)
-                            }
-                        ]
-                    );
-                }
-            }
-
-        } catch (err) {
-            console.log("Update error:", err);
-        }
-    };
-
-    useEffect(() => {
-        checkUpdate(gsURL);
-    }, []);
-
-
-    useEffect(() => {
-        console.log("OPERATE INFO UPDATED:", {
-            userCode: operateUserCode,
-            userName: operateUserName,
-            warehouseCode: operateWareHouseCode,
-            operateRandomNumber, operateSign
-        });
-    }, [operateUserCode, operateUserName, operateWareHouseCode, operateRandomNumber, operateSign]);
-
-    const handleUserCodeChange = (text: string) => {
-        const now = Date.now();
-        lastKeyTime.current = now;
-
-        clearTimeout(scanTimer.current);
-
-
-
-        if (text.endsWith("\n") || text.endsWith("\r")) {
-            const cleanCode = text.trim();
-            if (cleanCode.length > 0) {
-                setUserCode(cleanCode);
-                checkUserCode(cleanCode);
-            }
-
-            return;
-        }
-
-        setUserCode(text);
-
-
-        if (text.includes("|")) {
-
-            setDisplayUserCode(" ".repeat(text.length));
-            scanTimer.current = setTimeout(() => {
-                const finalCode = text.trim();
-                //console.log("Reinforced Scan Buffer Stabilized:", finalCode);
-
-              
-                const parts = finalCode.split("|");
-                if (parts.length >= 2) {
-                    setDisplayUserCode(parts[0].trim()); 
-                }
-                checkUserCode(finalCode);
-            }, 800);
-        } else {
-
-            scanTimer.current = setTimeout(() => {
-                const finalCode = text.trim();
-
-                Alert.alert("Error", "QR invalide ");
-                setUserCode("")
-                return;
-            }, 400);
-
-
-        }
-    };
-
-    const [selectedClass, setSelectedClass] =
-        useState<ClassItem | null>(null);
-
-    const [warehouseOptions, setWarehouseOptions] = useState<WarehouseItem[]>(
-        []
-    );
-    const [selectedWarehouse, setSelectedWarehouse] =
-        useState<WarehouseItem | null>(null);
+    const lastKeyTime = useRef<number>(0);
     const [loading, setLoading] = useState(false);
-    const [showSettings, setShowSettings] = useState(false);
-    const [tempURL, setTempURL] = useState(gsURL);
+    const [newVersionLabel, setNewVersionLabel] = useState("");
+
+    const [classList, setClassList] = useState<ClassItem[]>([]);
+    const [selectedClass, setSelectedClass] = useState<ClassItem | null>(null);
+
+    const [warehouseList, setWarehouseList] = useState<WarehouseItem[]>([]);
+    const [selectedWarehouse, setSelectedWarehouse] = useState<WarehouseItem | null>(null);
 
     const userRef = useRef<TextInput>(null);
     const passwordRef = useRef<TextInput>(null);
     const warehouseRef = useRef<CustomInputRef>(null);
     const classRef = useRef<CustomInputRef>(null);
-
 
     const [activeField, setActiveField] = useState<"user" | "password" | "warehouse" | "class">("class");
 
@@ -371,595 +308,288 @@ export default function Login({ navigation }: any) {
             else if (activeField === "password") passwordRef.current?.focus();
             else if (activeField === "warehouse") warehouseRef.current?.focus();
             else if (activeField === "class") classRef.current?.focus();
-        }, 100);
+        }, 120);
     };
 
-    const { gs_factoryCode } = useGlobal();
-    const { setgs_wareCode } = useGlobal();
-    const { setgs_wareName } = useGlobal();
-    const { setgs_wareType } = useGlobal();
-    const { setgs_classCode } = useGlobal();
-    const { setgs_className } = useGlobal();
-    const { gs_workdate, setgs_workdate } = useGlobal();
-    const { setgs_userCode } = useGlobal();
-    const { setgs_userName } = useGlobal();
-    const { setgs_roleCode, gs_roleCode } = useGlobal();
-
-
-
-
-    const handleSelectWarehouse = (item: any) => {
-        setSelectedWarehouse(item);
-        setOperateWareHouseCode(item.wareHouseCode);
-
-        setTimeout(() => {
-            warehouseRef.current?.focus();
-        }, 100);
+    // Signature generator
+    const getUserSign = (addchar: string) => {
+        return pubfunction.GetUserSign(addchar);
     };
 
+    // Handler for typing and barcode scanning
+    const handleUserCodeChange = (text: string) => {
+        const now = Date.now();
+        lastKeyTime.current = now;
 
+        clearTimeout(scanTimer.current);
 
-    /* =====================
-       Load Classes
-    ===================== */
+        if (text.includes("\n") || text.includes("\r")) {
+            const cleanCode = text.replace(/[\r\n]/g, "").trim();
+            if (cleanCode.length > 0) {
+                if (cleanCode.includes("|")) {
+                    const parts = cleanCode.split("|");
+                    const u = parts[0].trim();
+                    let p = parts.slice(1).join("|").trim();
+                    
+                    // Normalize scanned/emulated characters transposition
+                    p = normalizeWedgePassword(p);
 
-    const loadClasses = async (url?: string) => {
-        const finalURL = url || gsURL;
-
-        try {
-            const res = await fetch(`${finalURL}/api/GetClassList/GetClassList`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ factoryCode: gs_factoryCode }),
-            });
-
-            const data = await res.json();
-
-            if (data.Code === 500) {
-                Alert.alert("Error", data.Message);
-                return;
+                    setUserVal(u);
+                    setDisplayUserVal(u);
+                    setPasswordVal(p);
+                    getWarehouseListByUser(u);
+                    setTimeout(() => {
+                        warehouseRef.current?.focus();
+                    }, 150);
+                } else {
+                    setUserVal(cleanCode);
+                    setDisplayUserVal(cleanCode);
+                    getWarehouseListByUser(cleanCode);
+                    passwordRef.current?.focus();
+                }
             }
+            return;
+        }
 
-            setClassOptions(
-                data.data.map((c: any) => ({
-                    ClassCode: c.classesCode,
-                    ClassName: c.classesName,
-                }))
-            );
+        // Keep local display value in sync: mask/hide password while scanning
+        if (text.includes("|")) {
+            const parts = text.split("|");
+            const u = parts[0].trim();
+            setDisplayUserVal(u);
+        } else {
+            setDisplayUserVal(text);
+        }
 
-        } catch (err) {
-            console.log(err);
-            //  Alert.alert("Error", "Unable to load classes");
+        if (text.includes("|")) {
+            scanTimer.current = setTimeout(() => {
+                const finalCode = text.replace(/[\r\n]/g, "").trim();
+                const parts = finalCode.split("|");
+                if (parts.length >= 2) {
+                    const u = parts[0].trim();
+                    let p = parts.slice(1).join("|").trim();
+                    
+                    // Normalize scanned/emulated characters transposition
+                    p = normalizeWedgePassword(p);
+
+                    setUserVal(u);
+                    setDisplayUserVal(u);
+                    setPasswordVal(p);
+                    getWarehouseListByUser(u);
+                    setTimeout(() => {
+                        warehouseRef.current?.focus();
+                    }, 150);
+                }
+            }, 300);
+        } else {
+            // Standard user entry
+            setUserVal(text);
         }
     };
 
+    // Load Classes
+    const getClassListJava = async (baseURL: string) => {
+        try {
+            const signParams = getUserSign("?");
+            const url = `${baseURL}/basedata/class/getComboList${signParams}`;
+            
+            const res = await fetch(url);
+            const data = await res.json();
+            
+            if (data && data.list) {
+                const list = typeof data.list === 'string' ? JSON.parse(data.list) : data.list;
+                const mapped = list.map((c: any) => ({
+                    id: c.id,
+                    text: c.text
+                }));
+                setClassList(mapped);
+                if (mapped.length > 0) {
+                    setSelectedClass(mapped[0]);
+                }
+            } else if (data && !data.success) {
+                pubfunction.ShowError(data.msg || "Failed to load classes list");
+            }
+        } catch (err) {
+            pubfunction.ShowError("getClassListJava error");
+        }
+    };
 
+    // Load warehouses by user code
+    const getWarehouseListByUser = async (uCode: string) => {
+        try {
+            pubfunction.globalstr.gs_userCode = uCode;
+            pubfunction.globalstr.gs_userName = uCode;
+            let urlCur = `${gs_BaseURL}/basedata/warehouseAuth/getAuthWarehouseComb`;
+            urlCur += pubfunction.GetUserSign("?");
+            
+            const res = await fetch(urlCur);
+            const data = await res.json();
+            
+            if (data && data.list) {
+                const list = typeof data.list === 'string' ? JSON.parse(data.list) : data.list;
+                const mapped = list.map((w: any) => ({
+                    id: w.id,
+                    text: w.text,
+                    otherInfo: w.otherInfo,
+                    factoryCode: w.factoryCode,
+                    mes3g: w.mes3g,
+                    mesLan: w.mesLan
+                }));
+                setWarehouseList(mapped);
+                if (mapped.length > 0) {
+                    setSelectedWarehouse(mapped[0]);
+                }
+            } else if (data && !data.success) {
+                pubfunction.ShowError(data.msg || "Failed to load warehouses");
+            }
+        } catch (err) {
+            pubfunction.ShowError("getWarehouseListByUser error");
+        }
+    };
+
+    // Authenticate user with selected warehouse
+    const getUserInfoWarehouseAuth = async (uCode: string, pass: string, wCode: string, cCode: string) => {
+        const candidates = getNormalizedPasswordCandidates(pass);
+        let lastError = "Login details verification failed.";
+
+        for (const pwdCandidate of candidates) {
+            try {
+                const operatorUser = uCode;
+                const operatorUserName = "";
+                
+                const pwd = pubfunction.GetPasswordEncrypt(pwdCandidate);
+                const signStr = pubfunction.MD5(operatorUser + operatorUserName + gs_randomNumber + gs_PasswordSalt);
+                const language = "en_US";
+
+                let url = `${gs_BaseURL}/user/doLoginWithWarehouse`;
+                url += `?operatorUser=${operatorUser}`;
+                url += `&operatorUserName=${operatorUserName}`;
+                url += `&password=${pwd}`;
+                url += `&warehouseCode=${wCode}`;
+                url += `&classCode=${cCode}`;
+                url += `&randomNumber=${gs_randomNumber}`;
+                url += `&sign=${signStr}`;
+                url += `&version=${gs_version}`;
+                url += `&languageType=${language}`;
+
+                const res = await fetch(url);
+                const data = await res.json();
+                 
+                if (data && data.success) {
+                    const vo = typeof data.data === 'string' ? JSON.parse(data.data) : data.data;
+                    setgs_userCode(uCode);
+                    setgs_userName(vo?.userName || uCode);
+                    setgs_remark(vo?.remark || "");
+                    return { success: true, user: vo };
+                } else {
+                    lastError = data?.msg || "Login details verification failed.";
+                }
+            } catch (err: any) {
+                pubfunction.ShowError("Login attempt failed for candidate");
+                lastError = `Cannot verify credentials`;
+            }
+        }
+
+        pubfunction.ShowError(lastError);
+        return { success: false };
+    };
+
+    // Sync React standard global context parameters to the utility modules static object
     useEffect(() => {
+        pubfunction.globalstr.gs_userCode = gs_userCode || "";
+        pubfunction.globalstr.gs_userName = gs_userName || "";
+        pubfunction.globalstr.gs_randomNumber = gs_randomNumber || "2";
+        pubfunction.globalstr.gs_PasswordSalt = gs_PasswordSalt || "abc12345";
+        pubfunction.globalstr.gs_version = gs_version || "1.0.0";
+    }, [gs_userCode, gs_userName, gs_randomNumber, gs_PasswordSalt, gs_version]);
 
-        loadClasses(gsURL);
-        setTimeout(() => {
-            classRef.current?.focus();
-            setActiveField("class");
-        }, 500);
+    // Component did mount / Frm_login_Load
+    useEffect(() => {
+        const loadFormConfig = async () => {
+            try {
+                // Check version update and classes list
+                await getClassListJava(gs_BaseURL);
+
+                // Set focus on usercode input
+                setTimeout(() => {
+                    userRef.current?.focus();
+                    setActiveField("user");
+                }, 500);
+
+            } catch (err) {
+                pubfunction.ShowError("Connect error, Please change URL link!");
+            }
+        };
+
+        loadFormConfig();
     }, []);
 
-
-    /* =====================
-       Check User
-    ===================== */
-    const checkUserCode = async (manualInput?: string) => {
-        const inputToProcess = typeof manualInput === "string" ? manualInput : userCode;
-        if (!inputToProcess) {
-            Alert.alert("Error", "UserCode required");
-            return;
-        }
-
-       // console.log("Raw Input to checkUserCode:", `[${inputToProcess}]`);
-
-
-        const normalizeQR = (str: string) => {
-            return str
-                .replace(/[\r\n]/g, "")
-                .trim();
-        };
-
-        const cleanForCompare = (str: string) => {
-            if (!str) return "";
-            return str.replace(/\\/g, "").trim();
-        };
-
-
-        // QR Scan Detection (Format: username|password)  
-        if (inputToProcess.includes("|")) {
-            const cleanInput = normalizeQR(inputToProcess);
-
-           // console.log("SCAN RAW:", `[${inputToProcess}]`);
-            //console.log("SCAN CLEAN:", `[${cleanInput}]`);
-
-            const parts = cleanInput.split("|");
-            if (parts.length >= 2) {
-                const u = parts[0].trim();
-
-                const p = parts.slice(1).join("|").trim();
-
-                setUserCode(u);
-                setPassword(p);
-
-                //console.log("Parsed QR -> User:", `[${u}]`, "Pass:", `[${p}]`);
-                processQRScan(u, p);
-                return;
-            }
-        }
-
-        try {
-            const res = await fetch(`${gsURL}/api/UserInfo/getuserinfo`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    factoryCode: gs_factoryCode,
-                    userCode: inputToProcess
-                }),
-            });
-
-            const data = await res.json();
-
-            if (data.Code === 500) {
-                Alert.alert("Error", data.Message);
-                return;
-            }
-            console.log("User Lookup Response:", data);
-
-            if (data.code !== 200) {
-                Alert.alert("Error", data.message);
-                setUserCode("");
-                setPassword("");
-                return;
-            }
-
-            const rawData = data.data;
-            const dataObj = Array.isArray(rawData) ? rawData[0] : rawData;
-
-            if (!dataObj) {
-                Alert.alert("Error", "User info not found");
-                setUserCode("");
-                setPassword("");
-                return;
-            }
-
-            const passwordFromServer = dataObj.passwordInput?.trim();
-            console.log("Server PW:", `[${passwordFromServer}]`);
-
-            setServerPassword(passwordFromServer);
-            setOperateUserCode(inputToProcess);
-            setOperateUserName(dataObj.userName);
-            setgs_roleCode(dataObj.frolecode);
-
-            setActiveField("password");
-            setTimeout(() => passwordRef.current?.focus(), 100);
-
-        } catch (error) {
-            console.log(error);
-            Alert.alert("Error", "Server not reachable");
-            setUserCode("");
-        }
-    };
-
-    /* =====================
-       Process QR Scan
-    ===================== */
-    const processQRScan = async (u: string, p: string) => {
-        setLoading(true);
-        setOriginalQRUser(u);
-        setOriginalQRPassword(p);
-        try {
-            // 1. Get User Info
-            const userRes = await fetch(`${gsURL}/api/UserInfo/getuserinfo`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    factoryCode: gs_factoryCode,
-                    userCode: u
-                }),
-            });
-            const userData = await userRes.json();
-
-            if (userData.Code === 500) {
-                Alert.alert("Error", userData.Message);
-                return;
-            }
-
-            const rawData = userData.data;
-            const dataObj = Array.isArray(rawData) ? rawData[0] : rawData;
-
-            if (userData.code !== 200 || !dataObj) {
-                Alert.alert("Error", "User details missing in system");
-                setLoading(false);
-                setUserCode("");
-                setPassword("");
-                return;
-            }
-
-            const srvPwdRaw = dataObj.passwordInput;
-            const srvPwd = srvPwdRaw?.trim() || "";
-
-            //console.log("QR Validation - Comparing Input:", `[${p.trim()}]`, "with Server:", `[${srvPwd}]`);
-
-            setServerPassword(srvPwd);
-            setOperateUserCode(u);
-            setOperateUserName(dataObj.userName);
-            setgs_roleCode(dataObj.frolecode);
-
-            // 2. Validate Password (Tolerant to backslashes and scanner reordering)
-            if (!passwordsMatch(p, srvPwd)) {
-                Alert.alert("Error", "QR Password Mismatch");
-                setLoading(false);
-                setUserCode("");
-                setDisplayUserCode("");
-                setPassword("");
-                return;
-            }
-
-            // 3. Load Warehouses
-            const wareRes = await fetch(
-                `${gsURL}/api/WareListByFactory/GetWareListByFactory`,
-                {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        factoryCode: gs_factoryCode,
-                        userCode: u
-                    }),
-                }
-            );
-
-            const wareData = await wareRes.json();
-            if (wareData.Code === 500) {
-                Alert.alert("Error", wareData.Message);
-                return;
-            }
-            setWarehouseOptions(
-                wareData.data.map((w: any) => ({
-                    wareHouseCode: w.wareHouseCode,
-                    wareHouseName: w.wareHouseName.trim(),
-                }))
-            );
-
-            setActiveField("warehouse");
-            setTimeout(() => warehouseRef.current?.focus(), 100);
-            Alert.alert("Success", "QR Login: Please select warehouse");
-
-        } catch (error) {
-            Alert.alert("Error", "QR processing failed");
-            setUserCode("");
-        } finally {
-            setLoading(false);
-        }
-    };
-
-
-    /* =====================
-       Check Password
-    ===================== */
-    const checkPassword = async () => {
-        if (!passwordsMatch(password, serverPassword)) {
-            Alert.alert("Error", "Password Error, please check!");
-            return;
-        }
-
-        try {
-            const res = await fetch(
-                `${gsURL}/api/WareListByFactory/GetWareListByFactory`,
-                {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        factoryCode: gs_factoryCode,
-                        userCode: userCode
-                    }),
-                }
-            );
-
-            const data = await res.json();
-            console.log("donnes de wh", data);
-            setWarehouseOptions(
-                data.data.map((w: any) => ({
-                    wareHouseCode: w.wareHouseCode,
-                    wareHouseName: w.wareHouseName.trim(),
-                }))
-            );
-
-            setActiveField("warehouse");
-            setTimeout(() => warehouseRef.current?.focus(), 100);
-
-        } catch {
-            Alert.alert("Error", "Unable to load warehouses");
-        }
-    };
-
-    const generateSignature = async () => {
-        const random = Math.floor(Math.random() * 1000000).toString();
-
-        const sign = md5(
-            userCode +
-            random +
-            operateVersion +
-            "SECRET_KEY"
-        );
-
-        return { random, sign };
-    };
-
-    /* =====================
-       Final Login
-    ===================== */
+    // Handle Login Button Click
     const handleLogin = async () => {
         if (!selectedWarehouse) {
-            Alert.alert("Error", "Select warehouse");
+            pubfunction.ShowError("The user does not have Warehouse permissions to operate!");
             return;
         }
 
-        const wareHouseCode = selectedWarehouse.wareHouseCode;
-        const wareHouseName = selectedWarehouse.wareHouseName;
+        const mesURL = selectedWarehouse.mesLan || selectedWarehouse.mes3g;
 
-        setgs_wareCode(wareHouseCode);
-        setgs_wareName(wareHouseName);
+        if (!mesURL) {
+            pubfunction.ShowError("Please config warehouse url first !");
+            return;
+        }
 
-        console.log("WAREHOUSE:", wareHouseCode, wareHouseName);
+        // Apply settings to context
+        setgs_wareCode(selectedWarehouse.id);
+        setgs_wareName(selectedWarehouse.text);
+        setgs_wareType(selectedWarehouse.otherInfo || "");
+        setgs_factoryCode(selectedWarehouse.factoryCode || "001");
+        setgs_factoryCodeMES("001");
+        setgs_MESBaseURL(mesURL);
 
+        let finalClassCode = "BC01";
+        let finalClassName = "Jour";
+        if (selectedClass) {
+            finalClassCode = selectedClass.id;
+            finalClassName = selectedClass.text;
+        }
+        setgs_classCode(finalClassCode);
+        setgs_className(finalClassName);
 
+        const todayDate = new Date().toISOString().split("T")[0];
+        setgs_workdate(todayDate);
 
+        setgs_groupCode("BZ001");
+        setgs_groupName("class A");
 
-        try {
-            /* =========================
-               1️⃣ GET WAREHOUSE INFO
-            ========================= */
-            const resWare = await fetch(
-                `${gsURL}/api/BaseWarehouse/GetWareInfo`,
-                {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        factoryCode: gs_factoryCode,
-                        wareHouseCode: wareHouseCode,
-                    }),
-                }
-            );
+        setLoading(true);
+        const loginRes = await getUserInfoWarehouseAuth(userVal, passwordVal, selectedWarehouse.id, finalClassCode);
+        setLoading(false);
 
-            const dataWare = await resWare.json();
-            if (dataWare.Code === 500) {
-                Alert.alert("Error", dataWare.Message);
-                return;
-            }
-
-
-            if (!resWare.ok || !dataWare.data) {
-                Alert.alert("Error", "Warehouse does not exist!");
-                return;
-            }
-
-            console.log("Données warehouse:", dataWare);
-
-            const wareHouseType = dataWare.data.wareHouseType;
-            setgs_wareType(wareHouseType);
-            console.log("WAREHOUSE TYPE:", wareHouseType);
-
-            /* =========================
-            2️⃣ CHECK LICENSE
-         ========================= */
-            const resCheck = await fetch(
-                `${gsURL}/api/CheckLicense/CheckLicense`,
-                {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        factoryCode: gs_factoryCode,
-                        wareHouseCode: wareHouseCode,
-                    }),
-                }
-            );
-
-            const dataCheck = await resCheck.json();
-
-            if (dataCheck.Code === 500) {
-                Alert.alert("Error", dataCheck.Message);
-                return;
-            }
-
-            // Vérification
-            if (!dataCheck.data) {
-                Alert.alert("License Error", dataCheck.message || "Unknown error");
-                return;
-            }
-
-
-            /* =========================
-           3️⃣ CHECK USER
-         ========================= */
-            const resUser = await fetch(
-                `${gsURL}/api/UserInfo/getuserinfo`,
-                {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        factoryCode: gs_factoryCode,
-                        userCode: userCode,
-                    }),
-                }
-            );
-
-            const dataUser = await resUser.json();
-
-            if (dataUser.Code === 500) {
-                Alert.alert("Error", dataUser.Message);
-                return;
-            }
-
-
-            if (!resUser.ok || !dataUser.data) {
-                Alert.alert(
-                    "Error",
-                    "The user does not have permissions to operate!"
-                );
-                return;
-            }
-
-
-            const srvPwdManual = dataUser.data.passwordInput?.trim() || "";
-
-            if (!passwordsMatch(password, srvPwdManual)) {
-                Alert.alert("Error", "Password Error, please check!");
-                passwordRef.current?.focus();
-                return;
-            }
-
-
-            setgs_userCode(userCode);
-            setgs_userName(dataUser.data.userName);
-            setgs_roleCode(dataUser.data.frolecode);
-
-
-            setOperateUserCode(userCode);
-            setOperateUserName(dataUser.data.userName);
-            setOperateWareHouseCode(wareHouseCode);
-
-            //console.log("User info are:", dataUser.data);
-
-
-            /* =========================
-              4️⃣ GET WORKDATE
-           ========================= */
-
+        if (loginRes.success) {
             try {
-                if (!selectedClass) {
-                    Alert.alert("Error", "Select Class");
-                    return;
-                }
-
-                const ClassCode = selectedClass.ClassCode;
-                const ClassName = selectedClass.ClassName;
-
-                // Check if selected class time is valid
-                try {
-                    const resCheckTime = await fetch(`${gsURL}/api/CheckClassesTime`, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                            factoryCode: gs_factoryCode,
-                            classesCode: ClassCode,
-                        }),
-                    });
-
-                    if (resCheckTime.ok) {
-                        const dataCheckTime = await resCheckTime.json();
-                        if (dataCheckTime && dataCheckTime.data) {
-                            if (dataCheckTime.data.result === 0) {
-                                Alert.alert("Error", dataCheckTime.data.message || "Heure actuelle hors intervalle du shift");
-                                return;
-                            }
-                        }
-                    }
-                } catch (checkErr) {
-                    console.error("Error verifying classes time:", checkErr);
-                }
-
-                setgs_classCode(ClassCode);
-                setgs_className(ClassName);
-
-                const resWorkdate = await fetch(`${gsURL}/api/Workdate/getworkdate`, {
-                    method: "POST", // POST obligatoire
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        factoryCode: gs_factoryCode,
-                        classesCode: ClassCode,
-                    }),
-                });
-
-                const dataWorkdate = await resWorkdate.json();
-
-                if (dataWorkdate.Code === 500) {
-                    Alert.alert("Error", dataWorkdate.Message);
-                    return;
-                }
-                console.log("Workdate API response:", dataWorkdate);
-
-                if (!resWorkdate.ok || !dataWorkdate.data) {
-                    Alert.alert("Error", dataWorkdate.message || "Unable to get workdate!");
-                    return;
-                }
-
-
-                setgs_workdate(dataWorkdate.data.workdate);
-                console.log("Workdate set:", gs_workdate);
-
-            } catch (error) {
-                console.error("Fetch workdate error:", error);
-                Alert.alert("Error", "Something went wrong while fetching workdate!");
+                const netInfo = RNNetInfo?.NetworkInfo;
+                const ip = (netInfo && typeof netInfo.getIPAddress === "function")
+                    ? await netInfo.getIPAddress()
+                    : "127.0.0.1";
+                setgs_IPAddress(ip || "127.0.0.1");
+            } catch (err) {
+                pubfunction.ShowError("Error retrieving IP Address, fallback to default:"+err);
+                setgs_IPAddress("127.0.0.1");
             }
-
-
-
-
-
-            /* =========================
-               ✅ SUCCESS LOGIN
-            ========================= */
-
-            /* =========================
-         ✅ GENERATE JWT AFTER ALL CHECKS
-      ========================= */
-            try {
-                const tokenRes = await fetch(`${gsURL}/api/auth/login`, {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json"
-                    },
-                    body: JSON.stringify({
-                        UserCode: originalQRUser || userCode,
-                        Password: originalQRPassword || password
-                    }),
-                });
-
-                const tokenData = await tokenRes.json();
-
-                console.log("JWT RESPONSE:", tokenData);
-
-                // ✅ CHECK CORRECT
-                if (tokenData.code !== 200) {
-                    Alert.alert("Error", tokenData.message || "Cannot generate JWT");
-                    return;
-                }
-
-                const token = tokenData.data?.token;
-
-                if (!token) {
-                    Alert.alert("Error", "Token missing");
-                    return;
-                }
-
-                await AsyncStorage.setItem("userToken", token);
-
-
-                const { random, sign } = await generateSignature();
-                setOperateRandomNumber(random);
-                setOperateSign(sign);
-
-
-                navigation.navigate("Menu");
-                
-
-            } catch (error) {
-                console.error("JWT generation error:", error);
-                Alert.alert("Error", "Something went wrong while generating JWT!");
-            }
-
-
-
-        } catch (err) {
-            console.error(err);
-            Alert.alert("Error", "Cannot reach server or something went wrong!");
+            navigation.navigate("Menu");
         }
     };
 
+
+
+    // Download New Version Button Click
+    const handleDownload = async () => {
+        const confirmResult = await pubfunction.ShowConfirm("Are you sure download a new version replace old One, Restart again?");
+        if (confirmResult) {
+            if (gs_PADURL) {
+                Linking.openURL(gs_PADURL);
+            }
+        }
+    };
 
     return (
         <SafeAreaView style={styles.screen}>
@@ -968,123 +598,117 @@ export default function Login({ navigation }: any) {
                 behavior={Platform.OS === "ios" ? "padding" : undefined}
             >
                 <View style={styles.container}>
-                    {/* 1. Logo Condor Logistics */}
+                    {/* Header Logo */}
                     <View style={styles.logoContainer}>
                         <Image
                             source={condorLogo}
                             style={styles.condorLogo}
                             resizeMode="stretch"
                         />
-                        <Text style={styles.wmsText}>WAREHOUSE MANAGEMENT SYSTEM</Text>
-                    </View>
+                        <Text style={styles.wmsText}>GROUP WAREHOUSE MANAGEMENT</Text>
 
+                        {/* Download & Version Container */}
+                        <View style={styles.headerDownloadRow}>
+                            <LinearGradient
+                                colors={['#0052cc', '#22c55e']}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 0 }}
+                                style={styles.downloadGradientButton}
+                            >
+                                <TouchableOpacity
+                                    onPress={handleDownload}
+                                    style={styles.downloadButton}
+                                    activeOpacity={0.7}
+                                >
+                                    <Text style={styles.downloadButtonText}>Download new</Text>
+                                </TouchableOpacity>
+                            </LinearGradient>
+                            <Text style={styles.headerVersion}>Version {gs_version}</Text>
+                        </View>
+                    </View>
 
                     {loading && (
                         <View style={styles.loadingOverlay}>
                             <ActivityIndicator size="large" color="#0052cc" />
-                            <Text style={styles.loadingText}>Processing QR Scan...</Text>
+                            <Text style={styles.loadingText}>Verifying credentials...</Text>
                         </View>
                     )}
 
                     <View style={styles.form}>
+                        {/* Class selector */}
                         <CustomInput
                             ref={classRef}
                             label="Classes"
                             placeholder="Select Class"
-                            value={selectedClass?.ClassName}
-                            onChangeText={async (val: any) => {
-                                if (!val) return;
-                                try {
-                                    const resCheckTime = await fetch(`${gsURL}/api/CheckClassesTime`, {
-                                        method: "POST",
-                                        headers: { "Content-Type": "application/json" },
-                                        body: JSON.stringify({
-                                            factoryCode: gs_factoryCode,
-                                            classesCode: val.ClassCode,
-                                        }),
-                                    });
-
-                                    if (resCheckTime.ok) {
-                                        const dataCheckTime = await resCheckTime.json();
-                                        if (dataCheckTime && dataCheckTime.data) {
-                                            if (dataCheckTime.data.result === 0) {
-                                                Alert.alert("Error", dataCheckTime.data.message || "Heure actuelle hors intervalle du shift");
-                                                setSelectedClass(null);
-                                                return;
-                                            }
-                                        }
-                                    }
-                                } catch (checkErr) {
-                                    console.error("Error verifying classes time on select:", checkErr);
-                                }
-
+                            value={selectedClass?.text}
+                            onChangeText={(val: any) => {
                                 setSelectedClass(val);
                                 setActiveField("user");
-                                setTimeout(() => userRef.current?.focus(), 100);
+                                setTimeout(() => userRef.current?.focus(), 120);
                             }}
                             isSelect
-                            options={classOptions}
+                            options={classList}
                             onBlur={ensureFocus}
                             icon={calendarIcon}
                         />
 
+                        {/* User ID */}
                         <CustomInput
                             label="User Code"
                             placeholder="Enter your ID"
-                            value={displayUserCode}  
+                            value={displayUserVal}
                             onChangeText={handleUserCodeChange}
                             inputRef={userRef}
-                            //onSubmitEditing={() => checkUserCode()}
                             onFocus={() => setActiveField("user")}
-                            onBlur={ensureFocus}
+                            onBlur={() => {
+                                ensureFocus();
+                                if (userVal) getWarehouseListByUser(userVal.trim());
+                            }}
                             icon={userIcon}
                         />
 
+                        {/* Password */}
                         <CustomInput
                             label="Password"
                             placeholder="••••••••"
-                            value={password}
-                            onChangeText={setPassword}
+                            value={passwordVal}
+                            onChangeText={(text: string) => {
+                                setPasswordVal(text);
+                            }}
                             isPassword
                             inputRef={passwordRef}
-                            onSubmitEditing={checkPassword}
+                            onSubmitEditing={() => {
+                                if (userVal) {
+                                    getWarehouseListByUser(userVal.trim());
+                                    setTimeout(() => {
+                                        warehouseRef.current?.focus();
+                                    }, 500);
+                                }
+                            }}
                             onFocus={() => setActiveField("password")}
                             onBlur={ensureFocus}
                             icon={lockIcon}
                         />
 
+                        {/* Warehouse Selector */}
                         <CustomInput
                             ref={warehouseRef}
                             label="Warehouse"
                             placeholder="Select Warehouse"
-                            value={selectedWarehouse?.wareHouseName}
+                            value={selectedWarehouse?.text}
                             onChangeText={(val: any) => {
                                 setSelectedWarehouse(val);
-                                setOperateWareHouseCode(val.wareHouseCode);
                             }}
                             isSelect
-                            options={warehouseOptions}
-                            onSubmitEditing={handleSelectWarehouse}
+                            options={warehouseList}
                             onBlur={ensureFocus}
                             icon={warehouseIcon}
                         />
                     </View>
 
-                    {/* 3. Version and Settings below Warehouse */}
-                    <View style={styles.infoBox}>
-                        <View style={styles.infoRow}>
-                            <Text style={styles.version}>App Version  {operateVersion}</Text>
-                            {gs_roleCode === "RoleAdmin" && (
-                                <TouchableOpacity onPress={() => setShowSettings(true)}>
-                                    <Image
-                                        source={settingsIcon}
-                                        style={styles.settingsIcon}
-                                    />
-                                </TouchableOpacity>
-                            )}
-                        </View>
-                    </View>
 
+
+                    {/* Action buttons */}
                     <View style={styles.buttonContainer}>
                         <LinearGradient
                             colors={['#85ddf3ff', '#0052cc']}
@@ -1097,46 +721,11 @@ export default function Login({ navigation }: any) {
                                 onPress={handleLogin}
                                 activeOpacity={0.8}
                             >
-                                <Text style={styles.primaryButtonText}>logIn</Text>
+                                <Text style={styles.primaryButtonText}>LogIn</Text>
                             </TouchableOpacity>
                         </LinearGradient>
                     </View>
                 </View>
-
-                {/* Settings Modal */}
-                <Modal transparent visible={showSettings} animationType="slide">
-                    <View style={styles.modalOverlay}>
-                        <View style={styles.modalContent}>
-                            <Text style={styles.modalTitle}>API Settings</Text>
-                            <TextInput
-                                style={styles.settingsInput}
-                                value={tempURL}
-                                onChangeText={setTempURL}
-                                placeholder="Server URL"
-                            />
-                            <View style={styles.modalButtons}>
-                                <TouchableOpacity
-                                    style={[styles.modalBtn, styles.cancelBtn]}
-                                    onPress={() => setShowSettings(false)}
-                                >
-                                    <Text>Cancel</Text>
-                                </TouchableOpacity>
-                                <TouchableOpacity
-                                    style={[styles.modalBtn, styles.saveBtn]}
-                                    onPress={() => {
-                                        setgs_gsURL(tempURL);
-                                        checkUpdate(tempURL);
-                                        loadClasses(tempURL);
-
-                                        setShowSettings(false);
-                                    }}
-                                >
-                                    <Text style={{ color: '#fff' }}>Save</Text>
-                                </TouchableOpacity>
-                            </View>
-                        </View>
-                    </View>
-                </Modal>
             </KeyboardAvoidingView>
         </SafeAreaView>
     );
@@ -1154,34 +743,21 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: "#ffffff",
     },
-
     container: {
         padding: width * 0.05,
         flex: 1,
         justifyContent: "center",
     },
-
     logoContainer: {
         alignItems: "center",
         marginBottom: height * 0.02,
         width: width,
         marginLeft: -width * 0.05,
     },
-
     condorLogo: {
         width: "100%",
         height: scale(160),
     },
-
-    logisticsText: {
-        fontSize: scale(20),
-        fontWeight: "900",
-        color: "#0052cc",
-        letterSpacing: 5,
-        marginTop: 5,
-        textTransform: "uppercase",
-    },
-
     wmsText: {
         fontSize: 12,
         fontWeight: "600",
@@ -1190,54 +766,12 @@ const styles = StyleSheet.create({
         textAlign: "center",
         letterSpacing: 1,
     },
-
-    header: {
-        alignItems: "center",
-        marginBottom: height * 0.01,
-    },
-
-    logoBox: {
-        width: isSmallDevice ? 50 : 60,
-        height: isSmallDevice ? 40 : 48,
-        borderRadius: 12,
-        backgroundColor: "#0052cc",
-        alignItems: "center",
-        justifyContent: "center",
-        marginBottom: 10,
-    },
-
-    logoText: {
-        color: "#fff",
-        fontSize: isSmallDevice ? scale(14) : scale(18),
-        fontWeight: "900",
-    },
-
-    title: {
-        fontSize: isSmallDevice ? scale(14) : scale(17),
-        fontWeight: "800",
-        color: "#0f172a",
-        textAlign: "center",
-    },
-
-    subtitle: {
-        fontSize: isSmallDevice ? scale(10) : scale(12),
-        color: "#64748b",
-    },
-
     form: {
         marginBottom: height * 0.015,
     },
-
     inputWrapper: {
         marginBottom: height * 0.012,
     },
-
-    label: {
-        fontSize: isSmallDevice ? scale(9) : scale(11),
-        fontWeight: "700",
-        marginBottom: 4,
-    },
-
     inputContainer: {
         height: isSmallDevice ? 55 : 65,
         borderRadius: 10,
@@ -1247,83 +781,67 @@ const styles = StyleSheet.create({
         alignItems: "center",
         paddingHorizontal: width * 0.03,
     },
-
     inputFocused: {
         borderColor: "#0052cc",
     },
-
     inputIcon: {
         width: 20,
         height: 20,
         marginRight: 10,
         tintColor: "#64748b",
     },
-
     eyeIcon: {
         width: 24,
         height: 24,
         tintColor: "#64748b",
     },
-
     input: {
         flex: 1,
         fontSize: isSmallDevice ? scale(16) : scale(20),
         color: "#0f172a",
     },
-
     placeholderText: {
         color: "#94a3b8",
         fontSize: isSmallDevice ? scale(13) : scale(16),
     },
-
     chevronIcon: {
         fontSize: isSmallDevice ? scale(10) : scale(12),
         color: "#94a3b8",
     },
-
     buttonContainer: {
         gap: 10,
         marginTop: height * 0.02,
     },
-
     button: {
         height: isSmallDevice ? 44 : 50,
         borderRadius: 12,
         alignItems: "center",
         justifyContent: "center",
     },
-
-    primaryButton: {
-        backgroundColor: "#0052cc",
-    },
-
     primaryButtonText: {
         color: "#fff",
         fontWeight: "700",
         fontSize: isSmallDevice ? scale(16) : scale(18),
     },
-
     secondaryButton: {
         borderWidth: 2,
         borderColor: "#e2e8f0",
+        backgroundColor: "#f8fafc",
     },
-
     secondaryButtonText: {
         fontWeight: "700",
-        fontSize: isSmallDevice ? scale(13) : scale(15),
+        color: "#475569",
+        fontSize: isSmallDevice ? scale(16) : scale(18),
     },
-
     gradientButton: {
         borderRadius: 10,
     },
-
     modalOverlay: {
         flex: 1,
         backgroundColor: "rgba(0,0,0,0.5)",
         justifyContent: "center",
         alignItems: "center",
     },
-
     modalContent: {
         backgroundColor: "#fff",
         width: width * 0.9,
@@ -1331,27 +849,21 @@ const styles = StyleSheet.create({
         borderRadius: 16,
         padding: width * 0.05,
     },
-
     modalTitle: {
         fontSize: isSmallDevice ? scale(14) : scale(17),
         fontWeight: "800",
         marginBottom: 12,
         textAlign: "center",
     },
-
     optionItem: {
         paddingVertical: height * 0.02,
         borderBottomWidth: 1,
         borderBottomColor: "#f1f5f9",
     },
-
     optionText: {
         fontSize: isSmallDevice ? scale(13) : scale(15),
         textAlign: "center",
     },
-
-    /* ===== Info Box ===== */
-
     infoBox: {
         backgroundColor: "#f8fafc",
         padding: width * 0.02,
@@ -1360,93 +872,75 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: "#e2e8f0",
     },
-
     infoRow: {
         flexDirection: "row",
         justifyContent: "space-between",
         alignItems: "center",
+        paddingVertical: 2,
     },
-
-    settingsIcon: {
-        width: 25,
-        height: 25,
-        tintColor: "#64748b",
+    apiStyle: {
+        fontSize: isSmallDevice ? scale(12) : scale(14),
+        fontWeight: "700",
+        color: "#22c55e",
     },
-
-    url: {
-        fontSize: isSmallDevice ? scale(8) : scale(10),
-        color: "#94a3b8",
-        textAlign: "center",
-        marginTop: 2,
+    apiStyleTest: {
+        color: "#ef4444",
     },
-
+    urlStyle: {
+        fontSize: isSmallDevice ? scale(12) : scale(13),
+        fontWeight: "600",
+        color: "#64748b",
+    },
     version: {
         fontSize: isSmallDevice ? scale(13) : scale(14),
         fontWeight: "700",
         color: "#1e293b",
     },
-
-    operateInfo: {
-        borderBottomWidth: 1,
-        borderBottomColor: "#e2e8f0",
-        paddingBottom: 5,
-        marginBottom: 5,
+    newVersionText: {
+        fontSize: isSmallDevice ? scale(12) : scale(13),
+        fontWeight: "700",
+        color: "#ef4444",
     },
-
-    operateText: {
-        fontSize: scale(12),
-        color: "#64748b",
-        fontWeight: "600",
-    },
-
-    settingsInput: {
-        borderWidth: 1,
-        borderColor: "#e2e8f0",
-        borderRadius: 8,
-        padding: 10,
-        marginBottom: 20,
-        fontSize: 16,
-    },
-
-    modalButtons: {
+    headerDownloadRow: {
         flexDirection: "row",
-        justifyContent: "flex-end",
-        gap: 10,
-    },
-
-    modalBtn: {
-        paddingVertical: 8,
-        paddingHorizontal: 15,
-        borderRadius: 6,
-    },
-
-    cancelBtn: {
-        backgroundColor: "#f1f5f9",
-    },
-
-    saveBtn: {
-        backgroundColor: "#0052cc",
-    },
-
-    qrHint: {
-        fontSize: scale(9),
-        color: "#64748b",
-        marginTop: 4,
-        fontStyle: "italic",
-    },
-
-    loadingOverlay: {
-        padding: 10,
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: "#f1f5f9",
-        borderRadius: 12,
-        marginBottom: 15,
-    },
-
-    loadingText: {
         marginTop: 8,
-        fontSize: scale(12),
+        gap: 12,
+    },
+    downloadGradientButton: {
+        borderRadius: 20,
+        paddingHorizontal: 16,
+        paddingVertical: 6,
+    },
+    downloadButton: {
+        justifyContent: "center",
+        alignItems: "center",
+    },
+    downloadButtonText: {
+        color: "#ffffff",
+        fontSize: isSmallDevice ? scale(12) : scale(14),
+        fontWeight: "700",
+    },
+    headerVersion: {
+        fontSize: isSmallDevice ? scale(13) : scale(15),
+        fontWeight: "700",
+        color: "#1e293b",
+    },
+    loadingOverlay: {
+        position: "absolute",
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: "rgba(255,255,255,0.75)",
+        zIndex: 5,
+        justifyContent: "center",
+        alignItems: "center",
+    },
+    loadingText: {
+        marginTop: 10,
+        fontSize: 14,
         color: "#0052cc",
         fontWeight: "600",
     },

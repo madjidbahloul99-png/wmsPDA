@@ -1,220 +1,234 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   View,
   Text,
-  ScrollView,
-  TouchableOpacity,
+  TextInput,
   StyleSheet,
+  TouchableOpacity,
   StatusBar,
-  Alert,
   ActivityIndicator,
+  Alert,
   Image,
   Dimensions,
+  DeviceEventEmitter,
 } from "react-native";
-import { useGlobal } from "../../GlobalContext.tsx";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-
-type BoxDetail = {
-  fxh: string;
-  palletCode: string;
-  boxCode: string;
-  qty: string;
-  model: string;
-  color: string;
-};
+import { useGlobalStr } from "../../GlobalStrContext";
+import * as pubfunction from "../pubfunction";
 
 export default function DeliverySNBox({ navigation, route }: any) {
-  const { deliveryCode } = route.params || {};
-  const global = useGlobal();
-  const { gsURL } = global;
-  const BASE_URL = gsURL;
-  const [token, setToken] = useState("");
+  // Page pass value - can control by pallet/box/barcode
+  const f_deliveryCode = route.params?.f_deliveryCode ?? route.params?.deliveryCode ?? "";
+  const f_systemDeliveryCode = route.params?.f_systemDeliveryCode ?? route.params?.systemDeliveryCode ?? "";
+  const f_model = route.params?.f_model ?? route.params?.model ?? "";
+  const f_modeEAN = route.params?.f_modeEAN ?? route.params?.modeEAN ?? "";
+  const f_customerCode = route.params?.f_customerCode ?? route.params?.customerCode ?? "";
+  const f_sapMainBillCode = route.params?.f_sapMainBillCode ?? route.params?.sapMainBillCode ?? "";
+  const f_qty_initial = route.params?.f_qty ?? route.params?.qty ?? "";
+  const planQty = route.params?.planQty ?? "";
+  const finishQty = route.params?.finishQty ?? "";
+  const txtQtyTotalStr = `${finishQty}/${planQty}`;
 
+  const {
+    gs_BaseURL,
+    gs_wareCode,
+    gs_userCode,
+    gs_userName,
+    gs_PasswordSalt,
+    gs_version,
+  } = useGlobalStr();
+
+  // State variables mapping to C# form controls
+  const [f_qty, setFQty] = useState(String(f_qty_initial));
+  const [lblQtyTotal, setLblQtyTotal] = useState("");
   const [loading, setLoading] = useState(false);
-  const [details, setDetails] = useState<BoxDetail[]>([]);
-  const [totalQty, setTotalQty] = useState(0);
-  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
 
+  const txtQtyRef = useRef<TextInput>(null);
+
+  // Frm_DeliveryPalletQtySap_Load
   useEffect(() => {
-    const loadToken = async () => {
-      const t = await AsyncStorage.getItem("userToken");
-      console.log("TOKEN IN delivery", t);
-      if (t) setToken(t);
-    };
-
-    loadToken();
+    setLblQtyTotal("");
+    setTimeout(() => {
+      txtQtyRef.current?.focus();
+    }, 300);
   }, []);
 
-  useEffect(() => {
-    if (token) {
-      if (deliveryCode) {
-        fetchBoxDetails();
-      }
-    }
-  }, [deliveryCode, token]);
-
-  const fetchBoxDetails = async () => {
+  /**
+   * Matches palletQtyDeal in C#
+   */
+  const palletQtyDeal = async (targetQty: string) => {
     setLoading(true);
     try {
-      const response = await fetch(`${BASE_URL}/api/DeliveryPalletSNBox`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, },
-        body: JSON.stringify({
-          FactoryCode: global.gs_factoryCode,
-          WareHouseCode: global.gs_wareCode,
-          DeliveryCode: deliveryCode
-        })
+      const urlCur = `${gs_BaseURL}/warehouse/bill/updateWarehouseBillUpdatePalletOnly`;
+
+      // Through class transport post write details: WarehousePalletQtyQO
+      const qo = {
+        billCode: f_systemDeliveryCode,
+        modelCode: f_model,
+        warehouseCode: gs_wareCode,
+        actualCount: targetQty,
+        sapMainBillCode: f_sapMainBillCode,
+      };
+
+      // Universal signature class assignment
+      const signedQo = pubfunction.SetUserSignInfo(
+        qo,
+        gs_userCode,
+        gs_userName,
+        "2",
+        gs_PasswordSalt,
+        gs_version,
+        "en_US"
+      );
+
+      const formBody = Object.keys(signedQo).map(key => encodeURIComponent(key) + '=' + encodeURIComponent((signedQo as any)[key])).join('&');
+      const response = await fetch(urlCur, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: formBody,
       });
 
-      if (response.status === 401) {
-        Alert.alert("Unauthorized", "Token expired or invalid.");
-        return;
+      if (!response.ok) {
+        pubfunction.ShowError(`HTTP Error: ${response.status}`);
       }
 
-      if (response.status === 403) {
-        Alert.alert("Access Denied", "You do not have permission.");
-        return;
-      }
+      const data = await response.json();
+      console.log("palletQtyDeal response:", data);
 
-      const result = await response.json();
-      if (result.code === 500) {
-        Alert.alert("Error", result.message);
-        navigation.goBack();
-        return;
+      if (data) {
+        if (!data.success) {
+          // exception prompt
+          pubfunction.ShowError(data.msg || "Failed to update pallet only");
+          return false;
+        }
       }
-      if (result.message == "success" && result.data && result.data.length > 0) {
-        const list: BoxDetail[] = result.data.map((item: any) => ({
-          fxh: item.fxh,
-          palletCode: item.palletCode,
-          boxCode: item.boxCode,
-          qty: item.qty,
-          model: item.model,
-          color: item.color
-        }));
-
-        setDetails(list);
-        console.log("message5", deliveryCode);
-        console.log("message55", result);
-
-        const total = list.reduce((sum, item) => sum + parseInt(item.qty || "0"), 0);
-        setTotalQty(total);
-      } else {
-        Alert.alert("Error", "There is no product in the Pallet!");
-        setTotalQty(0);
-        console.log("message55", result);
-        navigation.goBack();
-      }
-    } catch (error) {
-      console.error(error);
-      Alert.alert("Error", "Failed to fetch box details");
+      return true;
+    } catch (err: any) {
+      return false;
     } finally {
       setLoading(false);
     }
   };
 
-  const viewSNDetails = () => {
-    if (selectedIndex === null) {
-      Alert.alert("Selection", "Please select a box from the list first.");
+  /**
+   * Matches button_Confirm_Click in C#
+   */
+  const handleConfirmClick = async () => {
+    let qtyValue = 0;
+    const cleanQtyText = f_qty.trim();
+
+    try {
+      // Validate integer parsibility
+      if (!/^\d+$/.test(cleanQtyText)) {
+        pubfunction.ShowError(`Not a number`);
+      }
+      qtyValue = parseInt(cleanQtyText);
+    } catch (err) {
+      setLblQtyTotal("QTY is not number!");
+      txtQtyRef.current?.focus();
       return;
     }
 
-    const selectedItem = details[selectedIndex];
-    navigation.navigate('DeliverySN', {
-      deliveryCode: deliveryCode,
-      palletCode: selectedItem.palletCode,
-      boxCode: selectedItem.boxCode
-    });
+    const updatedQtyStr = String(qtyValue);
+
+    // pallet quantity save
+    const isSuccess = await palletQtyDeal(updatedQtyStr);
+
+    if (isSuccess) {
+      Alert.alert("Success", "Save Success!", [
+        {
+          text: "OK",
+          onPress: () => {
+            DeviceEventEmitter.emit("ON_DELIVERY_CONFIRM_SUCCESS");
+            navigation.goBack();
+          },
+        },
+      ]);
+    }
   };
 
-  const columns = [
-    { label: "No", width: 40 },
-    { label: "Pallet", width: 150 },
-    { label: "Box", width: 150 },
-    { label: "Qty", width: 90 },
-    { label: "Model", width: 150 },
-    { label: "Color", width: 150 },
-  ];
-
-  const totalTableWidth = columns.reduce((acc, col) => acc + col.width, 0);
+  /**
+   * Matches button_exit_Click in C#
+   */
+  const handleExitClick = () => {
+    navigation.goBack();
+  };
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
 
-      {/* Header */}
+      {/* Header with Title matching: label_title.Text + " " + gs_wareCode + " Qty: " + f_qty */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <TouchableOpacity onPress={() => navigation.goBack()} activeOpacity={0.7}>
+          <TouchableOpacity onPress={handleExitClick} activeOpacity={0.7}>
             <Image
               source={require("../../assets/logo/left.png")}
               style={styles.returnLogo}
               resizeMode="contain"
             />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Delivery Box Details</Text>
+          <Text style={styles.headerTitle}>
+            Pallet Qty Sap {gs_wareCode || ""}
+          </Text>
         </View>
-
         <View style={styles.headerRight}>
-          <Text style={styles.userNameText}>{global.gs_userName}</Text>
+          <Text style={styles.userNameText}>{gs_userName || gs_userCode}</Text>
         </View>
       </View>
 
-      <View style={styles.statsCard}>
-        <View style={styles.statBox}>
-          <Text style={styles.statLabel}>Total Qty</Text>
-          <Text style={styles.statValue}>{totalQty || "0"}</Text>
-        </View>
-      </View>
-
-      {/* List Card */}
-      <View style={styles.tableCard}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={true}>
-          <View style={{ width: totalTableWidth }}>
-            <View style={styles.tableHeader}>
-              {columns.map((col) => (
-                <Text key={col.label} style={[styles.headerCell, { width: col.width }]}>
-                  {col.label}
-                </Text>
-              ))}
-            </View>
-
-            <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator>
-              {details.length > 0 ? (
-                details.map((item, index) => (
-                  <TouchableOpacity
-                    key={index}
-                    style={[
-                      styles.row,
-                      { backgroundColor: index % 2 === 0 ? "#FFFFFF" : "#BAE6FD" },
-                      selectedIndex === index && styles.selectedRow
-                    ]}
-                    onPress={() => setSelectedIndex(index)}
-                  >
-                    <Text style={[styles.cell, { width: columns[0].width }]}>{item.fxh}</Text>
-                    <Text style={[styles.cell, { width: columns[1].width }]}>{item.palletCode}</Text>
-                    <Text style={[styles.cell, { width: columns[2].width }]}>{item.boxCode}</Text>
-                    <Text style={[styles.cell, { width: columns[3].width }]}>{item.qty}</Text>
-                    <Text style={[styles.cell, { width: columns[4].width }]}>{item.model}</Text>
-                    <Text style={[styles.cell, { width: columns[5].width }]}>{item.color}</Text>
-                  </TouchableOpacity>
-                ))
-              ) : (
-                <Text style={[styles.emptyText, { width: totalTableWidth }]}>No data available</Text>
-              )}
-            </ScrollView>
+      <View style={styles.content}>
+        <View style={styles.formCard}>
+          <View style={styles.formRow}>
+            <Text style={styles.rowLabel}>MODEL</Text>
+            <Text style={styles.rowValue}>{f_model || "-"}</Text>
           </View>
-        </ScrollView>
-      </View>
+          <View style={styles.formRow}>
+            <Text style={styles.rowLabel}>SAP MAIN BILL</Text>
+            <Text style={styles.rowValue}>{f_sapMainBillCode || "-"}</Text>
+          </View>
+          <View style={styles.formRow}>
+            <Text style={styles.rowLabel}>TOTAL QTY</Text>
+            <Text style={styles.rowValue}>{txtQtyTotalStr || "-"}</Text>
+          </View>
+          <View style={styles.formRow}>
+            <Text style={styles.rowLabel}>CUST CODE</Text>
+            <Text style={styles.rowValue}>{f_customerCode || "-"}</Text>
+          </View>
 
-      {/* Actions */}
-      <View style={styles.footer}>
-        <View style={styles.buttonRow}>
+          {/* PALLET COUNT INPUT - txtQty */}
+          <View style={styles.inputContainer}>
+            <Text style={styles.inputLabel}>QTY</Text>
+            <TextInput
+              ref={txtQtyRef}
+              style={styles.textInput}
+              value={f_qty}
+              onChangeText={(text) => {
+                setFQty(text);
+                setLblQtyTotal("");
+              }}
+              placeholder="Input Pallet Count"
+              placeholderTextColor="#94A3B8"
+              keyboardType="numeric"
+              selectTextOnFocus={true}
+            />
+          </View>
+
+          {/* Message Text - lblQtyTotal */}
+          {lblQtyTotal ? (
+            <Text style={styles.messageText}>{lblQtyTotal}</Text>
+          ) : null}
+        </View>
+
+        {loading && <ActivityIndicator size="small" color="#0052cc" style={styles.spinner} />}
+
+        <View style={styles.footer}>
           <TouchableOpacity
-            style={[styles.actionBtn, styles.btnPrimary]}
-            onPress={viewSNDetails}
+            style={[styles.btn, styles.btnSave, loading && styles.disabledBtn]}
+            onPress={handleConfirmClick}
+            disabled={loading}
           >
-            <Text style={styles.btnTextPrimary}>Details</Text>
+            <Text style={styles.btnTextSave}>Confirm</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -222,8 +236,7 @@ export default function DeliverySNBox({ navigation, route }: any) {
   );
 }
 
-const { width, height } = Dimensions.get("window");
-const isSmallDevice = width < 360;
+const { width } = Dimensions.get("window");
 const scale = (size: number) => (width / 375) * size;
 
 const styles = StyleSheet.create({
@@ -237,56 +250,76 @@ const styles = StyleSheet.create({
     alignItems: "center",
     elevation: 4,
   },
-  headerLeft: {
-    flexDirection: "row",
-    alignItems: "center",
+  headerLeft: { flexDirection: "row", alignItems: "center" },
+  returnLogo: { width: scale(23), height: scale(23), marginRight: 10, tintColor: "#FFFFFF" },
+  headerTitle: { color: "#FFFFFF", fontSize: scale(11), fontWeight: "900" },
+  headerRight: { flexDirection: "row", alignItems: "center" },
+  userNameText: { color: "#FFFFFF", fontSize: scale(11), fontWeight: "700" },
+  content: { flex: 1, padding: 16, justifyContent: "center" },
+  formCard: {
+    backgroundColor: "#FFF",
+    padding: 16,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#0052cc",
+    elevation: 4,
+    marginBottom: 20,
   },
-  returnLogo: {
-    width: scale(24),
-    height: scale(24),
-    marginRight: 10,
-    tintColor: "#FFFFFF",
-  },
-  headerTitle: {
-    color: "#FFFFFF",
-    fontSize: isSmallDevice ? scale(14) : scale(16),
-    fontWeight: "900",
-  },
-  headerRight: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  userNameText: {
-    color: "#FFFFFF",
-    fontSize: scale(12),
-    fontWeight: "700",
-    marginRight: 1,
-  },
-  statsCard: { padding: 16, gap: 10 },
-  statBox: {
+  formRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     backgroundColor: "#0052cc",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 12,
-    elevation: 2,
+    paddingHorizontal: 15,
+    height: 38,
+    borderRadius: 10,
+    marginBottom: 8,
     borderWidth: 1,
-    borderColor: "#E2E8F0"
+    borderColor: "#E2E8F0",
   },
-  statLabel: { color: "#FFFFFF", fontSize: 13, fontWeight: "700", textTransform: "uppercase" },
-  statValue: { color: "#FFFFFF", fontSize: 13, fontWeight: "800" },
-  tableCard: { flex: 1, backgroundColor: "#FFF", marginHorizontal: 16, borderRadius: 16, overflow: "hidden", elevation: 2, borderWidth: 1, borderColor: "#E2E8F0", marginBottom: -2 },
-  tableHeader: { flexDirection: "row", backgroundColor: "#0052cc", paddingVertical: 10 },
-  headerCell: { fontSize: 10, fontWeight: "800", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
-  row: { flexDirection: "row", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#F1F5F9", alignItems: "center" },
-  cell: { fontSize: 11, color: "#334155", textAlign: "center", fontWeight: "600" },
-  emptyText: { textAlign: "center", color: "#94A3B8", marginTop: 40, fontStyle: "italic" },
-  footer: { padding: 16 },
-  buttonRow: { flexDirection: 'row', gap: 12 },
-  actionBtn: { flex: 1, height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
-  btnPrimary: { backgroundColor: '#2563eb' },
-  btnTextPrimary: { color: '#fff', fontSize: 15, fontWeight: '800' },
-  selectedRow: { backgroundColor: "#ffc3c3ff" },
+  rowLabel: { color: "#FFFFFF", fontSize: 11, fontWeight: "800" },
+  rowValue: { color: "#FFFFFF", fontSize: 12, fontWeight: "900" },
+  inputContainer: { marginTop: 15 },
+  inputLabel: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: "#475569",
+    marginBottom: 6,
+    textTransform: "uppercase",
+  },
+  textInput: {
+    backgroundColor: "#e2f0eeff",
+    height: 44,
+    borderWidth: 1,
+    borderColor: "#0052cc",
+    borderRadius: 10,
+    paddingHorizontal: 15,
+    fontSize: 14,
+    color: "#1E293B",
+    fontWeight: "900",
+    textAlign: "center",
+  },
+  messageText: {
+    marginTop: 10,
+    color: "#EF4444",
+    fontSize: 13,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  spinner: { marginVertical: 10 },
+  footer: { flexDirection: "row", justifyContent: "space-between" },
+  btn: {
+    flex: 1,
+    height: 45,
+    borderRadius: 12,
+    justifyContent: "center",
+    alignItems: "center",
+    marginHorizontal: 5,
+    elevation: 2,
+  },
+  btnPrior: { backgroundColor: "#64748B" },
+  btnSave: { backgroundColor: "#10B981" },
+  disabledBtn: { backgroundColor: "#CBD5E1" },
+  btnTextPrior: { color: "#FFFFFF", fontSize: 14, fontWeight: "900" },
+  btnTextSave: { color: "#FFFFFF", fontSize: 14, fontWeight: "900" },
 });
