@@ -11,6 +11,7 @@ const doRestPost = async (url: string, body: any): Promise<any> => {
     "Content-Type": "application/x-www-form-urlencoded",
   };
 
+
   const response = await fetch(url, {
     method: "POST",
     headers,
@@ -62,12 +63,20 @@ const doSoapRequest = async (soapUrl: string, soapAction: string, xmlBody: strin
     });
 
     if (!response.ok) {
-    return false;
+      return false;
+    }
+    
+    const responseText = await response.text();
+    const resultTag = `${soapAction}Result`;
+    const regex = new RegExp(`<${resultTag}[^>]*>(.*?)</${resultTag}>`, 'i');
+    const match = responseText.match(regex);
+    if (match && match[1]) {
+      return match[1].toLowerCase() === 'true';
     }
     return true;
   } catch (err) {
-    pubfunction.ShowError((err as any)?.message || String(err));
-    return true; // Fail gracefully to allow operation to continue
+    console.log((err as any)?.message || String(err));
+    return false; // Fail gracefully to allow operation to continue
   }
 };
 
@@ -154,7 +163,7 @@ export const getWarehouseAllocateBillInfoByBillCodeFromSap = async (
     const data = await doRestGet(urlCur);
     return data;
   } catch (err: any) {
-    pubfunction.ShowError((err as any)?.message || String(err));
+    console.log((err as any)?.message || String(err));
     return { success: false, msg: err.message || "Network Error" };
   }
 };

@@ -32,6 +32,11 @@ import AllocateInNewSap from "./src/AllocateIN/AllocateInNewSap";
 import AllocateInSNConfirmBoxNew from "./src/AllocateIN/AllocateInSNConfirmBoxNew";
 
 
+//AllocateInold
+import AllocateInNO from "./src/AllocateINold/AllocateInNO"
+import AllocateIn from "./src/AllocateINold/AllocateIn";
+import AllocateInSNConfirmBox from "./src/AllocateINold/AllocateInSNConfirmBox";
+
 
 //AllocateoutSAP
 import AllocateOutNONewSap from "./src/Allocateout/AllocateOutNONewSap";
@@ -127,6 +132,10 @@ export default function App() {
           <Stack.Screen name="AllocateInNONewSap" component={AllocateInNONewSap} />
           <Stack.Screen name="AllocateInNewSap" component={AllocateInNewSap} />
           <Stack.Screen name="AllocateInSNConfirmBoxNew" component={AllocateInSNConfirmBoxNew} />
+
+          <Stack.Screen name="AllocateInNO" component={AllocateInNO} />
+          <Stack.Screen name="AllocateIn" component={AllocateIn} />
+          <Stack.Screen name="AllocateInSNConfirmBox" component={AllocateInSNConfirmBox} />
 
 
           <Stack.Screen name="AllocateRejectInOldWMS" component={AllocateRejectInOldWMS} />

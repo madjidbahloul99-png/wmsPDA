@@ -4,9 +4,10 @@ import React, {
     forwardRef,
     useImperativeHandle,
     useEffect,
+
 } from "react";
+import { Keyboard, AppState } from "react-native";
 import md5 from "md5";
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import LinearGradient from 'react-native-linear-gradient';
 import {
@@ -124,6 +125,7 @@ const CustomInput = forwardRef<CustomInputRef, any>(
             placeholder,
             isSelect = false,
             isPassword = false,
+            hideText = false,
             onChangeText,
             options = [],
             inputRef,
@@ -143,14 +145,28 @@ const CustomInput = forwardRef<CustomInputRef, any>(
         const resolvedRef = inputRef || defaultInputRef;
         const localValueRef = useRef(value || "");
 
+        const appState = useRef(AppState.currentState);
+
+        useEffect(() => {
+            const subscription = AppState.addEventListener("change", (nextState) => {
+                if (
+                    appState.current.match(/inactive|background/) &&
+                    nextState === "active"
+                ) {
+                    Keyboard.dismiss();
+                }
+
+                appState.current = nextState;
+            });
+
+            return () => subscription.remove();
+        }, []);
+
         useEffect(() => {
             if (value !== localValueRef.current) {
                 localValueRef.current = value || "";
-                if (resolvedRef && 'current' in resolvedRef && resolvedRef.current) {
-                    resolvedRef.current.setNativeProps({ text: value || "" });
-                }
             }
-        }, [value, resolvedRef]);
+        }, [value]);
 
         useImperativeHandle(ref, () => ({
             focus: () => {
@@ -188,14 +204,13 @@ const CustomInput = forwardRef<CustomInputRef, any>(
                         <TextInput
                             ref={resolvedRef}
                             value={value}
-                            defaultValue={value}
                             onChangeText={(text) => {
                                 localValueRef.current = text;
                                 if (onChangeText) onChangeText(text);
                             }}
                             placeholder={placeholder}
-                            placeholderTextColor="#94a3b8"
-                            style={styles.input}
+                            placeholderTextColor={hideText ? "transparent" : "#94a3b8"}
+                            style={[styles.input, hideText && { opacity: 0 }]}
                             secureTextEntry={isPassword}
                             onFocus={() => {
                                 setIsFocused(true);
@@ -301,13 +316,21 @@ export default function Login({ navigation }: any) {
     const classRef = useRef<CustomInputRef>(null);
 
     const [activeField, setActiveField] = useState<"user" | "password" | "warehouse" | "class">("class");
+    const activeFieldRef = useRef(activeField);
+
+    const [hideUserCode, setHideUserCode] = useState(false);
+    const isScanningRef = useRef(false);
+
+    useEffect(() => {
+        activeFieldRef.current = activeField;
+    }, [activeField]);
 
     const ensureFocus = () => {
         setTimeout(() => {
-            if (activeField === "user") userRef.current?.focus();
-            else if (activeField === "password") passwordRef.current?.focus();
-            else if (activeField === "warehouse") warehouseRef.current?.focus();
-            else if (activeField === "class") classRef.current?.focus();
+            if (activeFieldRef.current === "user") userRef.current?.focus();
+            else if (activeFieldRef.current === "password") passwordRef.current?.focus();
+            else if (activeFieldRef.current === "warehouse") warehouseRef.current?.focus();
+            else if (activeFieldRef.current === "class") classRef.current?.focus();
         }, 120);
     };
 
@@ -316,73 +339,89 @@ export default function Login({ navigation }: any) {
         return pubfunction.GetUserSign(addchar);
     };
 
+    const processScan = (rawInput: string, isScanner = true) => {
+        const cleanCode = rawInput.replace(/[\r\n]/g, "").trim();
+        if (cleanCode.length === 0) {
+            setHideUserCode(false);
+            isScanningRef.current = false;
+            return;
+        }
+
+        if (cleanCode.includes("|")) {
+            const parts = cleanCode.split("|");
+            if (parts.length >= 2) {
+                const u = parts[0].trim();
+                let p = parts.slice(1).join("|").trim();
+
+                // Normalize scanned/emulated characters transposition
+                p = normalizeWedgePassword(p);
+
+                setUserVal(u);
+                setDisplayUserVal(u);
+                
+                setPasswordVal(p);
+                
+                setHideUserCode(false);
+                isScanningRef.current = false;
+                
+                getWarehouseListByUser(u);
+                setTimeout(() => {
+                    warehouseRef.current?.focus();
+                }, 150);
+            }
+        } else {
+            if (isScanner) {
+                pubfunction.ShowError("Invalid QR code or barcode format.");
+                userRef.current?.clear();
+                setUserVal("");
+                setDisplayUserVal("");
+                
+                passwordRef.current?.clear();
+                setPasswordVal("");
+                
+                setHideUserCode(false);
+                isScanningRef.current = false;
+            } else {
+                setUserVal(cleanCode);
+                setDisplayUserVal(cleanCode);
+                setHideUserCode(false);
+                isScanningRef.current = false;
+                getWarehouseListByUser(cleanCode);
+                setTimeout(() => {
+                    passwordRef.current?.focus();
+                }, 150);
+            }
+        }
+    };
+
     // Handler for typing and barcode scanning
     const handleUserCodeChange = (text: string) => {
         const now = Date.now();
+        const diff = now - lastKeyTime.current;
         lastKeyTime.current = now;
 
         clearTimeout(scanTimer.current);
 
-        if (text.includes("\n") || text.includes("\r")) {
-            const cleanCode = text.replace(/[\r\n]/g, "").trim();
-            if (cleanCode.length > 0) {
-                if (cleanCode.includes("|")) {
-                    const parts = cleanCode.split("|");
-                    const u = parts[0].trim();
-                    let p = parts.slice(1).join("|").trim();
-                    
-                    // Normalize scanned/emulated characters transposition
-                    p = normalizeWedgePassword(p);
-
-                    setUserVal(u);
-                    setDisplayUserVal(u);
-                    setPasswordVal(p);
-                    getWarehouseListByUser(u);
-                    setTimeout(() => {
-                        warehouseRef.current?.focus();
-                    }, 150);
-                } else {
-                    setUserVal(cleanCode);
-                    setDisplayUserVal(cleanCode);
-                    getWarehouseListByUser(cleanCode);
-                    passwordRef.current?.focus();
-                }
-            }
+        if (text.endsWith("\n") || text.endsWith("\r")) {
+            processScan(text, isScanningRef.current);
+            isScanningRef.current = false;
             return;
         }
 
-        // Keep local display value in sync: mask/hide password while scanning
-        if (text.includes("|")) {
-            const parts = text.split("|");
-            const u = parts[0].trim();
-            setDisplayUserVal(u);
-        } else {
-            setDisplayUserVal(text);
+        if (text.includes("|") || (diff < 50 && text.length > 1)) {
+            isScanningRef.current = true;
+        } else if (text.length <= 1) {
+            isScanningRef.current = false;
         }
 
-        if (text.includes("|")) {
-            scanTimer.current = setTimeout(() => {
-                const finalCode = text.replace(/[\r\n]/g, "").trim();
-                const parts = finalCode.split("|");
-                if (parts.length >= 2) {
-                    const u = parts[0].trim();
-                    let p = parts.slice(1).join("|").trim();
-                    
-                    // Normalize scanned/emulated characters transposition
-                    p = normalizeWedgePassword(p);
+        setHideUserCode(isScanningRef.current);
+        setUserVal(text);
+        setDisplayUserVal(text);
 
-                    setUserVal(u);
-                    setDisplayUserVal(u);
-                    setPasswordVal(p);
-                    getWarehouseListByUser(u);
-                    setTimeout(() => {
-                        warehouseRef.current?.focus();
-                    }, 150);
-                }
-            }, 300);
-        } else {
-            // Standard user entry
-            setUserVal(text);
+        if (isScanningRef.current) {
+            scanTimer.current = setTimeout(() => {
+                processScan(text, true);
+            }, 400);
         }
     };
 
@@ -391,10 +430,10 @@ export default function Login({ navigation }: any) {
         try {
             const signParams = getUserSign("?");
             const url = `${baseURL}/basedata/class/getComboList${signParams}`;
-            
+
             const res = await fetch(url);
             const data = await res.json();
-            
+
             if (data && data.list) {
                 const list = typeof data.list === 'string' ? JSON.parse(data.list) : data.list;
                 const mapped = list.map((c: any) => ({
@@ -409,7 +448,7 @@ export default function Login({ navigation }: any) {
                 pubfunction.ShowError(data.msg || "Failed to load classes list");
             }
         } catch (err) {
-            pubfunction.ShowError("getClassListJava error");
+            pubfunction.ShowError("Unable to load the shift list. Please check your network connection and try again.");
         }
     };
 
@@ -420,10 +459,10 @@ export default function Login({ navigation }: any) {
             pubfunction.globalstr.gs_userName = uCode;
             let urlCur = `${gs_BaseURL}/basedata/warehouseAuth/getAuthWarehouseComb`;
             urlCur += pubfunction.GetUserSign("?");
-            
+
             const res = await fetch(urlCur);
             const data = await res.json();
-            
+
             if (data && data.list) {
                 const list = typeof data.list === 'string' ? JSON.parse(data.list) : data.list;
                 const mapped = list.map((w: any) => ({
@@ -455,7 +494,7 @@ export default function Login({ navigation }: any) {
             try {
                 const operatorUser = uCode;
                 const operatorUserName = "";
-                
+
                 const pwd = pubfunction.GetPasswordEncrypt(pwdCandidate);
                 const signStr = pubfunction.MD5(operatorUser + operatorUserName + gs_randomNumber + gs_PasswordSalt);
                 const language = "en_US";
@@ -473,7 +512,7 @@ export default function Login({ navigation }: any) {
 
                 const res = await fetch(url);
                 const data = await res.json();
-                 
+
                 if (data && data.success) {
                     const vo = typeof data.data === 'string' ? JSON.parse(data.data) : data.data;
                     setgs_userCode(uCode);
@@ -521,7 +560,28 @@ export default function Login({ navigation }: any) {
         };
 
         loadFormConfig();
-    }, []);
+
+        // Listen for screen focus (e.g. returning from Menu.tsx) to refresh/reset the login form
+        const focusSub = navigation?.addListener?.("focus", () => {
+            resetLoginForm();
+        });
+
+        return () => {
+            if (focusSub) focusSub();
+        };
+    }, [navigation]);
+
+    const resetLoginForm = () => {
+        setUserVal("");
+        setDisplayUserVal("");
+        setPasswordVal("");
+        setSelectedWarehouse(null);
+        setWarehouseList([]);
+        setActiveField("user");
+        setTimeout(() => {
+            userRef.current?.focus();
+        }, 200);
+    };
 
     // Handle Login Button Click
     const handleLogin = async () => {
@@ -572,10 +632,12 @@ export default function Login({ navigation }: any) {
                     : "127.0.0.1";
                 setgs_IPAddress(ip || "127.0.0.1");
             } catch (err) {
-                pubfunction.ShowError("Error retrieving IP Address, fallback to default:"+err);
+                pubfunction.ShowError("Error retrieving IP Address, fallback to default:" + err);
                 setgs_IPAddress("127.0.0.1");
             }
             navigation.navigate("Menu");
+        } else {
+            resetLoginForm();
         }
     };
 
@@ -600,11 +662,22 @@ export default function Login({ navigation }: any) {
                 <View style={styles.container}>
                     {/* Header Logo */}
                     <View style={styles.logoContainer}>
-                        <Image
-                            source={condorLogo}
-                            style={styles.condorLogo}
-                            resizeMode="stretch"
-                        />
+                        <TouchableOpacity
+                            style={{ width: "100%" }}
+                            activeOpacity={0.8}
+                            onPress={() => {
+                                navigation.reset({
+                                    index: 0,
+                                    routes: [{ name: "Login" }],
+                                });
+                            }}
+                        >
+                            <Image
+                                source={condorLogo}
+                                style={styles.condorLogo}
+                                resizeMode="stretch"
+                            />
+                        </TouchableOpacity>
                         <Text style={styles.wmsText}>GROUP WAREHOUSE MANAGEMENT</Text>
 
                         {/* Download & Version Container */}
@@ -657,8 +730,14 @@ export default function Login({ navigation }: any) {
                             label="User Code"
                             placeholder="Enter your ID"
                             value={displayUserVal}
+                            hideText={hideUserCode}
                             onChangeText={handleUserCodeChange}
                             inputRef={userRef}
+                            onSubmitEditing={() => {
+                                if (displayUserVal && !displayUserVal.includes("|")) {
+                                    processScan(displayUserVal, false);
+                                }
+                            }}
                             onFocus={() => setActiveField("user")}
                             onBlur={() => {
                                 ensureFocus();

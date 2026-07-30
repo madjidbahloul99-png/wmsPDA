@@ -71,8 +71,7 @@ const getMenuDetails = (menuName: string) => {
       return {
         title: "Allocate Into\nWarehouse",
         icon: require("../assets/logomenu/AllocateIn.png"),
-        screen: "InWarehouseConfirmBox",
-        disabled: true,
+        screen: "AllocateInNO",
       };
     case "Delivery Return":
       return {

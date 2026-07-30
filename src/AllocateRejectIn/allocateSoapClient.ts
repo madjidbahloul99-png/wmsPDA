@@ -12,24 +12,26 @@ const getField = (xml: string, tag: string): string => {
   return m ? m[1].trim() : "";
 };
 
+const decodeHtmlEntities = (str: string): string => {
+  if (!str) return "";
+  return str
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'");
+};
+
 // Parser for dt XML rows returned inside dataset
 export const parseRows = (xml: string): any[] => {
   if (!xml) return [];
+  const decoded = decodeHtmlEntities(xml);
   const rows: any[] = [];
 
-  let docXml = xml;
-  const docMatch = /<DocumentElement[^>]*>([\s\S]*?)<\/DocumentElement>/i.exec(xml);
-  if (docMatch) {
-    docXml = docMatch[1];
-  }
-
-  // Regex matching row tags (dt, DT, Table, Table1, row, etc.)
-  const dtRegex = /<([a-zA-Z0-9_:]+)(?:\s+[^>]*)?>([\s\S]*?)<\/\1>/gi;
+  // Matches specific row tags (dt, DT, Table, Table1, row, etc.) with or without attributes/namespaces
+  const rowRegex = /<(?:[a-zA-Z0-9_:]+)?(dt|DT|Table|Table1|row)[^>]*>([\s\S]*?)<\/(?:[a-zA-Z0-9_:]+)?\1>/gi;
   let match;
-  while ((match = dtRegex.exec(docXml)) !== null) {
-    const tagName = match[1];
-    if (tagName.toLowerCase().includes("schema")) continue;
-
+  while ((match = rowRegex.exec(decoded)) !== null) {
     const rowXml = match[2];
     if (!rowXml) continue;
 

@@ -20,6 +20,7 @@ import * as allocateSoapClient from "./allocateSoapClient";
 
 interface BoxItem {
   boxCode: string;
+  palletCode: string;
   model: string;
   color: string;
   boxQty: string;
@@ -201,6 +202,7 @@ export default function AllocateRejectInOldWMS({ navigation }: any) {
         currentAllocateCode,
         gs_userCode
       );
+      console.log("responseRows"+responseRows)
 
       if (responseRows && responseRows.length > 0) {
         if (responseRows[0].isok === "1") {
@@ -211,6 +213,7 @@ export default function AllocateRejectInOldWMS({ navigation }: any) {
           const mapped: BoxItem[] = responseRows.map((row: any) => {
             return {
               boxCode: row.boxCode || "",
+              palletCode: row.palletCode || "",
               model: row.model || "",
               color: row.color || "",
               boxQty: row.boxQty || "0",
@@ -251,10 +254,11 @@ export default function AllocateRejectInOldWMS({ navigation }: any) {
         ]}
       >
         <Text style={[styles.cell, { width: 140 }]}>{item.boxCode}</Text>
+        <Text style={[styles.cell, { width: 140 }]}>{item.palletCode}</Text>
         <Text style={[styles.cell, { width: 120 }]}>{item.model}</Text>
         <Text style={[styles.cell, { width: 100 }]}>{item.color}</Text>
         <Text style={[styles.cell, { width: 80 }]}>{item.boxQty}</Text>
-        <Text style={[styles.cell, { width: 140 }]}>{item.systemAllocateCode}</Text>
+        <Text style={[styles.cell, { width: 200 }]}>{item.systemAllocateCode}</Text>
         <Text style={[styles.cell, { width: 120 }]}>{item.allocateCode}</Text>
       </View>
     );
@@ -316,10 +320,11 @@ export default function AllocateRejectInOldWMS({ navigation }: any) {
             <View>
               <View style={styles.listHeader}>
                 <Text style={[styles.headerCell, { width: 140 }]}>BOX CODE</Text>
+                <Text style={[styles.headerCell, { width: 140 }]}>PALLET CODE</Text>
                 <Text style={[styles.headerCell, { width: 120 }]}>MODEL</Text>
                 <Text style={[styles.headerCell, { width: 100 }]}>COLOR</Text>
                 <Text style={[styles.headerCell, { width: 80 }]}>QTY</Text>
-                <Text style={[styles.headerCell, { width: 140 }]}>SYS CODE</Text>
+                <Text style={[styles.headerCell, { width: 200 }]}>SYS CODE</Text>
                 <Text style={[styles.headerCell, { width: 120 }]}>ALLOCATE</Text>
               </View>
 
@@ -328,7 +333,7 @@ export default function AllocateRejectInOldWMS({ navigation }: any) {
                 renderItem={renderItem}
                 keyExtractor={(item, index) => `${item.boxCode}-${index}`}
                 ListEmptyComponent={
-                  <View style={{ width: 700 }}>
+                  <View style={{ width: 840 }}>
                     <Text style={styles.emptyText}>No items scanned yet.</Text>
                   </View>
                 }

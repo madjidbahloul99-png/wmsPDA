@@ -87,12 +87,13 @@ export default function AllocateInNONewSap({ navigation }: any) {
         gs_PasswordSalt,
         gs_version
       );
-      console.log("DeliveryModelListSapFromOut",res)
+      console.log("message "+res)
       if (res && res.success) {
-        // success
+        console.log("success")
       } else {
         if (res && !res.success) {
-          pubfunction.ShowError(`${sapMainBillCode} ${res.msg }`);
+          pubfunction.ShowError(`${sapMainBillCode} ${res.msg}`);
+          console.log(res.msg)
         }
       }
     } catch (err: any) {
@@ -322,7 +323,7 @@ export default function AllocateInNONewSap({ navigation }: any) {
                 if (text.trim().length > 0) {
                   handleSNSubmit(text);
                 }
-              }, 400);
+              }, 200);
             }}
             //onSubmitEditing={() => handleSNSubmit()}
             placeholder=" SCAN BILL"

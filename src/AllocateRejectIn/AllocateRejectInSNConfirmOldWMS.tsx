@@ -71,7 +71,7 @@ export default function AllocateRejectInSNConfirmOldWMS({ navigation, route }: a
         gs_wareCode,
         barcode
       );
- console.log("data",data)
+      console.log("data", data)
       if (data && data.length > 0) {
         let fmodel = "";
         let fcolor = "";
@@ -107,6 +107,7 @@ export default function AllocateRejectInSNConfirmOldWMS({ navigation, route }: a
         setLblColor(fcolor);
       } else {
         pubfunction.ShowError("There is no product in the Pallet!");
+        navigation.goBack();
         setLblColor("");
       }
     } catch (err: any) {
@@ -151,12 +152,12 @@ export default function AllocateRejectInSNConfirmOldWMS({ navigation, route }: a
         ]}
       >
         <Text style={[styles.cell, { width: 60 }]}>{item.fxh}</Text>
-        <Text style={[styles.cell, { width: 150 }]}>{item.SN}</Text>
-        <Text style={[styles.cell, { width: 120 }]}>{item.model}</Text>
-        <Text style={[styles.cell, { width: 120 }]}>{item.boxCode}</Text>
-        <Text style={[styles.cell, { width: 120 }]}>{item.palletCode}</Text>
-        <Text style={[styles.cell, { width: 120 }]}>{item.realdate}</Text>
-        <Text style={[styles.cell, { width: 120 }]}>{item.orderCode}</Text>
+        <Text style={[styles.cell, { width: 180 }]}>{item.SN}</Text>
+        <Text style={[styles.cell, { width: 180 }]}>{item.model}</Text>
+        <Text style={[styles.cell, { width: 180 }]}>{item.boxCode}</Text>
+        <Text style={[styles.cell, { width: 180 }]}>{item.palletCode}</Text>
+        <Text style={[styles.cell, { width: 200 }]}>{item.realdate}</Text>
+        <Text style={[styles.cell, { width: 180 }]}>{item.orderCode}</Text>
       </View>
     );
   };
@@ -205,12 +206,12 @@ export default function AllocateRejectInSNConfirmOldWMS({ navigation, route }: a
             <View>
               <View style={styles.tableHeader}>
                 <Text style={[styles.headerCell, { width: 60 }]}>LINE</Text>
-                <Text style={[styles.headerCell, { width: 150 }]}>SN</Text>
-                <Text style={[styles.headerCell, { width: 120 }]}>MODEL</Text>
-                <Text style={[styles.headerCell, { width: 120 }]}>BOX CODE</Text>
-                <Text style={[styles.headerCell, { width: 120 }]}>PALLET CODE</Text>
-                <Text style={[styles.headerCell, { width: 120 }]}>DATE</Text>
-                <Text style={[styles.headerCell, { width: 120 }]}>ORDER CODE</Text>
+                <Text style={[styles.headerCell, { width: 180 }]}>SN</Text>
+                <Text style={[styles.headerCell, { width: 180 }]}>MODEL</Text>
+                <Text style={[styles.headerCell, { width: 180 }]}>BOX CODE</Text>
+                <Text style={[styles.headerCell, { width: 180 }]}>PALLET CODE</Text>
+                <Text style={[styles.headerCell, { width: 200 }]}>DATE</Text>
+                <Text style={[styles.headerCell, { width: 180 }]}>ORDER CODE</Text>
               </View>
 
               <FlatList
