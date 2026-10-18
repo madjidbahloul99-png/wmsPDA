@@ -48,6 +48,7 @@ export default function PalletSearch({ navigation }: any) {
     const [showKeyboard, setShowKeyboard] = useState(false);
 
     const txtSNRef = useRef<TextInput>(null);
+    const scanTimerRef = useRef<any>(null);
 
     useEffect(() => {
         const focusSub = navigation.addListener("focus", () => {
@@ -66,10 +67,41 @@ export default function PalletSearch({ navigation }: any) {
     };
 
     const handleSNSubmit = () => {
+        if (scanTimerRef.current) {
+            clearTimeout(scanTimerRef.current);
+        }
         const SN = txtSN.toUpperCase().trim();
         if (SN.length > 0) {
             const scanType = pubfunction.getBarcodeType(SN);
             boxListShow(SN, scanType);
+        }
+    };
+
+    const handleSNChange = (text: string) => {
+        setTxtSN(text);
+
+        if (scanTimerRef.current) {
+            clearTimeout(scanTimerRef.current);
+        }
+
+        if (text.endsWith("\n") || text.endsWith("\r")) {
+            const SN = text.replace(/[\r\n]/g, "").toUpperCase().trim();
+            if (SN.length > 0) {
+                const scanType = pubfunction.getBarcodeType(SN);
+                boxListShow(SN, scanType);
+            }
+            return;
+        }
+
+        // Auto-submit after 500ms of inactivity for scanners that don't send Enter
+        if (text.trim().length > 0) {
+            scanTimerRef.current = setTimeout(() => {
+                const SN = text.toUpperCase().trim();
+                if (SN.length > 0) {
+                    const scanType = pubfunction.getBarcodeType(SN);
+                    boxListShow(SN, scanType);
+                }
+            }, 500);
         }
     };
 
@@ -176,7 +208,7 @@ export default function PalletSearch({ navigation }: any) {
                         ref={txtSNRef}
                         style={styles.input}
                         value={txtSN}
-                        onChangeText={setTxtSN}
+                        onChangeText={handleSNChange}
                         onSubmitEditing={handleSNSubmit}
                         placeholder=" SCAN BARCODE"
                         placeholderTextColor="#64748B"

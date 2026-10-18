@@ -57,7 +57,35 @@ export const UpdateBillDA = async (
     if (resultMatch && resultMatch[1]) {
       return resultMatch[1].toLowerCase() === "true";
     }
-    return true;
+    return false;
+  } catch (err: any) {
+    pubfunction.ShowError((err as any)?.message || String(err));
+    return false;
+  }
+};
+
+export const PWMS_DELIVERY_RETURNDEAL = async (
+  baseUrl: string,
+  sapMainBillCode: string
+): Promise<boolean> => {
+
+  const cleanCode = (sapMainBillCode || "").toUpperCase().trim();
+  if (!cleanCode) return false;
+
+  try {
+    const xml = `<PWMS_DELIVERY_RETURNDEAL xmlns="http://tempuri.org/">
+      <sapBillCode>${cleanCode}</sapBillCode>
+    </PWMS_DELIVERY_RETURNDEAL>`;
+
+    const text = await doSoapRequest(baseUrl, "PWMS_DELIVERY_RETURNDEAL", xml);
+    console.log(`[SOAP] PWMS_DELIVERY_RETURNDEAL response for ${cleanCode}:`, text);
+
+    const resultMatch = text.match(/<PWMS_DELIVERY_RETURNDEALResult>(.*?)<\/PWMS_DELIVERY_RETURNDEALResult>/);
+    if (resultMatch && resultMatch[1]) {
+      console.log(`[SOAP] PWMS_DELIVERY_RETURNDEAL parsed result:`, resultMatch[1]);
+      return resultMatch[1].toLowerCase() === "true";
+    }
+    return false;
   } catch (err: any) {
     pubfunction.ShowError((err as any)?.message || String(err));
     return false;

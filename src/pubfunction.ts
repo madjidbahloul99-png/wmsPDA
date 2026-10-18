@@ -30,7 +30,7 @@ export const PostSpecialStr = (barcode: string): string => {
   newStr = newStr.replace(/\\/g, "%2F");
   newStr = newStr.replace(/=/g, "%3D");
   newStr = newStr.replace(/\?/g, "%3F");
-  newStr = newStr.replace(/ /g, "%20");
+  newStr = newStr.replace(/ /g, " ");
   return newStr;
 };
 

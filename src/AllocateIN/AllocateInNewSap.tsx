@@ -107,6 +107,7 @@ export default function AllocateInNewSap({ navigation, route }: any) {
         gs_PasswordSalt,
         gs_version
       );
+      console.log("getListFinishBoxList response:", res)
 
       if (res && res.success && res.list) {
         const listObj = typeof res.list === "string" ? JSON.parse(res.list) : res.list;
@@ -142,6 +143,13 @@ export default function AllocateInNewSap({ navigation, route }: any) {
     }
     const SN = txtSN.toUpperCase().trim();
     if (SN.length > 0) {
+      const isAlreadyScanned = items.some(item => item.scanBarCode && item.scanBarCode.toUpperCase() === SN);
+      if (isAlreadyScanned) {
+        pubfunction.ShowError(SN + "  This barcode has already been scanned!");
+        setTxtSN("");
+        setTimeout(() => { txtSNRef.current?.focus(); }, 150);
+        return;
+      }
       const scanType = pubfunction.getBarcodeType(SN);
       navigation.navigate("AllocateInSNConfirmBoxNew", {
          f_systemDeliveryCode: f_systemDeliveryCode,
@@ -158,6 +166,7 @@ export default function AllocateInNewSap({ navigation, route }: any) {
 
   const handleTextChange = (text: string) => {
     setTxtSN(text);
+    console.log("text", text);
 
     if (scanTimerRef.current) {
       clearTimeout(scanTimerRef.current);
@@ -167,7 +176,16 @@ export default function AllocateInNewSap({ navigation, route }: any) {
     if (!trimmed) return;
 
     scanTimerRef.current = setTimeout(() => {
-      const scanType = pubfunction.getBarcodeType(trimmed.toUpperCase());
+      const SN = trimmed.toUpperCase();
+      const isAlreadyScanned = items.some(item => item.scanBarCode && item.scanBarCode.toUpperCase() === SN);
+      if (isAlreadyScanned) {
+        pubfunction.ShowError(SN + "  This barcode has already been scanned!");
+        setTxtSN("");
+        setTimeout(() => { txtSNRef.current?.focus(); }, 150);
+        return;
+      }
+      
+      const scanType = pubfunction.getBarcodeType(SN);
       navigation.navigate("AllocateInSNConfirmBoxNew", {
          f_systemDeliveryCode: f_systemDeliveryCode,
          f_barCode: trimmed.toUpperCase(),
@@ -283,7 +301,7 @@ export default function AllocateInNewSap({ navigation, route }: any) {
             style={styles.input}
             value={txtSN}
             onChangeText={handleTextChange}
-            onSubmitEditing={handleSNSubmit}
+            //onSubmitEditing={handleSNSubmit}
             placeholder=" SCAN BARCODE"
             placeholderTextColor="#64748B"
             autoCapitalize="characters"

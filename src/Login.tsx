@@ -25,9 +25,11 @@ import {
     ActivityIndicator,
     Image,
     Linking,
-    BackHandler
+    BackHandler,
+    NativeModules
 } from "react-native";
 import { useGlobalStr } from "../GlobalStrContext";
+import RNFS from 'react-native-fs';
 import * as pubfunction from "./pubfunction";
 import * as RNNetInfo from "react-native-network-info";
 
@@ -241,8 +243,8 @@ const CustomInput = forwardRef<CustomInputRef, any>(
                                 <Text style={styles.modalTitle}>Select {label}</Text>
                                 <FlatList
                                     data={options}
-                                    keyExtractor={(item: any) =>
-                                        item.id ?? item
+                                    keyExtractor={(item: any, index: number) =>
+                                        `${item.id ?? item}_${index}`
                                     }
                                     renderItem={({ item }) => (
                                         <TouchableOpacity
@@ -309,6 +311,13 @@ export default function Login({ navigation }: any) {
 
     const [warehouseList, setWarehouseList] = useState<WarehouseItem[]>([]);
     const [selectedWarehouse, setSelectedWarehouse] = useState<WarehouseItem | null>(null);
+
+    const [updateStatus, setUpdateStatus] = useState("");
+    const [newVersion, setNewVersion] = useState(false);
+    const [downloadProgress, setDownloadProgress] = useState(0);
+    const [downloadedBytes, setDownloadedBytes] = useState(0);
+    const [totalBytes, setTotalBytes] = useState(0);
+    const [newApkUrl, setNewApkUrl] = useState<string | null>(null);
 
     const userRef = useRef<TextInput>(null);
     const passwordRef = useRef<TextInput>(null);
@@ -548,6 +557,8 @@ export default function Login({ navigation }: any) {
                 // Check version update and classes list
                 await getClassListJava(gs_BaseURL);
 
+                checkUpdate();
+
                 // Set focus on usercode input
                 setTimeout(() => {
                     userRef.current?.focus();
@@ -581,6 +592,105 @@ export default function Login({ navigation }: any) {
         setTimeout(() => {
             userRef.current?.focus();
         }, 200);
+    };
+
+    // Update logic
+    const checkUpdate = async () => {
+        try {
+            const res = await fetch(`https://mespdamobile.condor.dz/WMSPDANEW/api/updateAC/latest`);
+            const json = await res.json();
+
+            if (json.message === "success" && json.data) {
+                const serverVersion = json.data.version;
+                const apkUrl = json.data.url;
+                const required = json.data.forceUpdate;
+
+                const currentVersion = gs_version;
+
+                if (currentVersion !== serverVersion) {
+                    setNewVersion(true);
+                    setNewApkUrl(apkUrl);
+                } else {
+                    setNewApkUrl(null);
+                }
+            }
+        } catch (err) {
+            console.log("Update error:", err);
+        }
+    };
+
+    const downloadAndInstall = (apkUrl: string) => {
+        setUpdateStatus("downloading");
+        setDownloadProgress(0);
+        setDownloadedBytes(0);
+        setTotalBytes(0);
+
+        // Sauvegarder dans le dossier public "Téléchargements" (Downloads) d'Android
+        const destPath = `${Platform.OS === 'android' ? RNFS.DownloadDirectoryPath : RNFS.DocumentDirectoryPath}/WMS_UpdateAC_${Date.now()}.apk`;
+
+        const downloadOptions = {
+            fromUrl: apkUrl,
+            toFile: destPath,
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Android; Mobile) WMS-App',
+                'Accept': 'application/vnd.android.package-archive, application/octet-stream, */*'
+            },
+            progressInterval: 500,
+            progress: (res: any) => {
+                const totalNum = Number(res.contentLength);
+                const receivedNum = Number(res.bytesWritten);
+                setDownloadedBytes(receivedNum);
+                setTotalBytes(totalNum);
+                if (totalNum > 0) {
+                    const percentage = Math.floor((receivedNum / totalNum) * 100);
+                    setDownloadProgress(percentage);
+                }
+            },
+            connectionTimeout: 120000,
+            readTimeout: 120000,
+        };
+
+        const ret = RNFS.downloadFile(downloadOptions);
+
+        ret.promise.then((res) => {
+            if (res.statusCode === 200) {
+                setUpdateStatus("");
+                setDownloadProgress(0);
+                setDownloadedBytes(0);
+                setTotalBytes(0);
+
+                // 👉 Lancement automatique de l'installation via le module natif
+                if (Platform.OS === "android" && NativeModules.ApkInstaller) {
+                    NativeModules.ApkInstaller.installApk(destPath)
+                        .then(() => {
+                            console.log("Installation lancée automatiquement");
+                        })
+                        .catch((err: any) => {
+                            console.log("Install error:", err);
+                            Alert.alert(
+                                "Installation manuelle requise",
+                                "Le fichier a été sauvegardé dans 'Téléchargements'. Veuillez l'ouvrir manuellement pour installer."
+                            );
+                        });
+                } else {
+                    Alert.alert(
+                        "Téléchargement terminé",
+                        "Le fichier de mise à jour a été sauvegardé dans le dossier 'Téléchargements' (Downloads) de votre téléphone.\n\nVeuillez ouvrir votre gestionnaire de fichiers pour l'installer manuellement."
+                    );
+                }
+            } else {
+                throw new Error(`Server returned status: ${res.statusCode}`);
+            }
+        })
+            .catch((err) => {
+                console.log("Download error:", err);
+                setUpdateStatus("");
+                Alert.alert(
+                    "Réseau instable",
+                    "Le téléchargement a été interrompu. Nous ouvrons le navigateur pour finaliser la mise à jour..."
+                );
+                Linking.openURL(apkUrl);
+            });
     };
 
     // Handle Login Button Click
@@ -629,27 +739,15 @@ export default function Login({ navigation }: any) {
                 const netInfo = RNNetInfo?.NetworkInfo;
                 const ip = (netInfo && typeof netInfo.getIPAddress === "function")
                     ? await netInfo.getIPAddress()
-                    : "127.0.0.1";
-                setgs_IPAddress(ip || "127.0.0.1");
+                    : "";
+                setgs_IPAddress(ip || "s");
             } catch (err) {
                 pubfunction.ShowError("Error retrieving IP Address, fallback to default:" + err);
-                setgs_IPAddress("127.0.0.1");
+                setgs_IPAddress("");
             }
             navigation.navigate("Menu");
         } else {
             resetLoginForm();
-        }
-    };
-
-
-
-    // Download New Version Button Click
-    const handleDownload = async () => {
-        const confirmResult = await pubfunction.ShowConfirm("Are you sure download a new version replace old One, Restart again?");
-        if (confirmResult) {
-            if (gs_PADURL) {
-                Linking.openURL(gs_PADURL);
-            }
         }
     };
 
@@ -682,23 +780,38 @@ export default function Login({ navigation }: any) {
 
                         {/* Download & Version Container */}
                         <View style={styles.headerDownloadRow}>
-                            <LinearGradient
-                                colors={['#0052cc', '#22c55e']}
-                                start={{ x: 0, y: 0 }}
-                                end={{ x: 1, y: 0 }}
-                                style={styles.downloadGradientButton}
-                            >
-                                <TouchableOpacity
-                                    onPress={handleDownload}
-                                    style={styles.downloadButton}
-                                    activeOpacity={0.7}
+                            {newVersion && newApkUrl && (
+                                <LinearGradient
+                                    colors={['#0052cc', '#22c55e']}
+                                    start={{ x: 0, y: 0 }}
+                                    end={{ x: 1, y: 0 }}
+                                    style={styles.downloadGradientButton}
                                 >
-                                    <Text style={styles.downloadButtonText}>Download new</Text>
-                                </TouchableOpacity>
-                            </LinearGradient>
+                                    <TouchableOpacity
+                                        onPress={() => downloadAndInstall(newApkUrl)}
+                                        style={styles.downloadButton}
+                                        activeOpacity={0.7}
+                                    >
+                                        <Text style={styles.downloadButtonText}>Download new</Text>
+                                    </TouchableOpacity>
+                                </LinearGradient>
+                            )}
                             <Text style={styles.headerVersion}>Version {gs_version}</Text>
                         </View>
                     </View>
+
+                    {updateStatus === "downloading" && (
+                        <View style={styles.updateOverlay}>
+                            <View style={styles.updateCard}>
+                                <ActivityIndicator size="large" color="#0052cc" />
+                                <Text style={styles.updateTitle}>Téléchargement en cours...</Text>
+                                <Text style={styles.updateProgressText}>{downloadProgress}%</Text>
+                                <Text style={styles.updateSizeText}>
+                                    {(downloadedBytes / 1024 / 1024).toFixed(1)} MB / {(totalBytes / 1024 / 1024).toFixed(1)} MB
+                                </Text>
+                            </View>
+                        </View>
+                    )}
 
                     {loading && (
                         <View style={styles.loadingOverlay}>
@@ -1022,5 +1135,40 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: "#0052cc",
         fontWeight: "600",
+    },
+    updateOverlay: {
+        position: "absolute",
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: "rgba(0,0,0,0.6)",
+        zIndex: 10,
+        justifyContent: "center",
+        alignItems: "center",
+    },
+    updateCard: {
+        backgroundColor: "#ffffff",
+        padding: 20,
+        borderRadius: 16,
+        alignItems: "center",
+        width: "80%",
+    },
+    updateTitle: {
+        marginTop: 15,
+        fontSize: 16,
+        color: "#1e293b",
+        fontWeight: "700",
+    },
+    updateProgressText: {
+        marginTop: 10,
+        fontSize: 24,
+        color: "#0052cc",
+        fontWeight: "900",
+    },
+    updateSizeText: {
+        marginTop: 5,
+        fontSize: 12,
+        color: "#64748b",
     },
 });

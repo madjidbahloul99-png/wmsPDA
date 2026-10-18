@@ -15,6 +15,7 @@ import {
   Dimensions,
   DeviceEventEmitter,
 } from "react-native";
+import { useFocusEffect } from "@react-navigation/native";
 import { useGlobalStr } from "../../GlobalStrContext";
 import * as pubfunction from "../pubfunction";
 
@@ -77,20 +78,24 @@ export default function DeliveryReturnNONewSap({ navigation }: any) {
       }
     });
 
-    const focusSub = navigation.addListener("focus", () => {
-      setTimeout(() => {
-        txtSNRef.current?.focus();
-      }, 150);
-    });
-
     return () => {
       refreshSub.remove();
-      focusSub();
       if (scanTimer.current) {
         clearTimeout(scanTimer.current);
       }
     };
   }, [f_sapMainBillCode, gs_wareCode]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      setTimeout(() => {
+        txtSNRef.current?.focus();
+      }, 150);
+      if (f_sapMainBillCode) {
+        DeliveryModelListSap(f_sapMainBillCode);
+      }
+    }, [f_sapMainBillCode])
+  );
 
   /**
    * Matches DeliveryModelListSap in C#
@@ -196,7 +201,7 @@ export default function DeliveryReturnNONewSap({ navigation }: any) {
       // Set state when successful
       setFSapMainBillCode(cleanCode);
     } catch (err: any) {
-      pubfunction.ShowError(err.message || "Network error");
+      pubfunction.ShowError("here"+err.message || "Network error");
     } finally {
       setLoading(false);
     }
@@ -336,8 +341,6 @@ export default function DeliveryReturnNONewSap({ navigation }: any) {
 
       <View style={styles.content}>
         {/* Input area */}
-        {labelError ? <Text style={styles.infoText}>{labelError}</Text> : null}
-
         <View style={styles.inputGroup}>
           <TextInput
             ref={txtSNRef}
@@ -353,6 +356,7 @@ export default function DeliveryReturnNONewSap({ navigation }: any) {
             onBlur={ensureFocus}
             selectTextOnFocus={true}
           />
+          {labelError ? <Text style={styles.infoText}>{labelError}</Text> : null}
         </View>
 
         {/* Data list view */}
@@ -469,7 +473,7 @@ const styles = StyleSheet.create({
   footer: { borderTopWidth: 1, borderTopColor: '#e2e8f0', paddingTop: 2 },
   choiceButton: { height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0052cc' },
   choiceButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '900' },
-  infoText: { color: "#1E293B", fontSize: 12, marginBottom: 8, fontWeight: "800" },
+  infoText: { color: "#EF4444", fontSize: 13, marginTop: 4, marginLeft: 4, fontWeight: "800" },
   selectedRow: { backgroundColor: "#BAE6FD" },
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,

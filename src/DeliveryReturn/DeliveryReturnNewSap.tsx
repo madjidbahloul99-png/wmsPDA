@@ -127,7 +127,7 @@ export default function DeliveryReturnNewSap({ navigation, route }: any) {
 
       // to#from label
       setTxtSource(`${f_customerCode}#${gs_wareCode}`);
-      
+
       const formBody = Object.keys(signedQo).map(key => encodeURIComponent(key) + '=' + encodeURIComponent((signedQo as any)[key])).join('&');
       const response = await fetch(urlCur, {
         method: "POST",
@@ -220,7 +220,7 @@ export default function DeliveryReturnNewSap({ navigation, route }: any) {
         f_model: f_model,
       });
       setTxtSN("");
-    }, 300);
+    }, 800);
   };
 
   /**
@@ -262,14 +262,30 @@ export default function DeliveryReturnNewSap({ navigation, route }: any) {
         "en_US"
       );
 
+      const formBody = Object.keys(signedQo)
+        .map((key) => {
+          const value = (signedQo as any)[key];
+
+          return (
+            encodeURIComponent(key) +
+            "=" +
+            encodeURIComponent(
+              value === null || value === undefined
+                ? ""
+                : String(value)
+            )
+          );
+        })
+        .join("&");
+
       // url获取测试
       const urlTest = urlCur + "?" + pubfunction.classToUrlStr(signedQo);
       console.log("urlTest:", urlTest);
 
       const response = await fetch(urlCur, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },//application/json
-        body: JSON.stringify(signedQo),
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },//application/json
+        body:formBody,
       });
 
       if (!response.ok) {
@@ -390,7 +406,7 @@ export default function DeliveryReturnNewSap({ navigation, route }: any) {
             style={styles.textInput}
             value={txtSN}
             onChangeText={handleTextChange}
-           // onSubmitEditing={handleSNSubmit}
+            // onSubmitEditing={handleSNSubmit}
             placeholder=" SCAN BARCODE (PALLET/BOX/SN)"
             placeholderTextColor="#64748B"
             autoCapitalize="characters"

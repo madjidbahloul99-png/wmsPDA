@@ -73,7 +73,7 @@ const doSoapRequest = async (soapUrl: string, soapAction: string, xmlBody: strin
     if (match && match[1]) {
       return match[1].toLowerCase() === 'true';
     }
-    return true;
+    return false;
   } catch (err) {
     console.log((err as any)?.message || String(err));
     return false; // Fail gracefully to allow operation to continue
@@ -287,7 +287,7 @@ export const getAllocateInScanBarCodeSumInfo = async (
     model: model,
     guid: guid
   };
-  
+  console.log("qo envoyé API:", qo);
   //通用签名类赋值
   qo = pubfunction.SetUserSignInfo(qo, userCode, userName, "2", passwordSalt, version, "en_US") as any;
   

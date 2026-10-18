@@ -12,13 +12,10 @@ import {
   Alert,
   Image,
   Dimensions,
-  Animated,
   DeviceEventEmitter,
 } from "react-native";
 import { useGlobalStr } from "../../GlobalStrContext";
 import * as pubfunction from "../pubfunction";
-
-const AnimatedView = Animated.View as any;
 
 interface ScannedBillItem {
   id: string;
@@ -65,57 +62,12 @@ export default function DeliverySN({ navigation, route }: any) {
 
   const snInputRef = useRef<TextInput>(null);
   const scanTimer = useRef<any>(null);
-  const borderAnim = useRef(new Animated.Value(0)).current;
 
   const [showKeyboard, setShowKeyboard] = useState(false);
 
   const [scanState, setScanState] = useState<
     "waiting" | "scanning" | "success" | "error"
   >("waiting");
-
-  // Pulse animation for scan input decoration border
-  useEffect(() => {
-    let animation: Animated.CompositeAnimation | null = null;
-    if (scanState === "waiting") {
-      animation = Animated.loop(
-        Animated.sequence([
-          Animated.timing(borderAnim, {
-            toValue: 1,
-            duration: 800,
-            useNativeDriver: false,
-          }),
-          Animated.timing(borderAnim, {
-            toValue: 0,
-            duration: 800,
-            useNativeDriver: false,
-          }),
-        ])
-      );
-      animation.start();
-    } else {
-      borderAnim.setValue(1);
-    }
-    return () => {
-      animation?.stop();
-    };
-  }, [scanState]);
-
-  const animatedBorderColor = borderAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange:
-      scanState === "waiting"
-        ? ["#0052cc", "#60a5fa"]
-        : scanState === "scanning"
-          ? ["#f59e0b", "#fbbf24"]
-          : scanState === "success"
-            ? ["#16a34a", "#4ade80"]
-            : ["#dc2626", "#f87171"],
-  });
-
-  const animatedBorderWidth = borderAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [1, 4],
-  });
 
   const ensureFocus = () => {
     snInputRef.current?.focus();
@@ -303,7 +255,7 @@ export default function DeliverySN({ navigation, route }: any) {
         getListFinishBoxList(true);
       }
 
-      setSn("");
+      snInputRef.current?.clear();
       setScanState("success");
       setTimeout(() => {
         snInputRef.current?.focus();
@@ -421,7 +373,7 @@ export default function DeliverySN({ navigation, route }: any) {
           getListFinishBoxList(true);
         }
 
-        setSn("");
+        snInputRef.current?.clear();
         setScanState("success");
       } else {
         const errMsg = resData ? resData.msg : "Failed to execute out storage";
@@ -443,18 +395,30 @@ export default function DeliverySN({ navigation, route }: any) {
    * Primary processing of scanned parameters 100% equivalent to txtSN_KeyDown callback
    */
   const processScannedInput = (scannedCode: string) => {
-    const SN = scannedCode.toUpperCase().trim();
+    let SN = scannedCode.toUpperCase().trim();
     if (SN.length === 0) return;
 
-    setSn(""); // Clear text input immediately
+    // FIX WEDGE LAG: Transposition V540 -> 540V (when V is scanned but shift state delays it)
+   
+
+    snInputRef.current?.clear(); // Clear text input immediately
 
     // Define scanning resolution logic
+    console.log("before SN =", SN);
     const scanType = pubfunction.getBarcodeType(SN);
     console.log("scanType", scanType)
     // EAN prefix checker identical to Substring(0,3) == "613"
     if (SN.substring(0, 3) === "613") {
       setScanState("error");
       pubfunction.ShowError("Please scan SN/BOX/PALLET,  this is EAN(starts with 613)!");
+      setTimeout(() => snInputRef.current?.focus(), 100);
+      return;
+    }
+    
+    const isAlreadyScanned = scannedList.some(item => item.scanBarCode && item.scanBarCode.toUpperCase() === SN);
+    if (isAlreadyScanned) {
+      setScanState("error");
+      pubfunction.ShowError(SN + "  This barcode has already been scanned!");
       setTimeout(() => snInputRef.current?.focus(), 100);
       return;
     }
@@ -483,7 +447,6 @@ export default function DeliverySN({ navigation, route }: any) {
   };
 
   const handleSnChange = (text: string) => {
-    setSn(text);
     clearTimeout(scanTimer.current);
 
     if (text.endsWith("\n") || text.endsWith("\r")) {
@@ -500,7 +463,7 @@ export default function DeliverySN({ navigation, route }: any) {
         if (clean.length > 0) {
           processScannedInput(clean);
         }
-      }, 600);
+      }, 500); // 500ms is perfectly safe when uncontrolled
     }
   };
 
@@ -558,27 +521,30 @@ export default function DeliverySN({ navigation, route }: any) {
 
         {/* Input block - txtSN */}
         <View style={styles.inputGroup}>
-          <AnimatedView style={{
+          <View style={{
             borderRadius: 10,
-            borderWidth: animatedBorderWidth,
-            borderColor: animatedBorderColor,
+            borderWidth: scanState === "waiting" ? 1 : 2,
+            borderColor: scanState === "waiting" ? "#0052cc" : scanState === "scanning" ? "#f59e0b" : scanState === "success" ? "#16a34a" : "#dc2626",
             backgroundColor: "#e2f0eeff",
             elevation: 4,
           }}>
             <TextInput
               ref={snInputRef}
               style={[styles.input, { borderWidth: 0 }]}
-              value={sn}
               onChangeText={handleSnChange}
               //onSubmitEditing={handleSnSubmit}
               placeholder="Scan Pallet / Box / SN Barcode"
               placeholderTextColor="#64748B"
               autoCapitalize="characters"
+              autoCorrect={false}
+              spellCheck={false}
+              autoComplete="off"
+              keyboardType="visible-password"
               blurOnSubmit={false}
               onBlur={ensureFocus}
               showSoftInputOnFocus={showKeyboard}
             />
-          </AnimatedView>
+          </View>
         </View>
 
         {/* Scanned table details - corresponds to listViewBox */}
@@ -670,8 +636,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#E2E8F0",
   },
-  infoLabel: { color: "#FFFFFF", fontSize: 10, fontWeight: "800" },
-  infoValue: { color: "#FFFFFF", fontSize: 11, fontWeight: "900" },
+  infoLabel: { color: "#FFFFFF", fontSize: 13, fontWeight: "800" },
+  infoValue: { color: "#FFFFFF", fontSize: 13, fontWeight: "900" },
   inputGroup: { marginTop: 2, marginBottom: 6 },
   input: {
     backgroundColor: "transparent",
@@ -705,5 +671,5 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 4,
   },
-  totalText: { color: "#FFFFFF", fontSize: 14, fontWeight: "900" },
+  totalText: { color: "#FFFFFF", fontSize: 13, fontWeight: "900" },
 });

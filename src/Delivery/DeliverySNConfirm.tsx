@@ -75,7 +75,7 @@ export default function DeliverySNConfirm({ navigation, route }: any) {
     if (!isSilent) setLoading(true);
     try {
       const urlCur = `${gs_BaseURL}/warehouse/billInfo/getScanBarCodeSumInfo`;
-
+      console.log("after in confirm SN =", SN);
       // Build body model equivalent to WarehouseBillScanQO in C#
       const requestQo = {
         billCode: "",

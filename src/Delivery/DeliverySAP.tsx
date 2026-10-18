@@ -100,8 +100,10 @@ export default function DeliverySAP({ navigation }: any) {
       if (g_isRealUrl) {
         mesUrl = g_webUrl;
       }
-      await soapClient.UpdateBillDA(mesUrl, cleanCode);
-
+      const x=await soapClient.UpdateBillDA(mesUrl, cleanCode);
+      console.log("UpdateBillDA:", x);
+      const y=await soapClient.PWMS_DELIVERY_RETURNDEAL(mesUrl, cleanCode);
+      console.log("PWMS_DELIVERY_RETURNDEAL:", y);
       // 2. Build URL and call getWarehouseDeliveryBillInfoByBillCodeFromSap
       let urlCur = `${gs_BaseURL}/warehouse/billInfo/getWarehouseDeliveryBillInfoByBillCodeFromSap`;
       urlCur = urlCur + "?sapMainBillCode=" + encodeURIComponent(cleanCode);
@@ -168,6 +170,7 @@ export default function DeliverySAP({ navigation }: any) {
 
           if (fromck !== "" && fromck !== gs_wareCode) {
             await soapClient.UpdateBillDA(mesUrl, cleanCode);
+            await soapClient.PWMS_DELIVERY_RETURNDEAL(mesUrl, cleanCode);
 
             setErrorMsg(
               "Source WareHose Must is Login WareHouse " +

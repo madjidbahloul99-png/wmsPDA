@@ -13,13 +13,10 @@ import {
     Image,
     Dimensions,
     DeviceEventEmitter,
-    Animated,
 } from "react-native";
 import { useGlobalStr } from "../../GlobalStrContext";
 import * as pubfunction from "../pubfunction";
 import * as soapClient from "./soapClient";
-
-const AnimatedView = Animated.View as any;
 
 interface BoxItem {
     id: string;
@@ -51,7 +48,6 @@ export default function InWarehouse({ navigation }: any) {
     const snInputRef = useRef<TextInput>(null);
     const isScanning = useRef(false);
     const scanTimer = useRef<any>(null);
-    const borderAnim = useRef(new Animated.Value(0)).current;
 
      const [showKeyboard, setShowKeyboard] = useState(false);
      const [inputEnabled, setInputEnabled] = useState(true);
@@ -59,50 +55,6 @@ export default function InWarehouse({ navigation }: any) {
     const [scanState, setScanState] = useState<
         "waiting" | "scanning" | "success" | "error"
     >("waiting");
-
-    // Pulse animation for keying scan
-    useEffect(() => {
-        let animation: Animated.CompositeAnimation | null = null;
-        if (scanState === "waiting") {
-            animation = Animated.loop(
-                Animated.sequence([
-                    Animated.timing(borderAnim, {
-                        toValue: 1,
-                        duration: 700,
-                        useNativeDriver: false,
-                    }),
-                    Animated.timing(borderAnim, {
-                        toValue: 0,
-                        duration: 700,
-                        useNativeDriver: false,
-                    }),
-                ])
-            );
-            animation.start();
-        } else {
-            borderAnim.setValue(1);
-        }
-        return () => {
-            animation?.stop();
-        };
-    }, [scanState]);
-
-    const animatedBorderColor = borderAnim.interpolate({
-        inputRange: [0, 1],
-        outputRange:
-            scanState === "waiting"
-                ? ["#0052cc", "#60a5fa"]
-                : scanState === "scanning"
-                    ? ["#f59e0b", "#fbbf24"]
-                    : scanState === "success"
-                        ? ["#16a34a", "#4ade80"]
-                        : ["#dc2626", "#f87171"],
-    });
-
-    const animatedBorderWidth = borderAnim.interpolate({
-        inputRange: [0, 1],
-        outputRange: [1, 4],
-    });
 
     // Verify WareType has "MainWarehouse" authority, else fallback
     useEffect(() => {
@@ -351,10 +303,10 @@ export default function InWarehouse({ navigation }: any) {
                     </View>
 
                     <View style={styles.inputGroup}>
-                        <AnimatedView style={{
+                        <View style={{
                             borderRadius: 10,
-                            borderWidth: animatedBorderWidth,
-                            borderColor: animatedBorderColor,
+                            borderWidth: scanState === "waiting" ? 1 : 2,
+                            borderColor: scanState === "waiting" ? "#0052cc" : scanState === "scanning" ? "#f59e0b" : scanState === "success" ? "#16a34a" : "#dc2626",
                             backgroundColor: "#e2f0eeff",
                             elevation: 4,
                         }}>
@@ -376,7 +328,7 @@ export default function InWarehouse({ navigation }: any) {
                                 placeholderTextColor="#64748B"
                                 showSoftInputOnFocus={showKeyboard}
                             />
-                        </AnimatedView>
+                        </View>
                     </View>
                 </View>
 

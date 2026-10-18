@@ -61,6 +61,8 @@ export default function AllocateInSNConfirmBoxNew({ navigation, route }: any) {
 
   const boxListShow = async () => {
     setLoading(true);
+
+    console.log("SN envoyé API:", f_barCode);
     try {
       const res = await allocateInClient.getAllocateInScanBarCodeSumInfo(
         gs_BaseURL,
@@ -102,10 +104,12 @@ export default function AllocateInSNConfirmBoxNew({ navigation, route }: any) {
             pubfunction.ShowError(res.msg);
          }
          setQtyTotalText("0");
+         navigation.goBack();
       }
     } catch (err: any) {
       pubfunction.ShowError(err?.message || "Network Error");
       setQtyTotalText("0");
+      navigation.goBack();
     } finally {
       setLoading(false);
     }

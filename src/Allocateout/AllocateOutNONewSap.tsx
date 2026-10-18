@@ -93,7 +93,7 @@ export default function AllocateOutNONewSap({ navigation }: any) {
         gs_PasswordSalt,
         gs_version
       );
-      console.log("sap bill allocate out " + res)
+   
 
       if (res && res.success && res.data) {
         const vo = typeof res.data === "string" ? JSON.parse(res.data) : res.data;
@@ -103,6 +103,7 @@ export default function AllocateOutNONewSap({ navigation }: any) {
         setF_fromck(fromck);
 
         if (vo.billInfoList && vo.billInfoList.length > 0) {
+           
           const mappedItems: BillItem[] = vo.billInfoList.map((item: any, index: number) => {
             const okqty = parseInt(item.actualCount || "0", 10);
             const billcount = parseInt(item.billCount || "0", 10);
@@ -127,6 +128,7 @@ export default function AllocateOutNONewSap({ navigation }: any) {
             };
           });
           setItems(mappedItems);
+            console.log("sap bill allocate out " + mappedItems)
         } else {
           setF_systemDeliveryCode("");
           if (fromck) {

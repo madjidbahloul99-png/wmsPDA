@@ -106,6 +106,8 @@ export default function AllocateOutNewSap({ navigation, route }: any) {
         gs_version
       );
 
+      console.log("getDeliveryInfoByOperatorBatch",res)
+
       if (res && res.success && res.list) {
         const listObj = typeof res.list === "string" ? JSON.parse(res.list) : res.list;
         let tQty = 0;
@@ -144,6 +146,8 @@ export default function AllocateOutNewSap({ navigation, route }: any) {
         gs_PasswordSalt,
         gs_version
       );
+
+      console.log("getListByCondition",res)
       if (res && res.success && res.list) {
         const listObj = typeof res.list === "string" ? JSON.parse(res.list) : res.list;
         if (listObj.length > 0 && listObj[0].ean) {
@@ -172,6 +176,16 @@ export default function AllocateOutNewSap({ navigation, route }: any) {
         setTimeout(() => { txtSNRef.current?.focus(); }, 150);
         return;
       }
+      
+      const isAlreadyScanned = items.some(item => item.scanBarCode && item.scanBarCode.toUpperCase() === SN);
+      if (isAlreadyScanned) {
+        pubfunction.ShowError(SN+"  This barcode has already been scanned!");
+        setTxtSN("");
+        setTimeout(() => { txtSNRef.current?.focus(); }, 150);
+        return;
+      }
+      
+      
       const scanType = pubfunction.getBarcodeType(SN);
       navigation.navigate("AllocateOutSNConfirmBoxNew", {
         f_barCode: SN,
@@ -195,6 +209,14 @@ export default function AllocateOutNewSap({ navigation, route }: any) {
       if (SN.length > 0) {
         if (SN.startsWith("613")) {
           pubfunction.ShowError("Please scan SN/BOX/PALLET, this is EAN(starts with 613)!");
+          setTimeout(() => { txtSNRef.current?.focus(); }, 150);
+          return;
+        }
+        
+        const isAlreadyScanned = items.some(item => item.scanBarCode && item.scanBarCode.toUpperCase() === SN);
+        if (isAlreadyScanned) {
+        pubfunction.ShowError(SN+"  This barcode has already been scanned!");
+          setTxtSN("");
           setTimeout(() => { txtSNRef.current?.focus(); }, 150);
           return;
         }
