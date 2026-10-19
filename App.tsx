@@ -81,13 +81,6 @@ import DistributorReturnNewSap from "./src/DistributorReturn/DistributorReturnNe
 import DistributorReturnSNConfirmBoxNew from "./src/DistributorReturn/DistributorReturnSNConfirmBoxNew";
 
 
-
-
-
-
-
-
-
 const Stack = createNativeStackNavigator();
 
 export default function App() {

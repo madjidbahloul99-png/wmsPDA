@@ -37,7 +37,7 @@ const getMenuDetails = (menuName: string) => {
       return {
         title: "Receive from\nLine",
         icon: require("../assets/logomenu/Inwarehouse.png"),
-        screen: "InWarehouse",
+        screen: "`InWarehouse`",
       };
     case "Receive from China":
       return {
@@ -182,6 +182,8 @@ export default function Menu({ navigation }: any) {
 
       const res = await fetch(urlCur);
       const data = await res.json();
+      console.log("Menu response : " )
+      console.table(data)
 
       if (data && data.list) {
         const rawList: BaseMenuVo[] = typeof data.list === "string" ? JSON.parse(data.list) : data.list;
