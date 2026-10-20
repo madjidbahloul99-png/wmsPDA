@@ -348,7 +348,7 @@ export default function DeliveryReturnNONewSap({ navigation }: any) {
             value={txtSN}
             onChangeText={handleTextChange}
             //onSubmitEditing={handleSNSubmit}
-            placeholder=" SCAN SAP MAIN BILL CODE"
+            placeholder=" SCAN SAP RETURN BILL CODE"
             placeholderTextColor="#64748B"
             autoCapitalize="characters"
             showSoftInputOnFocus={showKeyboard}

@@ -72,8 +72,10 @@ import DeliveryReturnNONewSap from "./src/DeliveryReturn/DeliveryReturnNONewSap"
 import DeliveryReturnNewSap from "./src/DeliveryReturn/DeliveryReturnNewSap";
 import DeliveryReturnSNConfirmBoxNew from "./src/DeliveryReturn/DeliveryReturnSNConfirmBoxNew";
 
-
-
+//Delivery Return new Multi Customer/One Bill
+import DeliveryReturnNew from "./src/DeliveryReturnNewBill/DeliveryReturnNewSap";
+import DeliveryReturnSNConfirmBoxNewBill from "./src/DeliveryReturnNewBill/DeliveryReturnSNConfirmBoxNew";
+import DeliveryReturnNONewSapBill from "./src/DeliveryReturnNewBill/DeliveryReturnNONewSap";
 
 //DistributorReturn
 import DistributorReturnNONewSap from "./src/DistributorReturn/DistributorReturnNONewSap";
@@ -125,6 +127,11 @@ export default function App() {
           <Stack.Screen name="AllocateInNONewSap" component={AllocateInNONewSap} />
           <Stack.Screen name="AllocateInNewSap" component={AllocateInNewSap} />
           <Stack.Screen name="AllocateInSNConfirmBoxNew" component={AllocateInSNConfirmBoxNew} />
+
+          {/* Delivery Return new Multi Customer/One Bill */}
+          <Stack.Screen name="DeliveryReturnNew" component={DeliveryReturnNew} />
+          <Stack.Screen name="DeliveryReturnSNConfirmBoxNewBill" component={DeliveryReturnSNConfirmBoxNewBill} />
+          <Stack.Screen name="DeliveryReturnNONewSapBill" component={DeliveryReturnNONewSapBill} />
 
           <Stack.Screen name="AllocateInNO" component={AllocateInNO} />
           <Stack.Screen name="AllocateIn" component={AllocateIn} />
