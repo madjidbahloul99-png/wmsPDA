@@ -127,7 +127,10 @@ const getMenuDetails = (menuName: string) => {
       return {
         title: "Delivery Return\nNew",
         icon: require("../assets/logomenu/DeliveryReturn.png"),
-        screen: "DeliveryReturnNONewSapBill",
+        // New delivery return flow (SN based return with traceability)
+        screen: "DeliveryReturnBillSelect",
+        // Legacy delivery return flow, uncomment once the server menu is back on it
+        // screen: "DeliveryReturnNONewSap",
       };
     case "Return to original wh":
       return {
