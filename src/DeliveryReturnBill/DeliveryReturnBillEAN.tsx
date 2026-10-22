@@ -41,7 +41,7 @@ export default function DeliveryReturnBillEAN({ navigation, route }: any) {
     gs_version,
     gs_classCode,
     gs_IPAddress,
-    // gs_remark, // -> uncomment to re-enable the EAN permission check below
+    gs_remark,
   } = useGlobalStr();
 
   const apiCtx: ApiContext = useMemo(
@@ -203,11 +203,11 @@ export default function DeliveryReturnBillEAN({ navigation, route }: any) {
 
     // The permission check is disabled for the tests, to re-enable it add
     // gs_remark back to the useGlobalStr() destructure above.
-    // if ((gs_remark || '').toUpperCase() !== 'EAN') {
-    //   pubfunction.ShowError("You don't have permission to scan EAN!");
-    //   setLabelError("You don't have permission to scan EAN!");
-    //   return;
-    // }
+    if ((gs_remark || '').toUpperCase() !== 'EAN') {
+      pubfunction.ShowError("You don't have permission to scan EAN!");
+      setLabelError("You don't have permission to scan EAN!");
+      return;
+    }
 
     lookupEAN(EAN);
   };
