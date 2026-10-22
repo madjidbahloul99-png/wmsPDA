@@ -19,7 +19,12 @@
  * MD5(userCode + userName + randomNumber + password salt) - the same formula
  * as the legacy pubfunction.GetUserSign, only the field names differ (this
  * API reads the "operate*" names).
+ *
+ * The controller is [Authorize]: every request sends the JWT of the logged
+ * user as "Authorization: Bearer <token>", the token is stored in
+ * AsyncStorage ("userToken") by the login flow.
  */
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as pubfunction from "../pubfunction";
 import {
   BillModelGroup,
@@ -125,8 +130,11 @@ const requestGet = async (
   path: string,
   params: Record<string, string>
 ): Promise<ApiEnvelope> => {
+  const token = await AsyncStorage.getItem("userToken");
+  const headers: Record<string, string> = {};
+  if (token) headers.Authorization = `Bearer ${token}`;
   const url = `${ctx.gs_BaseURL}${path}?${buildQuery(params)}`;
-  const response = await fetch(url, { method: "GET" });
+  const response = await fetch(url, { method: "GET", headers });
   let resData: any = null;
   try {
     resData = await response.json();
@@ -135,7 +143,13 @@ const requestGet = async (
   }
   const envelope = readEnvelope(resData, response.status);
   if (!envelope.ok) {
-    throw new Error(envelope.message || `HTTP Error: ${response.status}`);
+    if (envelope.message) {
+      throw new Error(envelope.message);
+    }
+    if (response.status === 401) {
+      throw new Error("Session expired, please log in again");
+    }
+    throw new Error(`HTTP Error: ${response.status}`);
   }
   return envelope;
 };
@@ -146,10 +160,13 @@ const requestPost = async (
   path: string,
   body: Record<string, any>
 ): Promise<ApiEnvelope> => {
+  const token = await AsyncStorage.getItem("userToken");
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (token) headers.Authorization = `Bearer ${token}`;
   const url = `${ctx.gs_BaseURL}${path}`;
   const response = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify(body),
   });
   let resData: any = null;
@@ -160,7 +177,13 @@ const requestPost = async (
   }
   const envelope = readEnvelope(resData, response.status);
   if (!envelope.ok) {
-    throw new Error(envelope.message || `HTTP Error: ${response.status}`);
+    if (envelope.message) {
+      throw new Error(envelope.message);
+    }
+    if (response.status === 401) {
+      throw new Error("Session expired, please log in again");
+    }
+    throw new Error(`HTTP Error: ${response.status}`);
   }
   return envelope;
 };
