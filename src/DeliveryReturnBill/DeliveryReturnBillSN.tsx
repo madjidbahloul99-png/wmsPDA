@@ -6,6 +6,8 @@ import {
   TextInput,
   StyleSheet,
   TouchableOpacity,
+  FlatList,
+  ScrollView,
   StatusBar,
   ActivityIndicator,
   Image,
@@ -22,13 +24,14 @@ import { EVENT_REFRESH, EVENT_RETURNED } from "./events";
  * Page 2 - Scan the SN of the returned product and check its delivery traceability.
  *
  *   traceability found  -> the confirm page
- *   traceability error  -> the EAN page (the EAN has to be scanned)
+ *   no delivery found   -> the EAN page (the EAN has to be scanned)
+ *
+ * The list of the scanned items is kept in the screen on purpose: the real API
+ * has no endpoint that returns it. Every successful return appends the scanned
+ * SN to the table below, the quantities come from the answer of the save.
  */
 export default function DeliveryReturnBillSN({ navigation, route }: any) {
-  const params: ReturnContext = useMemo(
-    () => route.params || {},
-    [route.params]
-  );
+  const params: ReturnContext = useMemo(() => route.params || {}, [route.params]);
 
   const {
     gs_BaseURL,
@@ -70,31 +73,62 @@ export default function DeliveryReturnBillSN({ navigation, route }: any) {
   const [labelStatus, setLabelStatus] = useState("");
   const [doneQty, setDoneQty] = useState<number>(0);
   const [planQty, setPlanQty] = useState<number>(0);
+  const [products, setProducts] = useState<TraceabilityRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [showKeyboard] = useState(false);
 
   const txtSNRef = useRef<TextInput>(null);
   const scanTimer = useRef<any>(null);
+  // True while a request is in flight, a ref is always up to date (no stale closure)
+  const busyRef = useRef(false);
+  // The scanned items, kept in a ref to always be up to date
+  const productsRef = useRef<TraceabilityRecord[]>([]);
 
   // Keep the quantities of the selected model
   useEffect(() => {
     setPlanQty(params.f_planQty || 0);
     setDoneQty(params.f_doneQty || 0);
   }, [params.f_planQty, params.f_doneQty]);
-
   const ensureFocus = () => {
     txtSNRef.current?.focus();
   };
 
-  // A product has been returned, refresh the quantities
+  /**
+   * Scans back to this page: refresh the quantities and remember the returned
+   * product (the API has no endpoint for the scanned list).
+   */
   useEffect(() => {
     const returnedSub = DeviceEventEmitter.addListener(
       EVENT_RETURNED,
-      (data?: { actualQty?: number; planQty?: number; productStatus?: string }) => {
+      (data?: {
+        actualQty?: number;
+        planQty?: number;
+        productStatus?: string;
+        sn?: string;
+        model?: string;
+        outBillCode?: string;
+        sapMainBillCode?: string;
+        billFinished?: boolean;
+      }) => {
         if (data) {
           if (typeof data.actualQty === "number") setDoneQty(data.actualQty);
           if (typeof data.planQty === "number") setPlanQty(data.planQty);
-          if (data.productStatus) setLabelStatus(`Status: ${data.productStatus}`);
+          if (data.billFinished) {
+            setLabelStatus("This return bill is finished.");
+          } else if (data.productStatus) {
+            setLabelStatus(`Status: ${data.productStatus}`);
+          }
+          if (data.sn && !productsRef.current.some((product) => product.sn === data.sn)) {
+            const product: TraceabilityRecord = {
+              sn: data.sn,
+              model: data.model || params.f_model || "",
+              outBillCode: data.outBillCode || "",
+              sapMainBillCode: data.sapMainBillCode || params.f_billCode || "",
+            } as TraceabilityRecord;
+            const list = [...productsRef.current, product];
+            productsRef.current = list;
+            setProducts(list);
+          }
         }
         setTxtSN("");
         setLabelError("");
@@ -114,28 +148,25 @@ export default function DeliveryReturnBillSN({ navigation, route }: any) {
         clearTimeout(scanTimer.current);
       }
     };
-  }, []);
+  }, [params.f_billCode, params.f_model]);
 
   const buildContext = useCallback(
     (): ReturnContext => ({
-      f_billCode: params.f_billCode || "",
-      f_systemDeliveryCode: params.f_systemDeliveryCode || "",
-      f_sapMainBillCode: params.f_sapMainBillCode || "",
-      f_model: params.f_model || "",
-      f_color: params.f_color || "",
-      f_customerCode: params.f_customerCode || "",
-      f_operatorBatch: params.f_operatorBatch || "",
-      f_wareCode: params.f_wareCode || gs_wareCode || "",
+      ...params,
       f_planQty: planQty,
       f_doneQty: doneQty,
+      f_diffQty: planQty - doneQty,
     }),
-    [params, planQty, doneQty, gs_wareCode]
+    [params, planQty, doneQty]
   );
 
   /**
    * Scanned SN handling, checks the delivery traceability.
    */
   const processSNInput = async (scannedText: string) => {
+    // A scan during a request is ignored, it would navigate twice
+    if (busyRef.current) return;
+
     if (scanTimer.current) {
       clearTimeout(scanTimer.current);
     }
@@ -154,35 +185,52 @@ export default function DeliveryReturnBillSN({ navigation, route }: any) {
     }
 
     setLoading(true);
+    busyRef.current = true;
     try {
+      // The product is already in the list of the scanned items
+      const scanned = productsRef.current.some(
+        (product) => product.sn.toUpperCase() === SN
+      );
+      if (scanned) {
+        setLabelError("This product was already scanned.");
+        pubfunction.ShowError("This product was already scanned.");
+        return;
+      }
+
       const result = await checkSNTraceability(apiCtx, {
         sn: SN,
-        billCode: params.f_systemDeliveryCode || "",
+        mainBillCode: params.f_billCode || "",
         model: params.f_model || "",
       });
 
-      if (result.found && result.trace) {
+      if (result.found && result.traces.length > 0) {
         // Traceability found, straight to the confirmation
         navigation.navigate("DeliveryReturnBillConfirm", {
           ...buildContext(),
           f_sn: SN,
-          f_trace: result.trace as TraceabilityRecord,
+          f_traces: result.traces,
         });
         return;
       }
 
-      // No traceability, the EAN has to be scanned
-      const message = result.error || `No delivery traceability found for SN ${SN}`;
+      // The product was not found, the EAN identifies it
+      const message = result.error || `SN ${SN} not found, please scan the EAN.`;
       setLabelError(message);
       pubfunction.ShowError(message);
-      navigation.navigate("DeliveryReturnBillEAN", {
-        ...buildContext(),
-        f_sn: SN,
-        f_requiresEan: true,
-      });
+
+      if (result.requiresEan) {
+        navigation.navigate("DeliveryReturnBillEAN", {
+          ...buildContext(),
+          f_sn: SN,
+          f_requiresEan: true,
+        });
+      }
     } catch (err: any) {
-      pubfunction.ShowError(err.message || "Network error");
+      const message = err.message || "Network error";
+      setLabelError(message);
+      pubfunction.ShowError(message);
     } finally {
+      busyRef.current = false;
       setLoading(false);
       setTimeout(() => {
         txtSNRef.current?.focus();
@@ -220,6 +268,26 @@ export default function DeliveryReturnBillSN({ navigation, route }: any) {
   const handleBack = () => {
     DeviceEventEmitter.emit(EVENT_REFRESH);
     navigation.goBack();
+  };
+
+  /**
+   * One item of the scanned list, everything was returned successfully so the
+   * rows are all in the ink color.
+   */
+  const renderProduct = ({ item, index }: { item: TraceabilityRecord; index: number }) => {
+    return (
+      <View
+        style={[
+          styles.tableRow,
+          { backgroundColor: index % 2 === 0 ? "#FFFFFF" : "#F8FAFC" },
+        ]}
+      >
+        <Text style={[styles.cell, { width: 150 }]}>{item.sn}</Text>
+        <Text style={[styles.cell, { width: 130 }]}>{item.model || "-"}</Text>
+        <Text style={[styles.cell, { width: 130 }]}>{item.outBillCode || "-"}</Text>
+        <Text style={[styles.cell, { width: 130 }]}>{item.sapMainBillCode || "-"}</Text>
+      </View>
+    );
   };
 
   return (
@@ -260,13 +328,9 @@ export default function DeliveryReturnBillSN({ navigation, route }: any) {
               {doneQty}/{planQty}
             </Text>
           </View>
-          <View style={styles.infoRowItem}>
+          <View style={[styles.infoRowItem, { marginBottom: 0 }]}>
             <Text style={styles.infoLabelWhite}>Model</Text>
             <Text style={styles.infoValueWhite}>{params.f_model || "-"}</Text>
-          </View>
-          <View style={[styles.infoRowItem, { marginBottom: 0 }]}>
-            <Text style={styles.infoLabelWhite}>Color</Text>
-            <Text style={styles.infoValueWhite}>{params.f_color || "-"}</Text>
           </View>
         </View>
 
@@ -279,6 +343,7 @@ export default function DeliveryReturnBillSN({ navigation, route }: any) {
             style={styles.input}
             value={txtSN}
             onChangeText={handleTextChange}
+            editable={!loading}
             placeholder=" SCAN PRODUCT SN"
             placeholderTextColor="#64748B"
             autoCapitalize="characters"
@@ -289,6 +354,42 @@ export default function DeliveryReturnBillSN({ navigation, route }: any) {
             selectTextOnFocus={true}
           />
           {labelError ? <Text style={styles.infoText}>{labelError}</Text> : null}
+        </View>
+
+          {/* Products that were already scanned in this session */}
+        <View style={styles.tableCard}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={true}>
+            <View>
+              <View style={styles.tableHeader}>
+                <Text style={[styles.headerCell, { width: 150 }]}>SN</Text>
+                <Text style={[styles.headerCell, { width: 130 }]}>Model</Text>
+                <Text style={[styles.headerCell, { width: 130 }]}>Out Bill</Text>
+                <Text style={[styles.headerCell, { width: 130 }]}>SAP Bill</Text>
+              </View>
+
+              <FlatList
+                data={products}
+                renderItem={renderProduct}
+                keyExtractor={(item, index) => `${item.sn}-${index}`}
+                ListEmptyComponent={
+                  <View style={styles.tableRow}>
+                    <Text style={[styles.cell, { width: 540 }]}>
+                      No product scanned yet
+                    </Text>
+                  </View>
+                }
+                style={{ flex: 1 }}
+                initialNumToRender={10}
+                maxToRenderPerBatch={10}
+                windowSize={5}
+                removeClippedSubviews={true}
+              />
+            </View>
+          </ScrollView>
+
+          <View style={styles.totalRow}>
+            <Text style={styles.totalText}>{`Total: ${products.length}`}</Text>
+          </View>
         </View>
       </View>
 
@@ -338,8 +439,16 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
   },
-  infoLabelWhite: { color: "#FFFFFF", fontSize: 12, fontWeight: "800" },
-  infoValueWhite: { color: "#FFFFFF", fontSize: 12, fontWeight: "900" },
+  infoLabelWhite: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  infoValueWhite: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "900",
+  },
   statusText: {
     color: "#0052cc",
     fontSize: 13,
@@ -360,6 +469,44 @@ const styles = StyleSheet.create({
     borderColor: "#0052cc",
   },
   infoText: { color: "#EF4444", fontSize: 13, marginTop: 4, marginLeft: 4, fontWeight: "800" },
+  tableCard: {
+    flex: 1,
+    backgroundColor: "#FFF",
+    borderRadius: 12,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "#0052cc",
+    marginBottom: 8,
+  },
+  tableHeader: { flexDirection: "row", backgroundColor: "#0052cc", paddingVertical: 10 },
+  headerCell: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#FFFFFF",
+    textAlign: "center",
+    textTransform: "uppercase",
+  },
+  tableRow: {
+    flexDirection: "row",
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F1F5F9",
+    alignItems: "center",
+  },
+  cell: { fontSize: 11, color: "#1E293B", textAlign: "center", fontWeight: "600" },
+  totalRow: {
+    backgroundColor: "#F1F5F9",
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderTopWidth: 1,
+    borderTopColor: "#E2E8F0",
+    alignItems: "flex-end",
+  },
+  totalText: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#0052cc",
+  },
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(255, 255, 255, 0.5)",

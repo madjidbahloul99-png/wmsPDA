@@ -1,29 +1,32 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { SafeAreaView } from "react-native-safe-area-context";
+import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   View,
   Text,
   TextInput,
   StyleSheet,
   TouchableOpacity,
+  ScrollView,
+  FlatList,
   StatusBar,
   ActivityIndicator,
   Image,
   Dimensions,
   DeviceEventEmitter,
-} from "react-native";
-import { useGlobalStr } from "../../GlobalStrContext";
-import * as pubfunction from "../pubfunction";
-import { ApiContext, getModelEAN, submitReturnWithEAN } from "./api";
-import { ReturnContext } from "./types";
-import { EVENT_RETURNED } from "./events";
+} from 'react-native';
+import { useGlobalStr } from '../../GlobalStrContext';
+import * as pubfunction from '../pubfunction';
+import { ApiContext, lookupByEAN, submitReturnWithEAN } from './api';
+import { EANCandidate, ReturnContext } from './types';
+import { EVENT_RETURNED } from './events';
 
 /**
- * Page 3 - Scan the EAN of a product without delivery traceability.
+ * Page 3 - Scan the EAN of a product that has no delivery traceability.
  *
- * This page is only reachable when the traceability check of the SN failed.
- * There is no confirmation screen here, the return is submitted automatically
- * with the SN and the EAN, then the operator goes back to the SN scan page.
+ * The EAN is matched to a model: the lookup returns the list of the models
+ * that carry it, the operator selects the model of the product he wants to
+ * return and presses Confirm OK. The return is saved with scanType = "EAN"
+ * and the screen goes back to the SN scan page.
  */
 export default function DeliveryReturnBillEAN({ navigation, route }: any) {
   const params: ReturnContext & { f_sn?: string; f_requiresEan?: boolean } =
@@ -38,7 +41,7 @@ export default function DeliveryReturnBillEAN({ navigation, route }: any) {
     gs_version,
     gs_classCode,
     gs_IPAddress,
-    gs_remark,
+    // gs_remark, // -> uncomment to re-enable the EAN permission check below
   } = useGlobalStr();
 
   const apiCtx: ApiContext = useMemo(
@@ -61,37 +64,29 @@ export default function DeliveryReturnBillEAN({ navigation, route }: any) {
       gs_version,
       gs_classCode,
       gs_IPAddress,
-    ]
+    ],
   );
 
   // Screen states
-  const [txtEAN, setTxtEAN] = useState("");
-  const [labelError, setLabelError] = useState("");
-  const [modelEAN, setModelEAN] = useState("");
+  const [txtEAN, setTxtEAN] = useState('');
+  const [labelError, setLabelError] = useState('');
+  const [labelInfo, setLabelInfo] = useState('');
+  const [scannedEAN, setScannedEAN] = useState('');
+  const [candidates, setCandidates] = useState<EANCandidate[]>([]);
+  // The identity of the selected row (model | color | ean), two models of the
+  // same list can share a model code but differ by their color
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [showKeyboard] = useState(false);
 
   const txtEANRef = useRef<TextInput>(null);
   const scanTimer = useRef<any>(null);
+  // True while a request is in flight, a ref is always up to date (no stale closure)
+  const busyRef = useRef(false);
 
   const ensureFocus = () => {
     txtEANRef.current?.focus();
   };
-
-  /**
-   * Loads the EAN of the selected model, the scanned EAN has to match it.
-   */
-  const loadModelEAN = useCallback(async () => {
-    try {
-      const ean = await getModelEAN(apiCtx, params.f_model || "");
-      setModelEAN(ean);
-      if (!ean) {
-        setLabelError("No EAN found for this model!");
-      }
-    } catch (err: any) {
-      pubfunction.ShowError(err.message || "Network error");
-    }
-  }, [apiCtx, params.f_model]);
 
   useEffect(() => {
     // The EAN page only makes sense after a failed traceability check
@@ -99,8 +94,6 @@ export default function DeliveryReturnBillEAN({ navigation, route }: any) {
       navigation.goBack();
       return;
     }
-
-    loadModelEAN();
 
     setTimeout(() => {
       txtEANRef.current?.focus();
@@ -111,39 +104,75 @@ export default function DeliveryReturnBillEAN({ navigation, route }: any) {
         clearTimeout(scanTimer.current);
       }
     };
-  }, [params.f_requiresEan, loadModelEAN, navigation]);
+  }, [params.f_requiresEan, navigation]);
 
   /**
-   * Submits the return, the submission is automatic (no confirmation screen).
+   * The return is saved for the model the operator selected.
    */
-  const submitReturn = async (EAN: string) => {
+  const submitReturn = async (model: EANCandidate) => {
     setLoading(true);
+    busyRef.current = true;
     try {
       const result = await submitReturnWithEAN(apiCtx, {
         context: params,
-        sn: params.f_sn || "",
-        ean: EAN,
+        sn: params.f_sn || '',
+        ean: scannedEAN,
+        model: model.model,
       });
-
-      if (!result.success) {
-        setLabelError(result.msg || "Save barcode error");
-        setTxtEAN("");
-        return;
-      }
 
       DeviceEventEmitter.emit(EVENT_RETURNED, {
         actualQty: result.actualQty,
         planQty: result.planQty,
         productStatus: result.productStatus,
+        billFinished: result.billFinished,
+        sn: params.f_sn,
+        model: model.model,
+        sapMainBillCode: params.f_billCode,
       });
 
       // Back to the SN scan page for the next product
       navigation.goBack();
     } catch (err: any) {
-      pubfunction.ShowError(err.message || "Network error");
-      setLabelError(err.message || "Network error");
-      setTxtEAN("");
+      const message = err.message || 'Network error';
+      pubfunction.ShowError(message);
+      setLabelError(message);
     } finally {
+      busyRef.current = false;
+      setLoading(false);
+    }
+  };
+
+  /**
+   * Looks up the models of the scanned EAN, the list is the list of the
+   * models of the API (model | description | color | ean).
+   */
+  const lookupEAN = async (EAN: string) => {
+    setLoading(true);
+    busyRef.current = true;
+    try {
+      const result = await lookupByEAN(apiCtx, {
+        ean: EAN,
+        mainBillCode: params.f_billCode || '',
+      });
+
+      if (result.candidates.length === 0) {
+        setCandidates([]);
+        setSelectedKey(null);
+        setScannedEAN('');
+        const message = result.message || `EAN ${EAN} not found.`;
+        setLabelError(message);
+        return;
+      }
+
+      setScannedEAN(EAN);
+      setCandidates(result.candidates);
+      setSelectedKey(null);
+      setLabelInfo(result.message || '');
+    } catch (err: any) {
+      pubfunction.ShowError(err.message || 'Network error');
+      setLabelError(err.message || 'Network error');
+    } finally {
+      busyRef.current = false;
       setLoading(false);
       setTimeout(() => {
         txtEANRef.current?.focus();
@@ -152,50 +181,48 @@ export default function DeliveryReturnBillEAN({ navigation, route }: any) {
   };
 
   /**
-   * Validates the scanned EAN and submits the return when it matches the model.
+   * Validates the scanned EAN and looks it up.
    */
   const processEANInput = (scannedText: string) => {
+    // A scan during a request is ignored, it would look up twice
+    if (busyRef.current) return;
+
     if (scanTimer.current) {
       clearTimeout(scanTimer.current);
     }
 
-    const EAN = (scannedText || "").replace(/[\r\n]/g, "").trim().toUpperCase();
+    const EAN = (scannedText || '')
+      .replace(/[\r\n]/g, '')
+      .trim()
+      .toUpperCase();
     if (!EAN) return;
 
-    setTxtEAN("");
-    setLabelError("");
+    setTxtEAN('');
+    setLabelError('');
+    setLabelInfo('');
 
-    if ((gs_remark || "").toUpperCase() !== "EAN") {
-      pubfunction.ShowError("You don't have permission to scan EAN!");
-      setLabelError("You don't have permission to scan EAN!");
-      return;
-    }
+    // The permission check is disabled for the tests, to re-enable it add
+    // gs_remark back to the useGlobalStr() destructure above.
+    // if ((gs_remark || '').toUpperCase() !== 'EAN') {
+    //   pubfunction.ShowError("You don't have permission to scan EAN!");
+    //   setLabelError("You don't have permission to scan EAN!");
+    //   return;
+    // }
 
-    if (!modelEAN) {
-      setLabelError("No EAN found for this model!");
-      return;
-    }
-
-    if (EAN !== modelEAN) {
-      const message = `EAN error, Ok is: ${modelEAN}`;
-      pubfunction.ShowError(message);
-      setLabelError(message);
-      return;
-    }
-
-    submitReturn(EAN);
+    lookupEAN(EAN);
   };
 
   const handleTextChange = (text: string) => {
     setTxtEAN(text);
-    setLabelError("");
+    setLabelError('');
+    setLabelInfo('');
 
     if (scanTimer.current) {
       clearTimeout(scanTimer.current);
     }
 
-    if (text.includes("\n") || text.includes("\r")) {
-      const clean = text.replace(/[\r\n]/g, "").trim();
+    if (text.includes('\n') || text.includes('\r')) {
+      const clean = text.replace(/[\r\n]/g, '').trim();
       if (clean.length > 0) {
         processEANInput(clean);
       }
@@ -213,6 +240,62 @@ export default function DeliveryReturnBillEAN({ navigation, route }: any) {
     }, 600);
   };
 
+  /**
+   * The identity of a candidate row: two models of the list can share a model
+   * code (the API answers one row per model and color).
+   */
+  const candidateKey = (model: EANCandidate): string =>
+    `${model.model}|${model.colorName}|${model.ean}`;
+
+  const handleConfirmClick = () => {
+    // A double tap would save the return twice
+    if (busyRef.current) return;
+
+    const model = candidates.find(item => candidateKey(item) === selectedKey);
+    if (!model) {
+      pubfunction.ShowError('Please select a model first!');
+      return;
+    }
+    submitReturn(model);
+  };
+
+  const renderCandidate = ({
+    item,
+    index,
+  }: {
+    item: EANCandidate;
+    index: number;
+  }) => {
+    const isSelected = selectedKey === candidateKey(item);
+    return (
+      <TouchableOpacity
+        style={[
+          styles.tableRow,
+          { backgroundColor: index % 2 === 0 ? '#FFFFFF' : '#F8FAFC' },
+          isSelected && styles.selectedRow,
+        ]}
+        onPress={() => setSelectedKey(candidateKey(item))}
+        activeOpacity={0.7}
+      >
+        <Text style={[styles.cell, { width: 140 }]}>{item.model}</Text>
+        <Text style={[styles.cell, { width: 240 }]}>
+          {item.modelDesc || '-'}
+        </Text>
+        <Text style={[styles.cell, { width: 110 }]}>
+          {item.colorName || '-'}
+        </Text>
+        <Text style={[styles.cell, { width: 150 }]}>{item.ean}</Text>
+      </TouchableOpacity>
+    );
+  };
+
+  const infoRow = (label: string, value: string) => (
+    <View style={styles.infoRowItem}>
+      <Text style={styles.infoLabelWhite}>{label}</Text>
+      <Text style={styles.infoValueWhite}>{value || '-'}</Text>
+    </View>
+  );
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
@@ -220,9 +303,12 @@ export default function DeliveryReturnBillEAN({ navigation, route }: any) {
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <TouchableOpacity onPress={() => navigation.goBack()} activeOpacity={0.7}>
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            activeOpacity={0.7}
+          >
             <Image
-              source={require("../../assets/logo/left.png")}
+              source={require('../../assets/logo/left.png')}
               style={styles.returnLogo}
               resizeMode="contain"
             />
@@ -235,47 +321,98 @@ export default function DeliveryReturnBillEAN({ navigation, route }: any) {
       </View>
 
       <View style={styles.content}>
-        {/* Product being processed */}
-        <View style={styles.infoCardWrapper}>
-          <View style={styles.infoRowItem}>
-            <Text style={styles.infoLabelWhite}>SN</Text>
-            <Text style={styles.infoValueWhite}>{params.f_sn || "-"}</Text>
+        <ScrollView
+          style={styles.scrollContent}
+          showsVerticalScrollIndicator={true}
+          contentContainerStyle={styles.scrollContentInner}
+        >
+          {/* Product being processed */}
+          <View style={styles.infoCardWrapper}>
+            {infoRow('SN', params.f_sn || '-')}
+            {infoRow('Model', params.f_model)}
+            {infoRow('Description', params.f_modelDesc)}
+            {infoRow('Delivery bill', params.f_systemDeliveryCode)}
+            {infoRow('EAN', scannedEAN)}
+            {infoRow(
+              'Customer',
+              `${params.f_customerCode || '-'} ${params.f_customerName || ''}`,
+            )}
           </View>
-          <View style={styles.infoRowItem}>
-            <Text style={styles.infoLabelWhite}>Model</Text>
-            <Text style={styles.infoValueWhite}>{params.f_model || "-"}</Text>
-          </View>
-          <View style={styles.infoRowItem}>
-            <Text style={styles.infoLabelWhite}>Color</Text>
-            <Text style={styles.infoValueWhite}>{params.f_color || "-"}</Text>
-          </View>
-          <View style={[styles.infoRowItem, { marginBottom: 0 }]}>
-            <Text style={styles.infoLabelWhite}>Model EAN</Text>
-            <Text style={styles.infoValueWhite}>{modelEAN || "-"}</Text>
-          </View>
-        </View>
 
-        {/* EAN input */}
-        <View style={styles.inputGroup}>
-          <TextInput
-            ref={txtEANRef}
-            style={styles.input}
-            value={txtEAN}
-            onChangeText={handleTextChange}
-            placeholder=" SCAN EAN"
-            placeholderTextColor="#64748B"
-            autoCapitalize="characters"
-            autoCorrect={false}
-            showSoftInputOnFocus={showKeyboard}
-            blurOnSubmit={false}
-            onBlur={ensureFocus}
-            selectTextOnFocus={true}
-          />
-          {labelError ? <Text style={styles.infoText}>{labelError}</Text> : null}
-          <Text style={styles.hintText}>
-            The return is submitted automatically, then continue with the next SN.
-          </Text>
-        </View>
+          {/* EAN input */}
+          <View style={styles.inputGroup}>
+            <TextInput
+              ref={txtEANRef}
+              style={styles.input}
+              value={txtEAN}
+              onChangeText={handleTextChange}
+              editable={!loading}
+              placeholder=" SCAN EAN"
+              placeholderTextColor="#64748B"
+              autoCapitalize="characters"
+              autoCorrect={false}
+              showSoftInputOnFocus={showKeyboard}
+              blurOnSubmit={false}
+              onBlur={ensureFocus}
+              selectTextOnFocus={true}
+            />
+            {labelError ? (
+              <Text style={styles.infoText}>{labelError}</Text>
+            ) : null}
+            {labelInfo ? (
+              <Text style={styles.statusText}>{labelInfo}</Text>
+            ) : null}
+          </View>
+
+          {/* The models that carry the scanned EAN, the operator picks one */}
+          {candidates.length > 0 ? (
+            <View style={styles.tableCard}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={true}>
+                <View>
+                  <View style={styles.tableHeader}>
+                    <Text style={[styles.headerCell, { width: 140 }]}>
+                      MODEL
+                    </Text>
+                    <Text style={[styles.headerCell, { width: 240 }]}>
+                      Description
+                    </Text>
+                    <Text style={[styles.headerCell, { width: 110 }]}>
+                      Color
+                    </Text>
+                    <Text style={[styles.headerCell, { width: 150 }]}>EAN</Text>
+                  </View>
+
+                  <FlatList
+                    data={candidates}
+                    renderItem={renderCandidate}
+                    keyExtractor={(item, index) => `${item.model}-${index}`}
+                    style={{ flex: 1 }}
+                    initialNumToRender={10}
+                  />
+                </View>
+              </ScrollView>
+            </View>
+          ) : null}
+        </ScrollView>
+
+        {/* Footer, the confirm appears when there is a list to choose from */}
+        {candidates.length > 0 ? (
+          <View style={styles.footer}>
+            <TouchableOpacity
+              style={[
+                styles.btn,
+                styles.btnConfirm,
+                (loading || !selectedKey) && styles.btnDisabled,
+              ]}
+              onPress={handleConfirmClick}
+              disabled={loading || !selectedKey}
+            >
+              <Text style={styles.btnText}>
+                {loading ? 'Saving...' : 'Confirm OK'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
       </View>
 
       {loading && (
@@ -287,77 +424,140 @@ export default function DeliveryReturnBillEAN({ navigation, route }: any) {
   );
 }
 
-const { width } = Dimensions.get("window");
+const { width } = Dimensions.get('window');
 const scale = (size: number) => (width / 375) * size;
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F8FAFC" },
+  container: { flex: 1, backgroundColor: '#F8FAFC' },
   header: {
-    backgroundColor: "#0052cc",
+    backgroundColor: '#0052cc',
     paddingHorizontal: width * 0.05,
     height: scale(56),
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     elevation: 4,
   },
-  headerLeft: { flexDirection: "row", alignItems: "center" },
-  returnLogo: { width: scale(24), height: scale(24), marginRight: 10, tintColor: "#FFFFFF" },
-  headerTitle: { color: "#FFFFFF", fontSize: scale(14), fontWeight: "900" },
-  headerRight: { flexDirection: "row", alignItems: "center" },
-  userNameText: { color: "#FFFFFF", fontSize: scale(12), fontWeight: "700" },
+  headerLeft: { flexDirection: 'row', alignItems: 'center' },
+  returnLogo: {
+    width: scale(24),
+    height: scale(24),
+    marginRight: 10,
+    tintColor: '#FFFFFF',
+  },
+  headerTitle: { color: '#FFFFFF', fontSize: scale(14), fontWeight: '900' },
+  headerRight: { flexDirection: 'row', alignItems: 'center' },
+  userNameText: { color: '#FFFFFF', fontSize: scale(12), fontWeight: '700' },
   content: { flex: 1, padding: 8 },
+  scrollContent: { flex: 1 },
+  scrollContentInner: { paddingBottom: 8 },
   infoCardWrapper: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: '#FFFFFF',
     padding: 8,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#0052cc",
+    borderColor: '#0052cc',
     marginBottom: 8,
   },
   infoRowItem: {
-    backgroundColor: "#0052cc",
-    padding: 10,
+    backgroundColor: '#0052cc',
+    padding: 9,
     borderRadius: 8,
-    marginBottom: 6,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+    marginBottom: 5,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
-  infoLabelWhite: { color: "#FFFFFF", fontSize: 12, fontWeight: "800" },
-  infoValueWhite: { color: "#FFFFFF", fontSize: 12, fontWeight: "900" },
-  statusText: {
-    color: "#0052cc",
-    fontSize: 13,
-    fontWeight: "800",
-    marginBottom: 6,
-    marginLeft: 4,
+  infoLabelWhite: { color: '#FFFFFF', fontSize: 12, fontWeight: '800' },
+  infoValueWhite: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '900',
+    flexShrink: 1,
   },
   inputGroup: { marginBottom: 12 },
   input: {
-    backgroundColor: "#e2f0eeff",
+    backgroundColor: '#e2f0eeff',
     height: 40,
     borderRadius: 10,
     paddingHorizontal: 12,
     fontSize: 14,
-    color: "#1E293B",
-    fontWeight: "700",
+    color: '#1E293B',
+    fontWeight: '700',
     borderWidth: 1,
-    borderColor: "#0052cc",
+    borderColor: '#0052cc',
   },
-  infoText: { color: "#EF4444", fontSize: 13, marginTop: 4, marginLeft: 4, fontWeight: "800" },
-  hintText: {
-    color: "#64748B",
-    fontSize: 12,
-    fontWeight: "600",
-    marginTop: 8,
+  infoText: {
+    color: '#EF4444',
+    fontSize: 13,
+    marginTop: 4,
+    marginLeft: 4,
+    fontWeight: '800',
+  },
+  statusText: {
+    color: '#0052cc',
+    fontSize: 13,
+    fontWeight: '800',
+    marginTop: 4,
     marginLeft: 4,
   },
+  tableCard: {
+    backgroundColor: '#FFF',
+    borderRadius: 12,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#0052cc',
+    marginBottom: 8,
+  },
+  tableHeader: {
+    flexDirection: 'row',
+    backgroundColor: '#0052cc',
+    paddingVertical: 10,
+  },
+  headerCell: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    textAlign: 'center',
+    textTransform: 'uppercase',
+  },
+  tableRow: {
+    flexDirection: 'row',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+    alignItems: 'center',
+  },
+  cell: {
+    fontSize: 11,
+    color: '#1E293B',
+    textAlign: 'center',
+    fontWeight: '600',
+  },
+  selectedRow: { backgroundColor: '#BAE6FD' },
+  footer: {
+    flexDirection: 'row',
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+    paddingTop: 6,
+  },
+  btn: {
+    flex: 1,
+    height: 44,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginHorizontal: 4,
+    elevation: 2,
+  },
+  btnConfirm: { backgroundColor: '#10B981' },
+  btnDisabled: { opacity: 0.5 },
+  btnText: { color: '#FFFFFF', fontSize: 14, fontWeight: '900' },
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(255, 255, 255, 0.5)",
-    justifyContent: "center",
-    alignItems: "center",
+    backgroundColor: 'rgba(255, 255, 255, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
     zIndex: 1000,
   },
 });

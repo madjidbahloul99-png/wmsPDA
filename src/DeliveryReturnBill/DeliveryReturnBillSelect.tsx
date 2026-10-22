@@ -18,11 +18,25 @@ import { useFocusEffect } from "@react-navigation/native";
 import { useGlobalStr } from "../../GlobalStrContext";
 import * as pubfunction from "../pubfunction";
 import { ApiContext, getBillModels } from "./api";
-import { BillModelRow, ReturnContext } from "./types";
+import { BillModelGroup, BillModelRow, ReturnContext } from "./types";
 import { EVENT_REFRESH } from "./events";
+
+/** One line of the table, a customer of a model. */
+type TableItem = {
+  key: string;
+  group: BillModelGroup;
+  row: BillModelRow;
+};
 
 /**
  * Page 1 - Scan the SAP return bill and select the model to return.
+ *
+ * A return bill can hold several customers (multi client) and the same model
+ * can belong to more than one of them, so the table is grouped by model and
+ * shows one line per customer of the model.
+ *
+ * The table is reloaded every time the screen comes back so the processed
+ * quantity is up to date.
  */
 export default function DeliveryReturnBillSelect({ navigation }: any) {
   const {
@@ -62,15 +76,16 @@ export default function DeliveryReturnBillSelect({ navigation }: any) {
   // Screen states
   const [txtBill, setTxtBill] = useState("");
   const [labelError, setLabelError] = useState("");
-  const [labelSource, setLabelSource] = useState("");
-  const [items, setItems] = useState<BillModelRow[]>([]);
-  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+  const [groups, setGroups] = useState<BillModelGroup[]>([]);
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [showKeyboard] = useState(false);
   const [f_billCode, setFBillCode] = useState("");
 
   const txtBillRef = useRef<TextInput>(null);
   const scanTimer = useRef<any>(null);
+  // True while a request is in flight, a ref is always up to date (no stale closure)
+  const busyRef = useRef(false);
 
   const ensureFocus = () => {
     txtBillRef.current?.focus();
@@ -85,27 +100,44 @@ export default function DeliveryReturnBillSelect({ navigation }: any) {
       if (!cleanCode) return;
 
       setLoading(true);
+      busyRef.current = true;
       setLabelError("");
 
       try {
         const rows = await getBillModels(apiCtx, { sapMainBillCode: cleanCode });
 
         if (rows.length === 0) {
-          setItems([]);
-          setSelectedIndex(null);
+          setGroups([]);
+          setSelectedKey(null);
           setFBillCode("");
           setLabelError(`No return bill found for ${cleanCode}`);
           return;
         }
 
-        setItems(rows);
-        setSelectedIndex(null);
+        // The destination customer cannot be empty (same check as the delivery flow)
+        const hasEmptyCustomer = rows.some((group) =>
+          group.rows.some((row) => !row.customerCode)
+        );
+        if (hasEmptyCustomer) {
+          pubfunction.ShowError("The destination customer cannot be empty!");
+          setGroups([]);
+          setSelectedKey(null);
+          setFBillCode("");
+          return;
+        }
+
+        // The warehouse of the bill is checked by the server: the rows are the
+        // ones of the logged in warehouse, a foreign bill answers
+        // "No model found for this bill in your warehouse" and the error below
+        // shows exactly the message of the server.
+        setGroups(rows);
+        setSelectedKey(null);
         setFBillCode(cleanCode);
-        const first = rows[0];
-        setLabelSource(`Source: ${first.supplierCode}#${first.fromck}`);
       } catch (err: any) {
+        setLabelError(err.message || "Network error");
         pubfunction.ShowError(err.message || "Network error");
       } finally {
+        busyRef.current = false;
         setLoading(false);
         setTimeout(() => {
           txtBillRef.current?.focus();
@@ -135,7 +167,7 @@ export default function DeliveryReturnBillSelect({ navigation }: any) {
     };
   }, [f_billCode, loadBillModels]);
 
-  // Reload the bill when the screen comes back (a product could have been returned)
+  // Reload the bill when the screen comes back (products could have been returned)
   useFocusEffect(
     React.useCallback(() => {
       setTimeout(() => {
@@ -148,6 +180,9 @@ export default function DeliveryReturnBillSelect({ navigation }: any) {
   );
 
   const processBillInput = (scannedText: string) => {
+    // A scan during a request is ignored, it would load the bill twice
+    if (busyRef.current) return;
+
     if (scanTimer.current) {
       clearTimeout(scanTimer.current);
     }
@@ -185,99 +220,153 @@ export default function DeliveryReturnBillSelect({ navigation }: any) {
     }, 300);
   };
 
-  const handleSelectIndex = useCallback(
-    (index: number) => {
-      setSelectedIndex(index);
-      const item = items[index];
-      if (item) {
-        setLabelSource(`Source: ${item.supplierCode}#${item.fromck}`);
-      }
-    },
-    [items]
-  );
+  /**
+   * One line per customer of a model, sorted by model. A return bill can hold
+   * several customers (multi client) and the same model can belong to more
+   * than one of them.
+   */
+  const tableData: TableItem[] = useMemo(() => {
+    const items: TableItem[] = [];
+    groups.forEach((group) => {
+      group.rows.forEach((row) => {
+        items.push({
+          // The key is a business key, it stays the same when the list is reloaded
+          key: `${row.customerCode}|${row.model}|${row.systemDeliveryCode}`,
+          group,
+          row,
+        });
+      });
+    });
+    return items;
+  }, [groups]);
+
+  /** The customer line that was selected. */
+  const selectedItem: TableItem | null = useMemo(() => {
+    if (!selectedKey) return null;
+    return tableData.find((entry) => entry.key === selectedKey) || null;
+  }, [selectedKey, tableData]);
+
+  const selectedRow: BillModelRow | null = selectedItem ? selectedItem.row : null;
+
+  /** Summary of the scanned bill. */
+  const summary = useMemo(() => {
+    let customers = 0;
+    let units = 0;
+    const seen: { [key: string]: boolean } = {};
+    groups.forEach((group) => {
+      units += group.planQty;
+      group.rows.forEach((row) => {
+        const key = `${row.customerCode}|${row.customerName}`;
+        if (!seen[key]) {
+          seen[key] = true;
+          customers += 1;
+        }
+      });
+    });
+    return { customers, models: groups.length, units };
+  }, [groups]);
 
   /**
-   * Choice - goes to the SN scan page with the selected model.
+   * Choice - goes to the SN scan page with the selected customer and model.
    */
   const handleChoiceClick = () => {
-    if (selectedIndex === null || selectedIndex < 0 || selectedIndex >= items.length) {
+    // A double tap would push the SN page twice
+    if (busyRef.current) return;
+
+    if (!selectedRow || !selectedItem) {
       pubfunction.ShowError("Please select a row first!");
       return;
     }
 
-    const selected = items[selectedIndex];
-    if (!selected) return;
+    const selected = selectedRow;
+    const group = selectedItem.group;
 
     const context: ReturnContext = {
       f_billCode: f_billCode,
       f_systemDeliveryCode: selected.systemDeliveryCode,
       f_sapMainBillCode: selected.sapMainBillCode,
+      f_lineId: selected.lineId,
       f_model: selected.model,
+      f_modelDesc: selected.modelDesc,
       f_color: selected.color,
-      f_customerCode: selected.supplierCode,
-      f_operatorBatch: selected.operatorBatch || selected.deliveryCode,
+      f_ean: selected.ean,
+      f_brand: selected.brand,
+      f_customerCode: selected.customerCode,
+      f_customerName: selected.customerName,
+      f_cityName: selected.cityName,
+      f_address: selected.address,
+      f_customerType: selected.customerType,
+      f_operatorBatch: selected.operatorBatch,
       f_wareCode: gs_wareCode || "",
-      f_planQty: selected.planQty,
-      f_doneQty: selected.doneQty,
+      f_toWarehouseCode: selected.toWarehouseCode,
+      f_deliveryDate: selected.deliveryDate,
+      f_movementStatus: selected.movementStatus,
+      f_movementDate: selected.movementDate,
+      f_movementType: selected.movementType,
+      // the quantities of the model, the list of the products to scan is
+      // the model of the bill, whatever the customer of the row
+      f_planQty: group.planQty,
+      f_doneQty: group.doneQty,
+      f_diffQty: group.diffQty,
     };
 
     navigation.navigate("DeliveryReturnBillSN", context);
   };
 
   const renderItem = React.useCallback(
-    ({ item, index }: { item: BillModelRow; index: number }) => {
+    ({ item, index }: { item: TableItem; index: number }) => {
+      const row = item.row;
+      const isSelected = selectedKey === item.key;
+
       // Blue when something was already returned, red when nothing was returned yet
       let textColor = "#1E293B";
-      if (item.diffQty > 0) {
-        textColor = item.doneQty > 0 ? "#0052cc" : "#EF4444";
+      if (row.diffQty > 0) {
+        textColor = row.doneQty > 0 ? "#0052cc" : "#EF4444";
       }
-
-      const isSelected = selectedIndex === index;
 
       return (
         <TouchableOpacity
-          key={item.id}
           style={[
             styles.tableRow,
             { backgroundColor: index % 2 === 0 ? "#FFFFFF" : "#F8FAFC" },
             isSelected && styles.selectedRow,
           ]}
-          onPress={() => handleSelectIndex(index)}
+          onPress={() => setSelectedKey(item.key)}
         >
           <Text style={[styles.cell, { color: textColor, width: 120 }]}>
-            {item.systemDeliveryCode}
+            {row.systemDeliveryCode}
           </Text>
           <Text style={[styles.cell, { color: textColor, width: 110 }]}>
-            {item.model}
+            {row.model}
           </Text>
           <Text style={[styles.cell, { color: textColor, width: 90 }]}>
-            {item.color}
+            {row.color || "-"}
           </Text>
-          <Text style={[styles.cell, { color: textColor, width: 60 }]}>
-            {item.planQty}
+          <Text style={[styles.cell, { color: textColor, width: 50 }]}>{row.planQty}</Text>
+          <Text style={[styles.cell, { color: textColor, width: 50 }]}>{row.doneQty}</Text>
+          <Text style={[styles.cell, { color: textColor, width: 50 }]}>{row.diffQty}</Text>
+          <Text style={[styles.cell, { color: textColor, width: 100 }]}>
+            {row.fromck || "-"}
           </Text>
-          <Text style={[styles.cell, { color: textColor, width: 60 }]}>
-            {item.doneQty}
-          </Text>
-          <Text style={[styles.cell, { color: textColor, width: 60 }]}>
-            {item.diffQty}
-          </Text>
-          <Text style={[styles.cell, { color: textColor, width: 90 }]}>
-            {item.fromck}
+          <Text style={[styles.cell, { color: textColor, width: 100 }]}>
+            {row.toWarehouseCode || gs_wareCode || "-"}
           </Text>
           <Text style={[styles.cell, { color: textColor, width: 90 }]}>
-            {item.supplierCode}
+            {row.customerCode}
           </Text>
-          <Text style={[styles.cell, { color: textColor, width: 130 }]}>
-            {item.operatorBatch}
+          <Text style={[styles.cell, { color: textColor, width: 160 }]}>
+            {row.customerName}
           </Text>
-          <Text style={[styles.cell, { color: textColor, width: 130 }]}>
-            {item.sapMainBillCode}
+          <Text style={[styles.cell, { color: textColor, width: 150 }]}>
+            {row.operatorBatch}
+          </Text>
+          <Text style={[styles.cell, { color: textColor, width: 120 }]}>
+            {row.sapMainBillCode}
           </Text>
         </TouchableOpacity>
       );
     },
-    [selectedIndex, handleSelectIndex]
+    [selectedKey, gs_wareCode]
   );
 
   return (
@@ -311,6 +400,7 @@ export default function DeliveryReturnBillSelect({ navigation }: any) {
             style={styles.input}
             value={txtBill}
             onChangeText={handleTextChange}
+            editable={!loading}
             placeholder=" SCAN SAP RETURN BILL CODE"
             placeholderTextColor="#64748B"
             autoCapitalize="characters"
@@ -320,8 +410,13 @@ export default function DeliveryReturnBillSelect({ navigation }: any) {
             onBlur={ensureFocus}
             selectTextOnFocus={true}
           />
-          {labelSource ? <Text style={styles.sourceText}>{labelSource}</Text> : null}
-          {labelError ? <Text style={styles.infoText}>{labelError}</Text> : null}
+          {labelError ? (
+            <Text style={styles.infoText}>{labelError}</Text>
+          ) : groups.length > 0 ? (
+            <Text style={styles.summaryText}>
+              {`Bill ${f_billCode} - ${summary.customers} customer(s) - ${summary.models} model(s) - ${summary.units} unit(s)`}
+            </Text>
+          ) : null}
         </View>
 
         {/* Models of the scanned bill */}
@@ -332,19 +427,21 @@ export default function DeliveryReturnBillSelect({ navigation }: any) {
                 <Text style={[styles.headerCell, { width: 120 }]}>BILL CODE</Text>
                 <Text style={[styles.headerCell, { width: 110 }]}>Model</Text>
                 <Text style={[styles.headerCell, { width: 90 }]}>Color</Text>
-                <Text style={[styles.headerCell, { width: 60 }]}>Plan</Text>
-                <Text style={[styles.headerCell, { width: 60 }]}>Done</Text>
-                <Text style={[styles.headerCell, { width: 60 }]}>Diff</Text>
-                <Text style={[styles.headerCell, { width: 90 }]}>From WH</Text>
-                <Text style={[styles.headerCell, { width: 90 }]}>Supplier</Text>
-                <Text style={[styles.headerCell, { width: 130 }]}>Batch</Text>
-                <Text style={[styles.headerCell, { width: 130 }]}>SAP BILL</Text>
+                <Text style={[styles.headerCell, { width: 50 }]}>Plan</Text>
+                <Text style={[styles.headerCell, { width: 50 }]}>Done</Text>
+                <Text style={[styles.headerCell, { width: 50 }]}>Diff</Text>
+                <Text style={[styles.headerCell, { width: 100 }]}>From WH</Text>
+                <Text style={[styles.headerCell, { width: 100 }]}>To WH</Text>
+                <Text style={[styles.headerCell, { width: 90 }]}>Customer</Text>
+                <Text style={[styles.headerCell, { width: 160 }]}>Customer Name</Text>
+                <Text style={[styles.headerCell, { width: 150 }]}>Batch</Text>
+                <Text style={[styles.headerCell, { width: 120 }]}>SAP BILL</Text>
               </View>
 
               <FlatList
-                data={items}
+                data={tableData}
                 renderItem={renderItem}
-                keyExtractor={(item, index) => `${item.systemDeliveryCode}-${index}`}
+                keyExtractor={(item) => item.key}
                 ListEmptyComponent={
                   <Text style={styles.emptyText}>
                     {loading ? "Loading..." : "Waiting for the SAP return bill..."}
@@ -362,7 +459,11 @@ export default function DeliveryReturnBillSelect({ navigation }: any) {
 
         {/* Footer controls */}
         <View style={styles.footer}>
-          <TouchableOpacity style={styles.choiceButton} onPress={handleChoiceClick}>
+          <TouchableOpacity
+            style={[styles.choiceButton, loading && styles.choiceButtonDisabled]}
+            onPress={handleChoiceClick}
+            disabled={loading}
+          >
             <Text style={styles.choiceButtonText}>Choice</Text>
           </TouchableOpacity>
         </View>
@@ -397,7 +498,7 @@ const styles = StyleSheet.create({
   headerRight: { flexDirection: "row", alignItems: "center" },
   userNameText: { color: "#FFFFFF", fontSize: scale(12), fontWeight: "700" },
   content: { flex: 1, padding: 8 },
-  inputGroup: { marginBottom: 12 },
+  inputGroup: { marginBottom: 8 },
   input: {
     backgroundColor: "#e2f0eeff",
     height: 40,
@@ -409,8 +510,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#0052cc",
   },
-  sourceText: { color: "#0052cc", fontSize: 13, marginTop: 4, marginLeft: 4, fontWeight: "800" },
   infoText: { color: "#EF4444", fontSize: 13, marginTop: 4, marginLeft: 4, fontWeight: "800" },
+  summaryText: {
+    color: "#0052cc",
+    fontSize: 12,
+    fontWeight: "800",
+    marginTop: 4,
+    marginLeft: 4,
+  },
   tableCard: {
     flex: 1,
     backgroundColor: "#FFF",
@@ -431,7 +538,7 @@ const styles = StyleSheet.create({
   },
   tableRow: {
     flexDirection: "row",
-    paddingVertical: 14,
+    paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: "#F1F5F9",
     alignItems: "center",
@@ -452,6 +559,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "#0052cc",
   },
+  choiceButtonDisabled: { opacity: 0.5 },
   choiceButtonText: { color: "#FFFFFF", fontSize: 15, fontWeight: "900" },
   selectedRow: { backgroundColor: "#BAE6FD" },
   loadingOverlay: {

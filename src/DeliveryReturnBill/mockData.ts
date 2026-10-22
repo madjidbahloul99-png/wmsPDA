@@ -1,97 +1,29 @@
 /**
- * Local dummy data used while the backend endpoints of the "Delivery Return Bill"
- * feature are not ready yet.
+ * Seed of the dummy return bills, used while the backend of the
+ * "Delivery Return Bill" feature is not ready yet.
  *
- * Every value returned by the dummy API calls comes from this file, so the whole
- * flow can be tested on the device:
- *   - SN0001 / SN0002  -> have delivery traceability -> confirm page
- *   - any other SN     -> traceability error      -> EAN page
+ * The data lives in testData.json so that the QR code generator of the test
+ * sheet (desktop folder wms-qr) reads exactly the same values.
+ *
+ * The shape of the objects is the one the server sends (SCREAMING_SNAKE).
+ *
+ * Bill 2026062030 (delivery bill 1326168351, customer SARL BOUGATTOUCHA):
+ *   - 43A4200G : 5 units, 1 of them already returned (status C)
+ *   - 43A4200H : 2 units, nothing returned yet
+ *   - 43A4200K : 1 unit, allocated out (no delivery traceability)
+ * Bill 2026062031 (delivery bill 1326168352, customer SPA INDUSTRIES):
+ *   - 43B5500K : 2 units, nothing returned yet
+ *
+ * The GUID of a unit is used as its SN by the dummy traceability lookup.
  */
 
-import { BillModelRow, TraceabilityRecord } from "./types";
+import seed from "./testData.json";
+import { RawReturnBillLine } from "./types";
 
-export const MOCK_BILL_MODELS: BillModelRow[] = [
-  {
-    id: "0",
-    systemDeliveryCode: "DR202610001",
-    deliveryCode: "OP-2026-0001",
-    model: "MDL-A100",
-    color: "BLACK",
-    supplierCode: "CUS001",
-    operatorBatch: "OP-2026-0001",
-    sapMainBillCode: "SRT20260001",
-    fromck: "WH01",
-    planQty: 10,
-    doneQty: 4,
-    diffQty: 6,
-  },
-  {
-    id: "1",
-    systemDeliveryCode: "DR202610002",
-    deliveryCode: "OP-2026-0002",
-    model: "MDL-B200",
-    color: "WHITE",
-    supplierCode: "CUS002",
-    operatorBatch: "OP-2026-0002",
-    sapMainBillCode: "SRT20260002",
-    fromck: "WH01",
-    planQty: 5,
-    doneQty: 5,
-    diffQty: 0,
-  },
-  {
-    id: "2",
-    systemDeliveryCode: "DR202610003",
-    deliveryCode: "OP-2026-0003",
-    model: "MDL-C300",
-    color: "BLUE",
-    supplierCode: "CUS003",
-    operatorBatch: "OP-2026-0003",
-    sapMainBillCode: "SRT20260003",
-    fromck: "WH02",
-    planQty: 20,
-    doneQty: 2,
-    diffQty: 18,
-  },
-];
+export const MOCK_BILL_LINES: RawReturnBillLine[] = seed.billLines as RawReturnBillLine[];
 
-/** SNs that have a delivery traceability record. Any other SN returns an error. */
-export const MOCK_TRACEABILITY: Record<string, TraceabilityRecord> = {
-  SN0001: {
-    sn: "SN0001",
-    model: "MDL-A100",
-    color: "BLACK",
-    palletCode: "PL00001",
-    boxCode: "BX00001",
-    imei1: "860111111111111",
-    imei2: "860222222222222",
-    imei3: "860333333333333",
-    deliveryDate: "2026-10-12 09:31:00",
-    ean: "6131000000017",
-    productStatus: "DELIVERED",
-    warehouseCode: "WH01",
-    customerCode: "CUS001",
-  },
-  SN0002: {
-    sn: "SN0002",
-    model: "MDL-A100",
-    color: "BLACK",
-    palletCode: "PL00001",
-    boxCode: "BX00002",
-    imei1: "860111111111112",
-    imei2: "860222222222223",
-    imei3: "860333333333334",
-    deliveryDate: "2026-10-12 09:35:00",
-    ean: "6131000000017",
-    productStatus: "DELIVERED",
-    warehouseCode: "WH01",
-    customerCode: "CUS001",
-  },
-};
-
-/** EAN of the models used by the dummy traceability records. */
-export const MOCK_MODEL_EAN: Record<string, string> = {
-  "MDL-A100": "6131000000017",
-  "MDL-B200": "6132000000024",
-  "MDL-C300": "6133000000031",
-};
+/** Physical details of the scanned barcode, used by the confirmation page. */
+export const MOCK_SCAN_BARCODE_DETAILS: Record<
+  string,
+  { palletCode: string; boxCode: string; imei1: string; imei2: string; imei3: string; goodsCount: string }
+> = seed.scanBarCodeDetails;

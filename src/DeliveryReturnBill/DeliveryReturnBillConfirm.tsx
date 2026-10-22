@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo, useRef } from "react";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
   View,
@@ -21,14 +21,16 @@ import { EVENT_REFRESH, EVENT_RETURNED } from "./events";
 /**
  * Page 4 - Confirm the return of a product that has a delivery traceability.
  *
- * Shows the product information and the traceability details, the operator
- * confirms the return, the product is added back to the stock, the processed
- * quantity and the product status are updated and the operator can continue
- * with the next product.
+ * The traceability of the API (ValidateProductSN) is shown as a table, one row
+ * with the delivery of the SN. The operator confirms the return, it is saved
+ * with scanType = "TRACE" and the quantities of the answer (qty, qtyOk) are
+ * sent back to the SN page.
  */
 export default function DeliveryReturnBillConfirm({ navigation, route }: any) {
-  const params: ReturnContext & { f_sn?: string; f_trace?: TraceabilityRecord } =
-    route.params || {};
+  const params: ReturnContext & {
+    f_sn?: string;
+    f_traces?: TraceabilityRecord[];
+  } = useMemo(() => route.params || {}, [route.params]);
 
   const {
     gs_BaseURL,
@@ -41,68 +43,84 @@ export default function DeliveryReturnBillConfirm({ navigation, route }: any) {
     gs_IPAddress,
   } = useGlobalStr();
 
-  const apiCtx: ApiContext = {
-    gs_BaseURL,
-    gs_wareCode,
-    gs_userCode,
-    gs_userName,
-    gs_PasswordSalt,
-    gs_version,
-    gs_classCode,
-    gs_IPAddress,
-  };
+  const apiCtx: ApiContext = useMemo(
+    () => ({
+      gs_BaseURL,
+      gs_wareCode,
+      gs_userCode,
+      gs_userName,
+      gs_PasswordSalt,
+      gs_version,
+      gs_classCode,
+      gs_IPAddress,
+    }),
+    [
+      gs_BaseURL,
+      gs_wareCode,
+      gs_userCode,
+      gs_userName,
+      gs_PasswordSalt,
+      gs_version,
+      gs_classCode,
+      gs_IPAddress,
+    ]
+  );
 
   const [loading, setLoading] = useState(false);
   const [labelError, setLabelError] = useState("");
+  const [labelStatus, setLabelStatus] = useState("");
+  // True while the confirmation is in flight, a ref is always up to date
+  const busyRef = useRef(false);
 
-  const trace: TraceabilityRecord = params.f_trace || {
-    sn: params.f_sn || "",
-    model: params.f_model || "",
-    color: params.f_color || "",
-    palletCode: "",
-    boxCode: "",
-    imei1: "",
-    imei2: "",
-    imei3: "",
-    deliveryDate: "",
-    ean: "",
-    productStatus: "",
-    warehouseCode: params.f_wareCode || "",
-    customerCode: params.f_customerCode || "",
-  };
+  /** The traceability records of the scanned SN, one row each. */
+  const traces: TraceabilityRecord[] = useMemo(() => {
+    if (params.f_traces && params.f_traces.length > 0) {
+      return params.f_traces;
+    }
+    return [];
+  }, [params.f_traces]);
 
   /**
    * Confirms the return of the product.
    */
   const handleConfirmClick = async () => {
+    // A double tap would confirm the return twice
+    if (busyRef.current) return;
+
     setLoading(true);
+    busyRef.current = true;
     setLabelError("");
+    setLabelStatus("");
 
     try {
+      const sn = params.f_sn || (traces[0] ? traces[0].sn : "");
       const result = await confirmReturn(apiCtx, {
         context: params,
-        sn: params.f_sn || "",
-        trace: trace,
+        sn: sn,
+        trace: traces[0] || null,
       });
 
-      if (!result.success) {
-        setLabelError(result.msg || "Save barcode error");
-        return;
-      }
-
-      // Refresh the processed quantity and the status on the SN page
+      // Refresh the processed quantity, the scanned list and the status on the
+      // SN page
       DeviceEventEmitter.emit(EVENT_RETURNED, {
         actualQty: result.actualQty,
         planQty: result.planQty,
         productStatus: result.productStatus,
+        billFinished: result.billFinished,
+        sn: sn,
+        model: params.f_model || (traces[0] ? traces[0].model : ""),
+        outBillCode: traces[0] ? traces[0].outBillCode : "",
+        sapMainBillCode: traces[0] ? traces[0].sapMainBillCode : params.f_billCode,
       });
 
       // Back to the SN scan page for the next product
       navigation.goBack();
     } catch (err: any) {
-      pubfunction.ShowError(err.message || "Network error");
-      setLabelError(err.message || "Network error");
+      const message = err.message || "Network error";
+      pubfunction.ShowError(message);
+      setLabelError(message);
     } finally {
+      busyRef.current = false;
       setLoading(false);
     }
   };
@@ -112,12 +130,7 @@ export default function DeliveryReturnBillConfirm({ navigation, route }: any) {
     navigation.goBack();
   };
 
-  const infoRow = (label: string, value: string) => (
-    <View style={styles.infoRowItem}>
-      <Text style={styles.infoLabelWhite}>{label}</Text>
-      <Text style={styles.infoValueWhite}>{value || "-"}</Text>
-    </View>
-  );
+  const first = traces.length > 0 ? traces[0] : null;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -141,84 +154,89 @@ export default function DeliveryReturnBillConfirm({ navigation, route }: any) {
       </View>
 
       <View style={styles.content}>
-        {/* Product information */}
-        <View style={styles.infoCardWrapper}>
-          {infoRow("Bill Code", params.f_systemDeliveryCode)}
-          {infoRow("SAP Bill", params.f_sapMainBillCode)}
-          {infoRow("Model", params.f_model)}
-          {infoRow("Color", params.f_color)}
-          {infoRow("SN", params.f_sn || trace.sn)}
-          {infoRow("Batch", params.f_operatorBatch)}
-          {infoRow("Supplier", params.f_customerCode)}
-          {infoRow("Warehouse", params.f_wareCode || gs_wareCode)}
-          {infoRow("Qty", `${params.f_doneQty || 0}/${params.f_planQty || 0}`)}
+        {/* Bill information, one line */}
+        <View style={styles.billLine}>
+          <Text style={styles.billLineText}>
+            {`Bill ${params.f_billCode || first?.mainBillCode || "-"}`}
+            {` · Line ${params.f_lineId || "-"}`}
+            {` · WH ${params.f_wareCode || gs_wareCode || "-"}`}
+            {` · Customer ${params.f_customerCode || "-"}`}
+          </Text>
         </View>
 
-        {/* Traceability details */}
+        {/* Quantity status header label, same as the legacy confirm page */}
+        <View style={styles.statusLabelCard}>
+          <Text style={styles.statusLabelText}>
+            {`${params.f_sn || (first ? first.sn : "")} Total qty:${traces.length}`}
+          </Text>
+        </View>
+
+        {/* The delivery traceability of the scanned SN */}
         <View style={styles.tableCard}>
           <ScrollView horizontal showsHorizontalScrollIndicator={true}>
             <View>
               <View style={styles.tableHeader}>
-                <Text style={[styles.headerCell, { width: 120 }]}>SN</Text>
-                <Text style={[styles.headerCell, { width: 110 }]}>Pallet</Text>
-                <Text style={[styles.headerCell, { width: 110 }]}>Box</Text>
-                <Text style={[styles.headerCell, { width: 140 }]}>IMEI 1</Text>
-                <Text style={[styles.headerCell, { width: 140 }]}>IMEI 2</Text>
-                <Text style={[styles.headerCell, { width: 140 }]}>IMEI 3</Text>
-                <Text style={[styles.headerCell, { width: 130 }]}>Delivery Date</Text>
-                <Text style={[styles.headerCell, { width: 130 }]}>EAN</Text>
-                <Text style={[styles.headerCell, { width: 110 }]}>Status</Text>
+                <Text style={[styles.headerCell, { width: 150 }]}>SN</Text>
+                <Text style={[styles.headerCell, { width: 130 }]}>Model</Text>
+                <Text style={[styles.headerCell, { width: 130 }]}>Out Bill</Text>
+                <Text style={[styles.headerCell, { width: 140 }]}>SAP Bill</Text>
+                <Text style={[styles.headerCell, { width: 140 }]}>SAP UUID</Text>
               </View>
 
-              <View style={styles.tableRow}>
-                <Text style={[styles.cell, { width: 120 }]}>
-                  {trace.sn || params.f_sn || "-"}
-                </Text>
-                <Text style={[styles.cell, { width: 110 }]}>
-                  {trace.palletCode || "-"}
-                </Text>
-                <Text style={[styles.cell, { width: 110 }]}>
-                  {trace.boxCode || "-"}
-                </Text>
-                <Text style={[styles.cell, { width: 140 }]}>
-                  {trace.imei1 || "-"}
-                </Text>
-                <Text style={[styles.cell, { width: 140 }]}>
-                  {trace.imei2 || "-"}
-                </Text>
-                <Text style={[styles.cell, { width: 140 }]}>
-                  {trace.imei3 || "-"}
-                </Text>
-                <Text style={[styles.cell, { width: 130 }]}>
-                  {trace.deliveryDate || "-"}
-                </Text>
-                <Text style={[styles.cell, { width: 130 }]}>
-                  {trace.ean || "-"}
-                </Text>
-                <Text style={[styles.cell, { width: 110 }]}>
-                  {trace.productStatus || "-"}
-                </Text>
-              </View>
+              {traces.length === 0 ? (
+                <View style={styles.tableRow}>
+                  <Text style={[styles.cell, { width: 690 }]}>
+                    No traceability detail found
+                  </Text>
+                </View>
+              ) : (
+                traces.map((trace, index) => (
+                  <View
+                    key={trace.sn || String(index)}
+                    style={[
+                      styles.tableRow,
+                      { backgroundColor: index % 2 === 0 ? "#FFFFFF" : "#F8FAFC" },
+                    ]}
+                  >
+                    <Text style={[styles.cell, { width: 150 }]}>
+                      {trace.sn || "-"}
+                    </Text>
+                    <Text style={[styles.cell, { width: 130 }]}>
+                      {trace.model || "-"}
+                    </Text>
+                    <Text style={[styles.cell, { width: 130 }]}>
+                      {trace.outBillCode || "-"}
+                    </Text>
+                    <Text style={[styles.cell, { width: 140 }]}>
+                      {trace.sapMainBillCode || "-"}
+                    </Text>
+                    <Text style={[styles.cell, { width: 140 }]}>
+                      {trace.sapUuid || "-"}
+                    </Text>
+                  </View>
+                ))
+              )}
             </View>
           </ScrollView>
         </View>
 
+        {labelStatus ? <Text style={styles.statusText}>{labelStatus}</Text> : null}
         {labelError ? <Text style={styles.infoText}>{labelError}</Text> : null}
 
-        {/* Footer actions */}
+        {/* Footer actions, always visible */}
         <View style={styles.footer}>
           <TouchableOpacity
-            style={[styles.btn, styles.exitBtn]}
-            onPress={handleExitClick}
-          >
-            <Text style={styles.btnText}>Exit</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.btn, styles.confirmBtn]}
+            style={[
+              styles.btn,
+              styles.btnConfirm,
+              (loading || traces.length === 0) && styles.btnDisabled,
+            ]}
             onPress={handleConfirmClick}
+            disabled={loading || traces.length === 0}
           >
-            <Text style={styles.btnText}>Confirm</Text>
+            <Text style={styles.btnText}>
+              {loading ? "Saving..." : "Confirm OK"}
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -252,26 +270,29 @@ const styles = StyleSheet.create({
   headerRight: { flexDirection: "row", alignItems: "center" },
   userNameText: { color: "#FFFFFF", fontSize: scale(12), fontWeight: "700" },
   content: { flex: 1, padding: 8 },
-  infoCardWrapper: {
-    backgroundColor: "#FFFFFF",
-    padding: 8,
-    borderRadius: 10,
+  billLine: {
+    backgroundColor: "#0052cc",
+    borderRadius: 8,
+    padding: 9,
+    marginBottom: 8,
+  },
+  billLineText: { color: "#FFFFFF", fontSize: 11, fontWeight: "800" },
+  statusLabelCard: {
+    backgroundColor: "#FFF",
+    borderRadius: 12,
+    padding: 12,
     borderWidth: 1,
     borderColor: "#0052cc",
     marginBottom: 8,
-  },
-  infoRowItem: {
-    backgroundColor: "#0052cc",
-    padding: 9,
-    borderRadius: 8,
-    marginBottom: 5,
-    flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
   },
-  infoLabelWhite: { color: "#FFFFFF", fontSize: 12, fontWeight: "800" },
-  infoValueWhite: { color: "#FFFFFF", fontSize: 12, fontWeight: "900" },
+  statusLabelText: {
+    color: "red",
+    fontSize: 13,
+    fontWeight: "900",
+  },
   tableCard: {
+    flex: 1,
     backgroundColor: "#FFF",
     borderRadius: 12,
     overflow: "hidden",
@@ -295,25 +316,26 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   cell: { fontSize: 11, color: "#1E293B", textAlign: "center", fontWeight: "600" },
+  statusText: { color: "#0052cc", fontSize: 13, marginTop: 4, marginLeft: 4, fontWeight: "800" },
   infoText: { color: "#EF4444", fontSize: 13, marginTop: 4, marginLeft: 4, fontWeight: "800" },
   footer: {
     flexDirection: "row",
-    justifyContent: "space-between",
     borderTopWidth: 1,
     borderTopColor: "#E2E8F0",
     paddingTop: 6,
   },
   btn: {
     flex: 1,
-    height: 45,
+    height: 44,
     borderRadius: 12,
     justifyContent: "center",
     alignItems: "center",
     marginHorizontal: 4,
+    elevation: 2,
   },
-  exitBtn: { backgroundColor: "#64748B" },
-  confirmBtn: { backgroundColor: "#0052cc" },
-  btnText: { color: "#FFFFFF", fontSize: 15, fontWeight: "900" },
+  btnConfirm: { backgroundColor: "#10B981" },
+  btnDisabled: { opacity: 0.5 },
+  btnText: { color: "#FFFFFF", fontSize: 14, fontWeight: "900" },
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(255, 255, 255, 0.5)",
