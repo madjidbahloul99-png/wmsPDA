@@ -1,30 +1,24 @@
 /**
  * API layer of the "Delivery Return Bill" feature.
  *
- * Two data sources share the same public functions:
+ * The calls go to the real backend "api/DeliveryReturn" of the WMS API
+ * (Controllers/DeliveryReturnNew/DeliveryReturnNewController.cs):
  *
- *   - the real backend, "api/DeliveryReturn" of the WMS API
- *     (Controllers/DeliveryReturnNew/DeliveryReturnNewController.cs), used when
- *     USE_DUMMY is switched off with setMockMode(false):
+ *   GET  api/DeliveryReturn/ScanReturnBill?returnBillCode=&warehouseCode=
+ *   GET  api/DeliveryReturn/ValidateProductSN?sn=&modelCode=
+ *   GET  api/DeliveryReturn/CheckEAN?ean=
+ *   POST api/DeliveryReturn/SaveReturnDetail        (JSON body)
  *
- *       GET  api/DeliveryReturn/ScanReturnBill?returnBillCode=&warehouseCode=
- *       GET  api/DeliveryReturn/ValidateProductSN?sn=&modelCode=
- *       GET  api/DeliveryReturn/CheckEAN?ean=
- *       POST api/DeliveryReturn/SaveReturnDetail        (JSON body)
+ * GET requests use the [FromQuery] models, the POST uses [FromBody].
+ * The answers are the envelope ApiResponse<T>: { code, message, data } (the
+ * exception middleware answers { Code, Message, Data } on errors).
  *
- *       GET requests use the [FromQuery] models, the POST uses [FromBody].
- *       The answers are the envelope ApiResponse<T>: { code, message, data }
- *       (the exception middleware answers { Code, Message, Data } on errors).
- *
- *       Every request carries the sign fields of Controllers/Model/BaseSignInfo.cs:
- *       operateUserCode / operateUserName / operateWareHouseCode /
- *       operateRandomNumber / operateSign / operateVersion, with
- *       MD5(userCode + userName + randomNumber + password salt) - the same
- *       formula as the legacy pubfunction.GetUserSign, only the field names
- *       differ (this API reads the "operate*" names).
- *
- *   - the dummy store (mockData.ts / mockStore.ts), used when USE_DUMMY is on
- *     (the default, while the backend is not deployed).
+ * Every request carries the sign fields of Controllers/Model/BaseSignInfo.cs:
+ * operateUserCode / operateUserName / operateWareHouseCode /
+ * operateRandomNumber / operateSign / operateVersion, with
+ * MD5(userCode + userName + randomNumber + password salt) - the same formula
+ * as the legacy pubfunction.GetUserSign, only the field names differ (this
+ * API reads the "operate*" names).
  */
 import * as pubfunction from "../pubfunction";
 import {
@@ -32,35 +26,12 @@ import {
   BillModelRow,
   EANCandidate,
   EANLookupResult,
-  RawReturnBillLine,
   ReturnBillLine,
   ReturnContext,
   ReturnResult,
   TraceabilityCheckResult,
   TraceabilityRecord,
 } from "./types";
-import { MOCK_SCAN_BARCODE_DETAILS } from "./mockData";
-import {
-  findUnit,
-  findUnits,
-  getAllLines,
-  getLinesByBill,
-  markReturned,
-} from "./mockStore";
-
-/**
- * Dummy data while the backend is not deployed.
- * Flip it off with setMockMode(false) to call the real "api/DeliveryReturn".
- */
-export let USE_DUMMY = true;
-
-/** Switches between the dummy store and the real API. */
-export const setMockMode = (enable: boolean): void => {
-  USE_DUMMY = enable;
-};
-
-/** Bill type of a delivery return, only used by the legacy barcode enrichment. */
-export const BILL_TYPE_RETURN = "5003";
 
 /** Base path of the feature on the WMS API. */
 export const API_PATH = "/api/DeliveryReturn";
@@ -72,9 +43,6 @@ export const SCAN_TYPE_EAN = "EAN";
 /** Status of the goods movement, "C" = the unit was already returned. */
 export const GOODS_MOVEMENT_STATUS_DONE = "C";
 
-/** Movement types that give a delivery traceability (dummy decision only). */
-export const TRACEABLE_MOVEMENT_TYPES = ["DELIVERY", "RETURN"];
-
 /** Everything the API layer needs from the global context. */
 export interface ApiContext {
   gs_BaseURL: string;
@@ -85,16 +53,6 @@ export interface ApiContext {
   gs_version: string;
   gs_classCode: string;
   gs_IPAddress: string;
-}
-
-/** Physical details of a scanned barcode, only used by the dummy flow. */
-export interface ScanBarCodeDetails {
-  palletCode: string;
-  boxCode: string;
-  imei1: string;
-  imei2: string;
-  imei3: string;
-  goodsCount: string;
 }
 
 /* ==========================================================================
@@ -124,7 +82,7 @@ export const getOperateSign = (ctx: ApiContext): Record<string, string> => {
 };
 
 /* ==========================================================================
-   Requests to the WMS API
+   Requests
    ========================================================================== */
 
 /** Unpacked answer of the WMS API (the envelope ApiResponse<T>). */
@@ -140,8 +98,7 @@ interface ApiEnvelope {
  * the exception middleware serializes { Code, Message, Data }, both are accepted.
  */
 const readEnvelope = (resData: any, httpStatus: number): ApiEnvelope => {
-  const raw =
-    resData && typeof resData === "object" ? resData : {};
+  const raw = resData && typeof resData === "object" ? resData : {};
   const code = raw.code !== undefined ? raw.code : raw.Code;
   const message = raw.message !== undefined ? raw.message : raw.Message;
   const data = raw.data !== undefined ? raw.data : raw.Data;
@@ -300,7 +257,6 @@ export const mapRawLine = (raw: any): ReturnBillLine => {
     priceHt: pickNumber(raw, ["PRICE_HT", "priceHt"]) ?? 0,
     movementStatus,
     movementDate: pickText(raw, ["GOODS_MOVEMENT_DATE", "movementDate"]),
-    // DELIVERY / ALLOCATEOUT / RETURN, only used by the dummy decision
     movementType: pickText(raw, ["DELIVERY_OR_ALLOCATEOUT", "movementType"]),
     planQty: billCount,
     doneQty,
@@ -405,85 +361,18 @@ export const aggregateByModel = (lines: ReturnBillLine[]): BillModelGroup[] => {
   });
 };
 
-/**
- * Planned and processed quantity of a model of a bill (dummy store only).
- */
-export const getModelCounts = (
-  mainBillCode: string,
-  model: string,
-  customerCode?: string
-): { planQty: number; doneQty: number; diffQty: number } => {
-  const groups = aggregateByModel(
-    getLinesByBill(mainBillCode).map((raw) => mapRawLine(raw))
-  );
-  const group = groups.find((g) => g.model === model);
-  if (!group) return { planQty: 0, doneQty: 0, diffQty: 0 };
-
-  if (customerCode) {
-    const row = group.rows.find((r) => r.customerCode === customerCode);
-    if (row) {
-      return { planQty: row.planQty, doneQty: row.doneQty, diffQty: row.diffQty };
-    }
-  }
-
-  return { planQty: group.planQty, doneQty: group.doneQty, diffQty: group.diffQty };
-};
-
-/** Builds the traceability record of a unit (dummy store only). */
-const buildTrace = (raw: RawReturnBillLine): TraceabilityRecord => {
-  const line = mapRawLine(raw);
-  const digits = (raw.GUID || "").slice(-12);
-  const details = MOCK_SCAN_BARCODE_DETAILS[raw.GUID] || {
-    palletCode: `PL${raw.OUT_BILL_CODE || ""}`,
-    boxCode: `BX${(raw.GUID || "").slice(-8)}`,
-    imei1: `860${digits}`,
-    imei2: `861${digits}`,
-    imei3: `862${digits}`,
-    goodsCount: String(line.billCount || 1),
-  };
-
-  return {
-    sn: raw.GUID,
-    lineId: line.lineId,
-    mainBillCode: line.mainBillCode,
-    outBillCode: line.outBillCode,
-    sapMainBillCode: line.mainBillCode,
-    sapUuid: "",
-    model: line.model,
-    modelDesc: line.modelDesc,
-    color: line.color,
-    ean: line.ean,
-    brand: line.brand,
-    customerCode: line.customerCode,
-    customerName: line.customerName,
-    warehouseCode: line.warehouseCode,
-    toWarehouseCode: line.toWarehouseCode,
-    deliveryDate: line.deliveryDate,
-    movementStatus: line.movementStatus,
-    movementDate: line.movementDate,
-    movementType: line.movementType,
-    productStatus: line.movementStatus,
-    palletCode: details.palletCode,
-    boxCode: details.boxCode,
-    imei1: details.imei1,
-    imei2: details.imei2,
-    imei3: details.imei3,
-    goodsCount: details.goodsCount,
-  };
-};
-
 /* ==========================================================================
-   Real requests of the WMS API
+   API 1 - the lines of the scanned return bill
    ========================================================================== */
 
 /**
- * API 1 - the lines of the scanned return bill.
+ * GET ScanReturnBill?returnBillCode=&warehouseCode=
  *
  * The server filters the bill by the logged in warehouse: when the bill is not
  * of this warehouse the answer is "No model found for this bill in your
  * warehouse", the screen shows exactly that message.
  */
-export async function remoteGetBillModels(
+export async function getBillModels(
   ctx: ApiContext,
   params: { sapMainBillCode: string }
 ): Promise<BillModelGroup[]> {
@@ -498,13 +387,20 @@ export async function remoteGetBillModels(
   return aggregateByModel(rows.map((raw) => mapRawLine(raw)));
 }
 
+/* ==========================================================================
+   API 2 - the delivery traceability of a scanned SN
+   ========================================================================== */
+
 /**
- * API 2 - the delivery traceability of a scanned SN.
+ * GET ValidateProductSN?sn=&modelCode=
  *
  * traceabilityExists = true  -> the operator goes to the confirm page
  * traceabilityExists = false -> no delivery found for this SN, the EAN page
+ *
+ * A model mismatch answers as an exception of the server, the screen shows its
+ * message: "SN model X does not match the selected model Y".
  */
-export async function remoteCheckSNTraceability(
+export async function checkSNTraceability(
   ctx: ApiContext,
   params: { sn: string; mainBillCode: string; model: string }
 ): Promise<TraceabilityCheckResult> {
@@ -554,13 +450,18 @@ export async function remoteCheckSNTraceability(
   };
 }
 
+/* ==========================================================================
+   API 3 - the models of a scanned EAN
+   ========================================================================== */
+
 /**
- * API 3 - the models of a scanned EAN.
+ * GET CheckEAN?ean=
  *
  * The EAN is matched to a model: the answer is the list of the models that
  * carry it, the operator picks the one matching the product and confirms.
+ * Identical model/color rows are shown once.
  */
-export async function remoteLookupByEAN(
+export async function lookupByEAN(
   ctx: ApiContext,
   params: { ean: string; mainBillCode: string }
 ): Promise<EANLookupResult> {
@@ -569,7 +470,6 @@ export async function remoteLookupByEAN(
     ...getOperateSign(ctx),
   });
   const rows: any[] = Array.isArray(envelope.data) ? envelope.data : [];
-  // The choice is a model, identical model/color rows are shown once
   const seen: { [key: string]: boolean } = {};
   const candidates = rows
     .map((raw) => mapEANCandidate(raw))
@@ -588,7 +488,11 @@ export async function remoteLookupByEAN(
   };
 }
 
-/** Body of the save request (ScanReturnDetailModels.cs). */
+/* ==========================================================================
+   API 4 - the save of the return
+   ========================================================================== */
+
+/** Body of the save request (SaveReturnDetailRequest). */
 const buildSaveBody = (
   ctx: ApiContext,
   payload: {
@@ -619,10 +523,7 @@ const buildSaveBody = (
 });
 
 /** Maps the answer of the save (SaveReturnDetailResponse). */
-const mapSaveResponse = (
-  payload: { context: ReturnContext; sn: string; model: string; scanType: string },
-  res: any
-): ReturnResult => ({
+const mapSaveResponse = (res: any): ReturnResult => ({
   success: true,
   planQty: pickNumber(res, ["qty"]) ?? 0,
   actualQty: pickNumber(res, ["qtyOk"]) ?? 0,
@@ -631,9 +532,13 @@ const mapSaveResponse = (
 });
 
 /**
- * API 4 - saves the return of a product with a delivery traceability.
+ * POST SaveReturnDetail (scanType = "TRACE")
+ *
+ * The server refuses an SN that was already scanned in the bill ("SN already
+ * scanned in this return bill") and a completed row ("This model is already
+ * completed"), the screens show those messages.
  */
-export async function remoteConfirmReturn(
+export async function confirmReturn(
   ctx: ApiContext,
   payload: {
     context: ReturnContext;
@@ -653,24 +558,16 @@ export async function remoteConfirmReturn(
       trace: payload.trace || null,
     })
   );
-  return mapSaveResponse(
-    {
-      context: payload.context,
-      sn: payload.sn,
-      model: payload.context.f_model,
-      scanType: SCAN_TYPE_TRACE,
-    },
-    envelope.data || {}
-  );
+  return mapSaveResponse(envelope.data || {});
 }
 
 /**
- * API 4 - saves the return of a product identified by its EAN.
+ * POST SaveReturnDetail (scanType = "EAN")
  *
  * The model is the one the operator selected in the list of the EAN page, the
  * SN is the one that had no delivery traceability.
  */
-export async function remoteSubmitReturnWithEAN(
+export async function submitReturnWithEAN(
   ctx: ApiContext,
   payload: {
     context: ReturnContext;
@@ -691,248 +588,5 @@ export async function remoteSubmitReturnWithEAN(
       trace: null,
     })
   );
-  return mapSaveResponse(
-    {
-      context: payload.context,
-      sn: payload.sn,
-      model: payload.model,
-      scanType: SCAN_TYPE_EAN,
-    },
-    envelope.data || {}
-  );
+  return mapSaveResponse(envelope.data || {});
 }
-
-/* ==========================================================================
-   Public API
-   ========================================================================== */
-
-/**
- * Page 1: loads the models of the scanned return bill.
- */
-export async function getBillModels(
-  ctx: ApiContext,
-  params: { sapMainBillCode: string }
-): Promise<BillModelGroup[]> {
-  if (USE_DUMMY) {
-    const lines = getLinesByBill(params.sapMainBillCode).map((raw) =>
-      mapRawLine(raw)
-    );
-    return aggregateByModel(lines);
-  }
-  return remoteGetBillModels(ctx, params);
-}
-
-/**
- * EAN of a model, fallback when the return bill line has no EAN (dummy only).
- */
-export async function getModelEAN(ctx: ApiContext, model: string): Promise<string> {
-  const line = getAllLines().find((raw) => raw.MODEL === model);
-  return ((line && line.CODE_EAN) || "").toUpperCase().trim();
-}
-
-/**
- * Page 2: checks whether the scanned SN has a delivery traceability.
- *
- * When the traceability is found the operator goes straight to the confirm
- * page, when the lookup fails the EAN has to be scanned (EAN page).
- */
-export async function checkSNTraceability(
-  ctx: ApiContext,
-  params: { sn: string; mainBillCode: string; model: string }
-): Promise<TraceabilityCheckResult> {
-  if (USE_DUMMY) {
-    // The products of the model that have to be scanned, the scanned SN has to
-    // be one of them (the customer is only a column of the list)
-    const list = getLinesByBill(params.mainBillCode).filter(
-      (raw) => !params.model || raw.MODEL === params.model
-    );
-    const unit = list.find((raw) => (raw.GUID || "").toUpperCase() === params.sn);
-
-    if (!unit) {
-      // the SN is not in the list of the products to return
-      const elsewhere = findUnits(params.sn);
-      if (elsewhere.length === 0) {
-        return {
-          found: false,
-          traces: [],
-          requiresEan: true,
-          error: `SN ${params.sn} not found, please scan the EAN.`,
-        };
-      }
-
-      const other = elsewhere[0];
-      if (other.MAIN_BILL_CODE !== params.mainBillCode) {
-        return {
-          found: false,
-          traces: [],
-          requiresEan: true,
-          error: `SN ${params.sn} not found on this bill, please scan the EAN.`,
-        };
-      }
-
-      return {
-        found: false,
-        traces: [],
-        requiresEan: true,
-        error: `SN ${params.sn} is of model ${other.MODEL}, not ${params.model}, please scan the EAN.`,
-      };
-    }
-
-    if (unit.GOODS_MOVEMENT_STATUS === GOODS_MOVEMENT_STATUS_DONE) {
-      // the product is already in the list of the scanned items
-      return {
-        found: false,
-        traces: [],
-        alreadyScanned: true,
-        error: "This product was already scanned.",
-      };
-    }
-
-    if (TRACEABLE_MOVEMENT_TYPES.indexOf(unit.DELIVERY_OR_ALLOCATEOUT) < 0) {
-      // the product has no delivery traceability, the EAN identifies it
-      return {
-        found: false,
-        traces: [],
-        requiresEan: true,
-        error: `SN ${params.sn} not found, please scan the EAN.`,
-      };
-    }
-
-    return { found: true, traces: [buildTrace(unit)] };
-  }
-
-  return remoteCheckSNTraceability(ctx, params);
-}
-
-/**
- * Physical details of a scanned barcode (pallet, box, IMEI), dummy only.
- */
-export async function getScanBarCodeDetails(
-  ctx: ApiContext,
-  params: { billCode: string; sn: string; model: string }
-): Promise<ScanBarCodeDetails> {
-  const unit = findUnit(params.sn);
-  const key = unit ? unit.GUID : params.sn;
-  const details = MOCK_SCAN_BARCODE_DETAILS[key];
-  return details
-    ? { ...details }
-    : { palletCode: "", boxCode: "", imei1: "", imei2: "", imei3: "", goodsCount: "1" };
-}
-
-/**
- * Page 4: confirms the return of a product that has a delivery traceability.
- */
-export async function confirmReturn(
-  ctx: ApiContext,
-  payload: {
-    context: ReturnContext;
-    sn: string;
-    trace?: TraceabilityRecord | null;
-  }
-): Promise<ReturnResult> {
-  if (USE_DUMMY) {
-    // the unit is flagged as returned in the store
-    markReturned(payload.sn);
-    const counts = getModelCounts(payload.context.f_billCode, payload.context.f_model);
-    return {
-      success: true,
-      actualQty: counts.doneQty,
-      planQty: counts.planQty,
-      productStatus: counts.doneQty >= counts.planQty ? "BILL FINISHED" : "RETURNED",
-      billFinished: counts.doneQty >= counts.planQty,
-    };
-  }
-  return remoteConfirmReturn(ctx, payload);
-}
-
-/**
- * Page 3: looks up the models of a scanned EAN.
- *
- * The EAN is matched to a model, so the list is a list of models the operator
- * chooses from; there is no automatic confirmation.
- */
-export async function lookupByEAN(
-  ctx: ApiContext,
-  params: { ean: string; mainBillCode: string }
-): Promise<EANLookupResult> {
-  if (USE_DUMMY) {
-    const ean = (params.ean || "").trim().toUpperCase();
-    const matches = getLinesByBill(params.mainBillCode).filter(
-      (raw) => (raw.CODE_EAN || "").trim().toUpperCase() === ean
-    );
-    // The choice is a model, the identical model/color rows are shown once
-    const seen: { [key: string]: boolean } = {};
-    const candidates: EANCandidate[] = [];
-    matches.forEach((raw) => {
-      const key = `${raw.MODEL}|${raw.COLOR_NAME}|${raw.CODE_EAN}`;
-      if (seen[key]) return;
-      seen[key] = true;
-      candidates.push({
-        model: raw.MODEL,
-        modelDesc: raw.MODEL_DESC,
-        colorName: raw.COLOR_NAME,
-        ean: raw.CODE_EAN,
-      });
-    });
-    return {
-      candidates,
-      message:
-        candidates.length > 0
-          ? `${candidates.length} model(s) found, please select one.`
-          : `EAN ${params.ean} not found on this bill.`,
-    };
-  }
-  return remoteLookupByEAN(ctx, params);
-}
-
-/**
- * Page 3: submits the return of a product identified by its EAN.
- *
- * The model is the one the operator selected in the list of the EAN page.
- */
-export async function submitReturnWithEAN(
-  ctx: ApiContext,
-  payload: {
-    context: ReturnContext;
-    sn: string;
-    ean: string;
-    model: string;
-  }
-): Promise<ReturnResult> {
-  if (USE_DUMMY) {
-    // the unit is flagged as returned in the store
-    console.log("submitReturnWithEAN (dummy):", payload.sn, payload.ean);
-    markReturned(payload.sn);
-    const counts = getModelCounts(payload.context.f_billCode, payload.context.f_model);
-    return {
-      success: true,
-      actualQty: counts.doneQty,
-      planQty: counts.planQty,
-      productStatus: counts.doneQty >= counts.planQty ? "BILL FINISHED" : "RETURNED (EAN)",
-      billFinished: counts.doneQty >= counts.planQty,
-    };
-  }
-  return remoteSubmitReturnWithEAN(ctx, payload);
-}
-
-/**
- * Page 2: the products of the model that were already scanned (dummy only).
- *
- * The real API has no list of the scanned items, the list is kept client side
- * by the SN page.
- */
-export async function getReturnedProducts(
-  ctx: ApiContext,
-  params: { mainBillCode: string; model: string }
-): Promise<TraceabilityRecord[]> {
-  const lines = getLinesByBill(params.mainBillCode).filter(
-    (raw) =>
-      (!params.model || raw.MODEL === params.model) &&
-      raw.GOODS_MOVEMENT_STATUS === GOODS_MOVEMENT_STATUS_DONE
-  );
-  return lines.map((raw) => buildTrace(raw));
-}
-
-/** True when the product of a traceability record is already confirmed. */
-export const isConfirmed = (trace: TraceabilityRecord): boolean =>
-  trace.movementStatus === GOODS_MOVEMENT_STATUS_DONE;

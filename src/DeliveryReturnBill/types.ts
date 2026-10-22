@@ -8,38 +8,7 @@
  *   4. DeliveryReturnBillConfirm - confirm the return (traceability found only)
  */
 
-/**
- * Raw line of the return bill, exactly as the server sends it.
- * The mapper of api.ts converts it to ReturnBillLine.
- */
-export interface RawReturnBillLine {
-  deliveryCode?: string;
-  MAIN_BILL_CODE: string;
-  OUT_BILL_CODE: string;
-  WAREHOUSE_CODE: string;
-  TO_WAREHOUSE_CODE: string;
-  CUSTOMER_CODE: string;
-  CUSTOMER_NAME: string;
-  CITY_CODE: string;
-  CITY_NAME: string;
-  ADDRESS: string;
-  CUSTOMER_TYPE: string;
-  GUID: string;
-  MODEL: string;
-  MODEL_DESC: string;
-  COLOR_NAME: string;
-  CODE_EAN: string;
-  BRAND: string;
-  MATERIAL_TYPE: string;
-  DELIVERY_DATE: string;
-  BILL_COUNT: number;
-  PRICE_HT: number;
-  GOODS_MOVEMENT_STATUS: string;
-  GOODS_MOVEMENT_DATE: string;
-  DELIVERY_OR_ALLOCATEOUT: string;
-}
-
-/** One line of the return bill, mapped to the naming used by the app. */
+/** One line of the return bill, mapped from the answer of ScanReturnBill. */
 export interface ReturnBillLine {
   /** GUID of the line / of the unit */
   lineId: string;
