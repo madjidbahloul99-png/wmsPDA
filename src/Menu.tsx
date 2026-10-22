@@ -127,10 +127,15 @@ const getMenuDetails = (menuName: string) => {
       return {
         title: "Delivery Return\nNew",
         icon: require("../assets/logomenu/DeliveryReturn.png"),
+        // Legacy delivery return flow (multi screen, menu url of the server)
+        screen: "DeliveryReturnNONewSap",
+      };
+    case "Delivery Return Bill":
+      return {
+        title: "Delivery Return\nBill",
+        icon: require("../assets/logomenu/DeliveryReturn.png"),
         // New delivery return flow (SN based return with traceability)
         screen: "DeliveryReturnBillSelect",
-        // Legacy delivery return flow, uncomment once the server menu is back on it
-        // screen: "DeliveryReturnNONewSap",
       };
     case "Return to original wh":
       return {
@@ -202,7 +207,27 @@ export default function Menu({ navigation }: any) {
           }
         }
 
-        setFilteredMenu(validMenus);
+        // The new "Delivery Return Bill" flow has no menu url of the server
+        // yet, it rides on the same permission as the legacy "Delivery Return
+        // New": one authorized entry on the server, two tiles on the screen.
+        // Once the server adds its own entry the guard skips the duplicate.
+        const menuWithName = (list: BaseMenuVo[], wanted: string) =>
+          list.some((item) => (item.menuName || "").trim() === wanted);
+        const expandedMenus: BaseMenuVo[] = [];
+        for (const menu of validMenus) {
+          expandedMenus.push(menu);
+          if (
+            (menu.menuName || "").trim() === "Delivery Return New" &&
+            !menuWithName(validMenus, "Delivery Return Bill")
+          ) {
+            expandedMenus.push({
+              menuName: "Delivery Return Bill",
+              menuValue: menu.menuValue,
+            });
+          }
+        }
+
+        setFilteredMenu(expandedMenus);
         setCurrentPage(1);
       } else if (data && !data.success) {
         pubfunction.ShowError(data.msg || "Failed to load menus list");
