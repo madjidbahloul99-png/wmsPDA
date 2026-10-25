@@ -319,7 +319,7 @@ export default function AllocateOutNONewSap({ navigation }: any) {
                 <Text style={[styles.headerCell, { width: 120 }]}>COLOR</Text>
                 <Text style={[styles.headerCell, { width: 60 }]}>QTY</Text>
                 <Text style={[styles.headerCell, { width: 60 }]}>OK</Text>
-                <Text style={[styles.headerCell, { width: 60 }]}>CY</Text>
+                <Text style={[styles.headerCell, { width: 60 }]}>Diff</Text>
                 <Text style={[styles.headerCell, { width: 100 }]}>FROM</Text>
                 <Text style={[styles.headerCell, { width: 140 }]}>TO</Text>
                 <Text style={[styles.headerCell, { width: 200 }]}>DELIVERY</Text>

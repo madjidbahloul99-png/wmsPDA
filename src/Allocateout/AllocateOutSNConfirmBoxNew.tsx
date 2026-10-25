@@ -32,6 +32,13 @@ interface SumItem {
   boxCode: string;
 }
 
+// Délai anti-rebond du scanner (même EAN reçu 2 fois très vite = ignoré)
+const SCAN_DEDUP_MS = 800;
+// Délai d'auto-validation quand le scanner n'envoie pas "Enter"
+const AUTO_SUBMIT_MS = 500;
+
+const normalize = (s: any) => String(s ?? "").toUpperCase().trim();
+
 export default function AllocateOutSNConfirmBoxNew({ navigation, route }: any) {
   const {
     f_barCode,
@@ -64,9 +71,66 @@ export default function AllocateOutSNConfirmBoxNew({ navigation, route }: any) {
   const txtEANRef = useRef<TextInput>(null);
   const scanTimerRef = useRef<any>(null);
 
+  // ---------- Protections anti double scan / double émission ----------
+  // Vrai pendant l'appel API doAddInventoryOldSNAdd : tout nouveau scan EAN est ignoré
+  const eanBusyRef = useRef(false);
+  // Vrai dès que le résultat a été envoyé à l'écran parent (ON_ALLOCATEOUT_CONFIRM_OK).
+  // Garantit qu'on n'émet JAMAIS deux fois pour le même code (EAN puis bouton Confirm,
+  // double clic sur Confirm, etc.)
+  const doneRef = useRef(false);
+  // Vrai dès que navigation.goBack() a été déclenché : évite de dépiler 2 écrans
+  const leavingRef = useRef(false);
+  // Dernier EAN accepté (anti-rebond)
+  const lastEanRef = useRef<{ code: string; ts: number }>({ code: "", ts: 0 });
+  // Évite le double chargement initial (ex: StrictMode / remontage)
+  const loadedRef = useRef(false);
+  // Évite les setState après démontage de l'écran
+  const mountedRef = useRef(true);
+
   useEffect(() => {
-    boxListShow();
+    mountedRef.current = true;
+    if (!loadedRef.current) {
+      loadedRef.current = true;
+      boxListShow();
+    }
+    return () => {
+      mountedRef.current = false;
+      if (scanTimerRef.current) {
+        clearTimeout(scanTimerRef.current);
+        scanTimerRef.current = null;
+      }
+    };
   }, []);
+
+  const clearScanTimer = () => {
+    if (scanTimerRef.current) {
+      clearTimeout(scanTimerRef.current);
+      scanTimerRef.current = null;
+    }
+  };
+
+  const clearEanInput = () => {
+    setTxtEAN("");
+    txtEANRef.current?.clear();
+  };
+
+  // goBack protégé : un seul retour possible, même en cas de double clic / double événement
+  const goBackOnce = () => {
+    if (leavingRef.current) return;
+    leavingRef.current = true;
+    navigation.goBack();
+  };
+
+  // Émission protégée : un seul ON_ALLOCATEOUT_CONFIRM_OK par ouverture de l'écran
+  const emitConfirmOk = (): boolean => {
+    if (doneRef.current) return false;
+    doneRef.current = true;
+    DeviceEventEmitter.emit("ON_ALLOCATEOUT_CONFIRM_OK", {
+      barCode: f_barCode,
+      scanType: f_scanType,
+    });
+    return true;
+  };
 
   const boxListShow = async () => {
     setLoading(true);
@@ -83,6 +147,8 @@ export default function AllocateOutSNConfirmBoxNew({ navigation, route }: any) {
         gs_PasswordSalt,
         gs_version
       );
+
+      if (!mountedRef.current) return;
 
       let isListEmpty = true;
       if (res && res.success && res.list) {
@@ -115,7 +181,6 @@ export default function AllocateOutSNConfirmBoxNew({ navigation, route }: any) {
       if (isListEmpty) {
         setShowEAN(true);
         setQtyTotalText(`This SN ${f_barCode} not exist: Already delivery or Already AllocateOut not in warehouse!`);
-        //pubfunction.ShowError('This SN '+f_barCode+'not exist: Already delivery or Already AllocateOut not in warehouse!')
         setTimeout(() => {
           txtEANRef.current?.focus();
         }, 150);
@@ -126,116 +191,121 @@ export default function AllocateOutSNConfirmBoxNew({ navigation, route }: any) {
     } catch (err: any) {
       pubfunction.ShowError(err.message || "Network Error");
     } finally {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
     }
   };
 
-  const handleEANSubmit = async (e?: any) => {
-    if (scanTimerRef.current) {
-      clearTimeout(scanTimerRef.current);
+  // ---------- Point d'entrée UNIQUE pour tout scan EAN (Enter ou auto-validation) ----------
+  const processEAN = async (raw: string) => {
+    const EAN = normalize(raw);
+    if (!EAN) return;
+
+    // 1) Verrou : un appel est en cours, ou le résultat est déjà parti, ou on quitte l'écran
+    if (eanBusyRef.current || doneRef.current || leavingRef.current) {
+      clearEanInput();
+      return;
     }
+
+    // 2) Anti-rebond : même EAN reçu 2 fois d'affilée (Enter + timer, double déclenchement)
+    const now = Date.now();
+    if (lastEanRef.current.code === EAN && now - lastEanRef.current.ts < SCAN_DEDUP_MS) {
+      clearEanInput();
+      return;
+    }
+    lastEanRef.current = { code: EAN, ts: now };
+
+    // 3) Permission
+    if ((gs_remark || "").toUpperCase() !== "EAN") {
+      pubfunction.ShowError("You don't have permission to scan EAN!");
+      clearEanInput();
+      return;
+    }
+
+    // 4) EAN incorrect
+    if (EAN !== normalize(f_modeEAN)) {
+      setQtyTotalText(`EAN error, Ok is: ${f_modeEAN}`);
+      clearEanInput();
+      return;
+    }
+
+    // 5) Scan accepté : on pose le verrou AVANT l'appel API (de façon synchrone)
+    eanBusyRef.current = true;
+    clearEanInput();
+    setLoading(true);
+
+    try {
+      const oldSNIsOk = await allocateOutClient.doAddInventoryOldSNAdd(
+        gs_BaseURL,
+        f_barCode,
+        EAN,
+        f_model,
+        gs_wareCode,
+        gs_classCode,
+        f_brand,
+        f_guid,
+        gs_userCode,
+        gs_userName,
+        gs_PasswordSalt,
+        gs_version
+      );
+
+      if (oldSNIsOk && oldSNIsOk.success) {
+        // Un seul événement vers le parent, un seul goBack
+        emitConfirmOk();
+        goBackOnce();
+      } else if (mountedRef.current) {
+        setQtyTotalText(oldSNIsOk?.msg || "doAddInventoryOldSNAdd error!");
+      }
+    } catch (err: any) {
+      if (mountedRef.current) {
+        setQtyTotalText(err?.message || "doAddInventoryOldSNAdd error!");
+      }
+    } finally {
+      eanBusyRef.current = false;
+      if (mountedRef.current) {
+        setLoading(false);
+        setTxtEAN("");
+      }
+    }
+  };
+
+  const handleEANSubmit = (e?: any) => {
+    clearScanTimer();
     let EAN = txtEAN;
     if (e && e.nativeEvent && e.nativeEvent.text !== undefined) {
       EAN = e.nativeEvent.text;
     }
-    EAN = EAN.toUpperCase().trim();
-    if (EAN.length > 0) {
-      if ((gs_remark || "").toUpperCase() !== "EAN") {
-        pubfunction.ShowError("You don't have permission to scan EAN!");
-        setTxtEAN("");
-        return;
-      }
-      if (EAN === f_modeEAN) {
-        setLoading(true);
-        try {
-          const oldSNIsOk = await allocateOutClient.doAddInventoryOldSNAdd(
-            gs_BaseURL,
-            f_barCode,
-            EAN,
-            f_model,
-            gs_wareCode,
-            gs_classCode,
-            f_brand,
-            f_guid,
-            gs_userCode,
-            gs_userName,
-            gs_PasswordSalt,
-            gs_version
-          );
-          if (oldSNIsOk && oldSNIsOk.success) {
-            DeviceEventEmitter.emit("ON_ALLOCATEOUT_CONFIRM_OK", { barCode: f_barCode, scanType: f_scanType });
-            navigation.goBack();
-          } else {
-            setQtyTotalText(oldSNIsOk.msg || "doAddInventoryOldSNAdd error!");
-          }
-        } catch (err: any) {
-          setQtyTotalText(err.message || "doAddInventoryOldSNAdd error!");
-        } finally {
-          setLoading(false);
-          setTxtEAN("");
-        }
-      } else {
-        setQtyTotalText(`EAN error, Ok is: ${f_modeEAN}`);
-        setTxtEAN("");
-      }
-    }
+    processEAN(EAN);
   };
 
   const handleEANTextChange = (text: string) => {
-    setTxtEAN(text);
-    if (scanTimerRef.current) {
-      clearTimeout(scanTimerRef.current);
+    // Pendant un traitement, on vide le champ et on ignore les caractères reçus
+    if (eanBusyRef.current || doneRef.current || leavingRef.current) {
+      clearScanTimer();
+      setTxtEAN("");
+      return;
     }
-    scanTimerRef.current = setTimeout(async () => {
-      const EAN = text.toUpperCase().trim();
-      if (EAN.length > 0) {
-        if ((gs_remark || "").toUpperCase() !== "EAN") {
-          pubfunction.ShowError("You don't have permission to scan EAN!");
-          setTxtEAN("");
-          return;
-        }
-        if (EAN === f_modeEAN) {
-          setLoading(true);
-          try {
-            const oldSNIsOk = await allocateOutClient.doAddInventoryOldSNAdd(
-              gs_BaseURL,
-              f_barCode,
-              EAN,
-              f_model,
-              gs_wareCode,
-              gs_classCode,
-              f_brand,
-              f_guid,
-              gs_userCode,
-              gs_userName,
-              gs_PasswordSalt,
-              gs_version
-            );
-            if (oldSNIsOk && oldSNIsOk.success) {
-              DeviceEventEmitter.emit("ON_ALLOCATEOUT_CONFIRM_OK", { barCode: f_barCode, scanType: f_scanType });
-              navigation.goBack();
-            } else {
-              setQtyTotalText(oldSNIsOk.msg || "doAddInventoryOldSNAdd error!");
-            }
-          } catch (err: any) {
-            setQtyTotalText(err.message || "doAddInventoryOldSNAdd error!");
-          } finally {
-            setLoading(false);
-            setTxtEAN("");
-          }
-        } else {
-          setQtyTotalText(`EAN error, Ok is: ${f_modeEAN}`);
-          setTxtEAN("");
-        }
-      }
-    }, 500);
+
+    setTxtEAN(text);
+    clearScanTimer();
+    scanTimerRef.current = setTimeout(() => {
+      scanTimerRef.current = null;
+      processEAN(text);
+    }, AUTO_SUBMIT_MS);
   };
 
   const handleConfirmClick = () => {
+    // Ignore les clics pendant l'appel EAN ou si on est déjà en train de quitter
+    if (eanBusyRef.current || leavingRef.current) return;
     if (items.length >= 1) {
-      DeviceEventEmitter.emit("ON_ALLOCATEOUT_CONFIRM_OK", { barCode: f_barCode, scanType: f_scanType });
+      emitConfirmOk();
     }
-    navigation.goBack();
+    goBackOnce();
+  };
+
+  const handleBackClick = () => {
+    if (eanBusyRef.current) return;
+    goBackOnce();
   };
 
   const renderItem = ({ item, index }: { item: SumItem; index: number }) => (
@@ -259,7 +329,7 @@ export default function AllocateOutSNConfirmBoxNew({ navigation, route }: any) {
 
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <TouchableOpacity onPress={() => navigation.goBack()} activeOpacity={0.7}>
+          <TouchableOpacity onPress={handleBackClick} activeOpacity={0.7}>
             <Image source={require("../../assets/logo/left.png")} style={styles.returnLogo} resizeMode="contain" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Allocate Out Confirm</Text>
@@ -295,12 +365,13 @@ export default function AllocateOutSNConfirmBoxNew({ navigation, route }: any) {
                 style={styles.input}
                 value={txtEAN}
                 onChangeText={handleEANTextChange}
-                //onSubmitEditing={handleEANSubmit}
+                onSubmitEditing={handleEANSubmit}
                 placeholder=" SCAN EAN"
                 placeholderTextColor="#64748B"
                 autoCapitalize="characters"
                 selectTextOnFocus={true}
                 showSoftInputOnFocus={showKeyboard}
+                blurOnSubmit={false}
               />
             </View>
           </View>
@@ -341,7 +412,11 @@ export default function AllocateOutSNConfirmBoxNew({ navigation, route }: any) {
         </View>
 
         <View style={styles.footer}>
-          <TouchableOpacity style={[styles.btn, styles.confirmBtn]} onPress={handleConfirmClick}>
+          <TouchableOpacity
+            style={[styles.btn, styles.confirmBtn]}
+            onPress={handleConfirmClick}
+            disabled={loading}
+          >
             <Text style={styles.btnText}>Confirm</Text>
           </TouchableOpacity>
         </View>

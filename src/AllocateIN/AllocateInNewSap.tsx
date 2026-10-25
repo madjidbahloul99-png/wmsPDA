@@ -19,6 +19,13 @@ import { useGlobalStr } from "../../GlobalStrContext";
 import * as pubfunction from "../pubfunction";
 import * as allocateInClient from "./allocateInNONewSapClient";
 
+// Même code scanné dans cet intervalle = ignoré
+const DUPLICATE_WINDOW_MS = 2000;
+// Même insertion (code + type) dans cet intervalle = ignorée
+const INSERT_DUPLICATE_WINDOW_MS = 3000;
+// Si la navigation n'a pas eu lieu, on libère le verrou après ce délai
+const NAV_LOCK_FAILSAFE_MS = 1500;
+
 interface ItemVO {
   id: string;
   scanBarCode: string;
@@ -61,16 +68,34 @@ export default function AllocateInNewSap({ navigation, route }: any) {
   const txtSNRef = useRef<TextInput>(null);
   const scanTimerRef = useRef<any>(null);
 
+  // Protections anti double scan / double insertion
+  const isScanning = useRef(false);
+  const dealing = useRef(false);
+  const listLoading = useRef(false);
+  const lastScan = useRef<{ code: string; time: number }>({ code: "", time: 0 });
+  const lastInsert = useRef<{ key: string; time: number }>({ key: "", time: 0 });
+  const lockTimer = useRef<any>(null);
+  const itemsRef = useRef<ItemVO[]>([]);
+
+  // Toujours la dernière liste, même depuis un timer ou un listener
+  useEffect(() => {
+    itemsRef.current = items;
+  }, [items]);
+
   useEffect(() => {
     if (f_systemDeliveryCode) {
       getListFinishBoxList();
     }
 
     const confirmSub = DeviceEventEmitter.addListener("ON_ALLOCATEIN_CONFIRM_OK", (data: any) => {
+       if (!data?.barCode) return;
        palletDeal(data.barCode, data.scanType);
     });
 
     const focusSub = navigation.addListener("focus", () => {
+      // Retour sur l'écran : on libère le verrou de scan
+      clearTimeout(lockTimer.current);
+      isScanning.current = false;
       setTimeout(() => {
         txtSNRef.current?.focus();
       }, 150);
@@ -86,6 +111,7 @@ export default function AllocateInNewSap({ navigation, route }: any) {
       confirmSub.remove();
       focusSub();
       clearInterval(interval);
+      clearTimeout(lockTimer.current);
       if (scanTimerRef.current) {
         clearTimeout(scanTimerRef.current);
       }
@@ -93,6 +119,7 @@ export default function AllocateInNewSap({ navigation, route }: any) {
   }, []);
 
   const getListFinishBoxList = async () => {
+    listLoading.current = true;
     setLoading(true);
     try {
       setTxtSource(`${gs_wareCode}#${f_fromck}`);
@@ -133,35 +160,77 @@ export default function AllocateInNewSap({ navigation, route }: any) {
     } catch (err: any) {
       pubfunction.ShowError(err?.message || "Network Error");
     } finally {
+      listLoading.current = false;
       setLoading(false);
     }
+  };
+
+  // Sécurité : si la navigation n'a pas abouti, on ne reste pas bloqué
+  const armLockFailsafe = () => {
+    clearTimeout(lockTimer.current);
+    lockTimer.current = setTimeout(() => {
+      if (navigation.isFocused()) {
+        isScanning.current = false;
+      }
+    }, NAV_LOCK_FAILSAFE_MS);
+  };
+
+  // Point d'entrée unique pour un scan (timer ou submit)
+  const submitBarcode = (raw: string) => {
+    const SN = raw.toUpperCase().trim();
+
+    // On vide toujours l'input, même si le scan est ignoré ensuite,
+    // pour que le scan suivant ne soit jamais concaténé à l'ancien.
+    setTxtSN("");
+
+    if (!SN) return;
+
+    // Scan déjà en cours, insertion en cours ou liste pas encore chargée
+    if (isScanning.current || dealing.current || listLoading.current) return;
+
+    // Écran en arrière-plan (confirmation ouverte) : on ignore
+    if (!navigation.isFocused()) return;
+
+    // Anti-doublon : même code dans les 2 secondes = ignoré
+    const now = Date.now();
+    if (
+      lastScan.current.code === SN &&
+      now - lastScan.current.time < DUPLICATE_WINDOW_MS
+    ) {
+      return;
+    }
+    lastScan.current = { code: SN, time: now };
+
+    const isAlreadyScanned = itemsRef.current.some(
+      item => item.scanBarCode && item.scanBarCode.toUpperCase() === SN
+    );
+    if (isAlreadyScanned) {
+      pubfunction.ShowError(SN + "  This barcode has already been scanned!");
+      setTimeout(() => { txtSNRef.current?.focus(); }, 150);
+      return;
+    }
+
+    const scanType = pubfunction.getBarcodeType(SN);
+
+    // Verrou actif jusqu'au retour sur l'écran (libéré par le listener "focus")
+    isScanning.current = true;
+    armLockFailsafe();
+    navigation.navigate("AllocateInSNConfirmBoxNew", {
+       f_systemDeliveryCode: f_systemDeliveryCode,
+       f_barCode: SN,
+       f_scanType: scanType,
+       f_model: f_model,
+       f_fromck: f_fromck,
+       f_guid: f_guid,
+       f_brand: f_brand
+    });
   };
 
   const handleSNSubmit = () => {
     if (scanTimerRef.current) {
       clearTimeout(scanTimerRef.current);
     }
-    const SN = txtSN.toUpperCase().trim();
-    if (SN.length > 0) {
-      const isAlreadyScanned = items.some(item => item.scanBarCode && item.scanBarCode.toUpperCase() === SN);
-      if (isAlreadyScanned) {
-        pubfunction.ShowError(SN + "  This barcode has already been scanned!");
-        setTxtSN("");
-        setTimeout(() => { txtSNRef.current?.focus(); }, 150);
-        return;
-      }
-      const scanType = pubfunction.getBarcodeType(SN);
-      navigation.navigate("AllocateInSNConfirmBoxNew", {
-         f_systemDeliveryCode: f_systemDeliveryCode,
-         f_barCode: SN,
-         f_scanType: scanType,
-         f_model: f_model,
-         f_fromck: f_fromck,
-         f_guid: f_guid,
-         f_brand: f_brand
-      });
-      setTxtSN("");
-    }
+    submitBarcode(txtSN);
   };
 
   const handleTextChange = (text: string) => {
@@ -176,31 +245,30 @@ export default function AllocateInNewSap({ navigation, route }: any) {
     if (!trimmed) return;
 
     scanTimerRef.current = setTimeout(() => {
-      const SN = trimmed.toUpperCase();
-      const isAlreadyScanned = items.some(item => item.scanBarCode && item.scanBarCode.toUpperCase() === SN);
-      if (isAlreadyScanned) {
-        pubfunction.ShowError(SN + "  This barcode has already been scanned!");
-        setTxtSN("");
-        setTimeout(() => { txtSNRef.current?.focus(); }, 150);
-        return;
-      }
-      
-      const scanType = pubfunction.getBarcodeType(SN);
-      navigation.navigate("AllocateInSNConfirmBoxNew", {
-         f_systemDeliveryCode: f_systemDeliveryCode,
-         f_barCode: trimmed.toUpperCase(),
-         f_scanType: scanType,
-         f_model: f_model,
-         f_fromck: f_fromck,
-         f_guid: f_guid,
-         f_brand: f_brand
-      });
-      setTxtSN("");
+      submitBarcode(trimmed);
     }, 300);
   };
 
   const palletDeal = async (barCode: string, scanType: string) => {
+    if (!barCode) return;
+
+    // Une insertion est déjà en cours
+    if (dealing.current) return;
+
+    // Même insertion déjà faite à l'instant (ex : événement émis deux fois)
+    const key = `${barCode}|${scanType}`;
+    const now = Date.now();
+    if (
+      lastInsert.current.key === key &&
+      now - lastInsert.current.time < INSERT_DUPLICATE_WINDOW_MS
+    ) {
+      return;
+    }
+    lastInsert.current = { key, time: now };
+    dealing.current = true;
+
     setLoading(true);
+    let success = false;
     try {
       const res = await allocateInClient.doAllocateWarehouseInStorage(
         gs_BaseURL,
@@ -219,6 +287,8 @@ export default function AllocateInNewSap({ navigation, route }: any) {
         gs_PasswordSalt,
         gs_version
       );
+
+      success = !!(res && res.success);
 
       if (res && res.success && res.data) {
         const vo = typeof res.data === "string" ? JSON.parse(res.data) : res.data;
@@ -257,6 +327,9 @@ export default function AllocateInNewSap({ navigation, route }: any) {
     } catch (err: any) {
       pubfunction.ShowError(err.message || "Network Error");
     } finally {
+      dealing.current = false;
+      // En cas d'échec, on autorise un nouvel essai immédiat
+      if (!success) lastInsert.current.time = 0;
       setLoading(false);
       setTimeout(() => { txtSNRef.current?.focus(); }, 150);
     }

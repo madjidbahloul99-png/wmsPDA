@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
-SafeAreaView } from "react-native-safe-area-context";
+  SafeAreaView } from "react-native-safe-area-context";
 import {
   View,
   Text,
@@ -32,6 +32,17 @@ interface SumItem {
   boxCode: string;
 }
 
+// ---------------------------------------------------------------------------
+// Protection anti double scan (niveau module, partagée entre les instances)
+// Une seule fenêtre de confirmation à la fois pour un même barcode (+ type).
+// Si une 2e instance de cet écran s'ouvre pour le même barcode (double scan,
+// double navigate...), elle se referme immédiatement sans appeler l'API.
+// ---------------------------------------------------------------------------
+let activeConfirm: { id: string; key: string } | null = null;
+
+const buildKey = (barCode: any, scanType: any) =>
+  `${String(barCode ?? "").toUpperCase().trim()}|${String(scanType ?? "")}`;
+
 export default function AllocateInSNConfirmBoxNew({ navigation, route }: any) {
   const {
     f_systemDeliveryCode,
@@ -52,14 +63,58 @@ export default function AllocateInSNConfirmBoxNew({ navigation, route }: any) {
   } = useGlobalStr();
 
   const [items, setItems] = useState<SumItem[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [confirming, setConfirming] = useState(false);
   const [qtyTotalText, setQtyTotalText] = useState("");
 
+  // Identifiant unique de cette instance d'écran
+  const instanceId = useRef(`${Date.now()}-${Math.random()}`).current;
+  // Écran en cours de fermeture : un seul goBack autorisé
+  const closingRef = useRef(false);
+  // Confirmation déjà déclenchée : un seul envoi autorisé
+  const confirmedRef = useRef(false);
+  // Appel API déjà en cours
+  const fetchingRef = useRef(false);
+  // Écran encore monté
+  const mountedRef = useRef(true);
+
+  // Un seul goBack, quoi qu'il arrive (double clic, erreur API + clic, etc.)
+  const safeGoBack = () => {
+    if (closingRef.current) return;
+    closingRef.current = true;
+    navigation.goBack();
+  };
+
   useEffect(() => {
+    mountedRef.current = true;
+    const key = buildKey(f_barCode, f_scanType);
+
+    // Une autre instance gère déjà ce barcode : on est un doublon, on se ferme
+    if (activeConfirm && activeConfirm.key === key && activeConfirm.id !== instanceId) {
+      console.log("Doublon écran confirmation ignoré:", key);
+      safeGoBack();
+      return () => {
+        mountedRef.current = false;
+      };
+    }
+
+    // On prend le verrou pour ce barcode
+    activeConfirm = { id: instanceId, key };
     boxListShow();
+
+    return () => {
+      mountedRef.current = false;
+      // On ne libère que notre propre verrou
+      if (activeConfirm && activeConfirm.id === instanceId) {
+        activeConfirm = null;
+      }
+    };
   }, []);
 
   const boxListShow = async () => {
+    // Déjà en cours : on ignore le second appel
+    if (fetchingRef.current) return;
+    fetchingRef.current = true;
     setLoading(true);
 
     console.log("SN envoyé API:", f_barCode);
@@ -77,6 +132,9 @@ export default function AllocateInSNConfirmBoxNew({ navigation, route }: any) {
         gs_PasswordSalt,
         gs_version
       );
+
+      // L'écran a été quitté pendant l'appel : on ne touche plus à rien
+      if (!mountedRef.current || closingRef.current) return;
 
       if (res && res.success && res.list) {
          const listObj = typeof res.list === "string" ? JSON.parse(res.list) : res.list;
@@ -104,23 +162,29 @@ export default function AllocateInSNConfirmBoxNew({ navigation, route }: any) {
             pubfunction.ShowError(res.msg);
          }
          setQtyTotalText("0");
-         navigation.goBack();
+         safeGoBack();
       }
     } catch (err: any) {
+      if (!mountedRef.current || closingRef.current) return;
       pubfunction.ShowError(err?.message || "Network Error");
       setQtyTotalText("0");
-      navigation.goBack();
+      safeGoBack();
     } finally {
-      setLoading(false);
+      fetchingRef.current = false;
+      if (mountedRef.current) setLoading(false);
     }
   };
 
-
   const handleConfirmClick = () => {
+    // Chargement en cours, déjà confirmé ou écran en fermeture : on ignore
+    if (loading || confirmedRef.current || closingRef.current) return;
+    confirmedRef.current = true;
+    setConfirming(true);
+
     if (items.length >= 1) {
        DeviceEventEmitter.emit("ON_ALLOCATEIN_CONFIRM_OK", { barCode: f_barCode, scanType: f_scanType });
     }
-    navigation.goBack();
+    safeGoBack();
   };
 
   const renderItem = ({ item, index }: { item: SumItem; index: number }) => (
@@ -138,13 +202,15 @@ export default function AllocateInSNConfirmBoxNew({ navigation, route }: any) {
     </View>
   );
 
+  const confirmDisabled = loading || confirming;
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
 
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <TouchableOpacity onPress={() => navigation.goBack()} activeOpacity={0.7}>
+          <TouchableOpacity onPress={safeGoBack} activeOpacity={0.7}>
             <Image source={require("../../assets/logo/left.png")} style={styles.returnLogo} resizeMode="contain" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Allocate In Confirm</Text>
@@ -189,7 +255,12 @@ export default function AllocateInSNConfirmBoxNew({ navigation, route }: any) {
         </View>
 
         <View style={styles.footer}>
-          <TouchableOpacity style={[styles.btn, styles.confirmBtn]} onPress={handleConfirmClick}>
+          <TouchableOpacity
+            style={[styles.btn, styles.confirmBtn, confirmDisabled && styles.btnDisabled]}
+            onPress={handleConfirmClick}
+            disabled={confirmDisabled}
+            activeOpacity={0.8}
+          >
             <Text style={styles.btnText}>Confirm</Text>
           </TouchableOpacity>
         </View>
@@ -292,6 +363,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   confirmBtn: { backgroundColor: "#0052cc" },
+  btnDisabled: { opacity: 0.5 },
   btnText: { color: "#FFFFFF", fontSize: 15, fontWeight: "900" },
   totalRow: {
     padding: 10,

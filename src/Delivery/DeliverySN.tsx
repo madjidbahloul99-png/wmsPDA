@@ -9,7 +9,6 @@ import {
   ScrollView,
   StatusBar,
   ActivityIndicator,
-  Alert,
   Image,
   Dimensions,
   DeviceEventEmitter,
@@ -25,6 +24,32 @@ interface ScannedBillItem {
   goodsCount: string;
   scanBarCodeType: string;
 }
+
+// ---- Anti double-scan settings ----
+const SCAN_DEBOUNCE_MS = 500;       // silence needed to consider a scan finished (no terminator)
+const DUPLICATE_WINDOW_MS = 1500;   // same code received twice within this window = scanner bounce
+const REQUEST_TIMEOUT_MS = 20000;   // RN Android fetch has no timeout by default
+const NAV_LOCK_FALLBACK_MS = 1500;  // release the navigation lock if navigate() did not leave this screen
+
+/**
+ * Converts the server list to table rows + total quantity
+ */
+const mapScannedList = (rawList: any[]) => {
+  let total = 0;
+  const list: ScannedBillItem[] = rawList.map((item: any, idx: number) => {
+    const count = parseInt(item.goodsCount || "0") || 0;
+    total = total + count;
+    return {
+      id: idx.toString(),
+      scanBarCode: item.scanBarCode || "",
+      model: item.model || "",
+      color: item.color || "",
+      goodsCount: String(count),
+      scanBarCodeType: item.scanBarCodeType || "",
+    };
+  });
+  return { list, total };
+};
 
 export default function DeliverySN({ navigation, route }: any) {
   const {
@@ -56,7 +81,6 @@ export default function DeliverySN({ navigation, route }: any) {
   const [txtQty, setTxtQty] = useState("");
   const [totalScannedCount, setTotalScannedCount] = useState(0);
 
-  const [sn, setSn] = useState("");
   const [loading, setLoading] = useState(false);
   const [scannedList, setScannedList] = useState<ScannedBillItem[]>([]);
 
@@ -69,8 +93,69 @@ export default function DeliverySN({ navigation, route }: any) {
     "waiting" | "scanning" | "success" | "error"
   >("waiting");
 
+  // ---- Refs used to avoid double scan / double insert ----
+  // true while doWarehouseOutStorage is running (synchronous lock, unlike a state)
+  const isSubmittingRef = useRef(false);
+  // false while another screen (confirm) is on top or navigation is in progress
+  const screenActiveRef = useRef(true);
+  // last scanned code + time, to ignore scanner bounces
+  const lastScanRef = useRef<{ code: string; time: number }>({ code: "", time: 0 });
+  // codes already accepted by the server during this screen session
+  const submittedCodesRef = useRef<Set<string>>(new Set());
+  // always-fresh copy of scannedList (avoids stale closures in timers/listeners)
+  const scannedListRef = useRef<ScannedBillItem[]>([]);
+  scannedListRef.current = scannedList;
+  // always-fresh handlers for timers and DeviceEventEmitter listeners
+  const handlersRef = useRef<any>({});
+
   const ensureFocus = () => {
+    // Do not steal the focus while the confirm screen is displayed
+    if (!screenActiveRef.current) return;
     snInputRef.current?.focus();
+  };
+
+  /**
+   * Signed POST (form-urlencoded) with timeout. Throws on HTTP error / timeout.
+   */
+  const postForm = async (url: string, payload: any) => {
+    const signedQo = pubfunction.SetUserSignInfo(
+      payload,
+      gs_userCode,
+      gs_userName,
+      "2",
+      gs_PasswordSalt,
+      gs_version,
+      "en_US"
+    );
+
+    const formBody = Object.keys(signedQo)
+      .map(key => encodeURIComponent(key) + '=' + encodeURIComponent((signedQo as any)[key]))
+      .join('&');
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: formBody,
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP Error: ${response.status}`);
+      }
+
+      return await response.json();
+    } catch (err: any) {
+      if (err && err.name === "AbortError") {
+        throw new Error("Request timeout, please check the network.");
+      }
+      throw err;
+    } finally {
+      clearTimeout(timer);
+    }
   };
 
   /**
@@ -78,40 +163,14 @@ export default function DeliverySN({ navigation, route }: any) {
    */
   const getModelEAN = async () => {
     try {
-      const urlCur = `${gs_BaseURL}/basedata/model/getListByCondition`;
-      const qo = {
+      const resData = await postForm(`${gs_BaseURL}/basedata/model/getListByCondition`, {
         model: model || "",
-      };
-
-      const signedQo = pubfunction.SetUserSignInfo(
-        qo,
-        gs_userCode,
-        gs_userName,
-        "2",
-        gs_PasswordSalt,
-        gs_version,
-        "en_US"
-      );
-
-      const formBody = Object.keys(signedQo).map(key => encodeURIComponent(key) + '=' + encodeURIComponent((signedQo as any)[key])).join('&');
-      const response = await fetch(urlCur, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: formBody,
       });
 
-      if (!response.ok) {
-        setFModeEan("ean Error");
-        return;
-      }
-
-      const resData = await response.json();
-      console.log("getModelEAN  " + resData.list)
+      console.log("getModelEAN  " + resData?.list);
       if (resData && resData.success && resData.list) {
         const rawList = typeof resData.list === "string" ? JSON.parse(resData.list) : resData.list;
-        console.log("rawList  " + rawList)
         if (rawList && rawList.length > 0) {
-
           setFModeEan((rawList[0].ean || "").toUpperCase());
           return;
         }
@@ -128,73 +187,231 @@ export default function DeliverySN({ navigation, route }: any) {
   const getListFinishBoxList = async (isSilent = false) => {
     if (!isSilent) setLoading(true);
     try {
-      const urlCur = `${gs_BaseURL}/warehouse/billInfo/getDeliveryInfoByOperatorBatch`;
-      const billType = "5000";
-
-      const qo = {
+      const resData = await postForm(`${gs_BaseURL}/warehouse/billInfo/getDeliveryInfoByOperatorBatch`, {
         billCode: systemDeliveryCode || "",
-        billType: billType,
+        billType: "5000",
         model: model || "",
         operatorBatchCode: deliveryCode || "",
         guid: guid || "",
-      };
-
-      const signedQo = pubfunction.SetUserSignInfo(
-        qo,
-        gs_userCode,
-        gs_userName,
-        "2",
-        gs_PasswordSalt,
-        gs_version,
-        "en_US"
-      );
-
-      const formBody = Object.keys(signedQo).map(key => encodeURIComponent(key) + '=' + encodeURIComponent((signedQo as any)[key])).join('&');
-      const response = await fetch(urlCur, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: formBody,
       });
 
-      if (!response.ok) {
-        throw new Error(`HTTP Error: ${response.status}`);
-      }
-
-      const resData = await response.json();
-      console.log("getListFinishBoxList  " + resData.success)
+      console.log("getListFinishBoxList  " + resData?.success);
       if (resData && resData.success && resData.list) {
-
         const rawList = typeof resData.list === "string" ? JSON.parse(resData.list) : resData.list;
-        let qtyTotal = 0;
-        const listBox = rawList.map((item: any, idx: number) => {
-          const count = parseInt(item.goodsCount || "0") || 0;
-          qtyTotal = qtyTotal + count;
-
-          return {
-            id: idx.toString(),
-            scanBarCode: item.scanBarCode || "",
-            model: item.model || "",
-            color: item.color || "",
-            goodsCount: String(count),
-            scanBarCodeType: item.scanBarCodeType || "",
-          };
-
-        });
+        const { list, total } = mapScannedList(rawList);
 
         // to#from
         setTxtSource((customerCode || "") + "#" + gs_wareCode);
-        setScannedList(listBox);
-        setTotalScannedCount(qtyTotal);
-      } else {
-        if (resData && !resData.success) {
-          pubfunction.ShowError(resData.msg || "Failed to load finished items list");
-        }
+        setScannedList(list);
+        setTotalScannedCount(total);
+      } else if (resData && !resData.success) {
+        pubfunction.ShowError(resData.msg || "Failed to load finished items list");
       }
     } catch (err: any) {
       pubfunction.ShowError("Failed to fetch scanned details: " + err.message);
     } finally {
-      setLoading(false);
+      if (!isSilent) setLoading(false);
     }
+  };
+
+  /**
+   * Applies the server result (deliveryCount + list) - identical to C# palletDeal.
+   * Returns true when the delivery is completed (screen closed).
+   */
+  const applyDeliveryResult = (voAndData: any): boolean => {
+    const currentBillCount = parseInt(voAndData.deliveryCount?.currentBillCount || "0") || 0;
+    const allDeliveryCount = parseInt(voAndData.deliveryCount?.allDeliveryCount || "0") || 0;
+
+    setTxtSource((customerCode || "") + "#" + gs_wareCode);
+    setTxtQty(`${allDeliveryCount}/${currentBillCount}`);
+
+    if (allDeliveryCount >= currentBillCount) {
+      // 发货完成 关闭
+      pubfunction.ShowError("The delivery of documents has already shipped completed!");
+      navigation.goBack();
+      return true;
+    }
+
+    if (voAndData.warehouseSumByScanBarCodeList) {
+      const { list, total } = mapScannedList(voAndData.warehouseSumByScanBarCodeList);
+      setScannedList(list);
+      setTotalScannedCount(total);
+    } else {
+      getListFinishBoxList(true);
+    }
+    return false;
+  };
+
+  /**
+   * Matches palletDeal inside C#
+   */
+  const palletDeal = async (SN: string, scanType: string) => {
+    const code = (SN || "").toUpperCase().trim();
+    if (!code) return;
+
+    // 1) Never run two submissions at the same time (set synchronously, before any await)
+    if (isSubmittingRef.current) {
+      console.log("palletDeal ignored (already submitting):", code);
+      return;
+    }
+
+    // 2) Never send again a barcode already accepted by the server
+    if (submittedCodesRef.current.has(code)) {
+      setScanState("error");
+      pubfunction.ShowError(code + "  This barcode has already been scanned!");
+      return;
+    }
+
+    isSubmittingRef.current = true;
+    setLoading(true);
+    setScanState("scanning");
+    try {
+      const resData = await postForm(`${gs_BaseURL}/warehouse/billInfo/doWarehouseOutStorage`, {
+        billCode: systemDeliveryCode || "",
+        billType: "5000",
+        warehouseCode: gs_wareCode,
+        customerCode: customerCode || "",
+        storageCode: "",
+        scanBarCode: pubfunction.PostSpecialStr(SN || ""),
+        scanBarCodeType: scanType || "",
+        scanCount: "",
+        materialCode: model || "",
+        operatorBatch: deliveryCode || "",
+        classCode: gs_classCode || "01",
+        remark: "",
+        workStationType: "delivery",
+        sapMainBillCode: sapMainBillCode || "",
+        guid: guid || "",
+        brand: brand || "",
+        deviceIp: gs_IPAddress,
+      });
+
+      console.log("REST doWarehouseOutStorage response:", resData);
+
+      if (resData && resData.success) {
+        // The server accepted it: remember it so it can never be sent twice
+        submittedCodesRef.current.add(code);
+
+        if (resData.data) {
+          if (applyDeliveryResult(resData.data)) return;
+        } else {
+          // success without data: just reload the list
+          getListFinishBoxList(true);
+        }
+
+        snInputRef.current?.clear();
+        setScanState("success");
+      } else {
+        const errMsg = resData ? resData.msg : "Failed to execute out storage";
+        pubfunction.ShowError(errMsg);
+        setScanState("error");
+      }
+    } catch (err: any) {
+      // Unknown outcome (timeout / network): the server may have inserted the barcode.
+      // Resync the list so the duplicate check relies on the real server state.
+      getListFinishBoxList(true);
+      pubfunction.ShowError(
+        (err.message || "Failed to execute out storage") +
+          "\nCheck the scanned list before scanning again."
+      );
+      setScanState("error");
+    } finally {
+      isSubmittingRef.current = false;
+      setLoading(false);
+      setTimeout(() => {
+        snInputRef.current?.focus();
+      }, 150);
+    }
+  };
+
+  /**
+   * Primary processing of scanned parameters 100% equivalent to txtSN_KeyDown callback
+   */
+  const processScannedInput = (scannedCode: string) => {
+    const SN = scannedCode.toUpperCase().trim();
+    if (SN.length === 0) return;
+
+    snInputRef.current?.clear(); // Clear text input immediately
+
+    // Ignore scans while the confirm screen is on top, while navigating, or while a request is running
+    if (!screenActiveRef.current || isSubmittingRef.current) {
+      console.log("scan ignored (screen busy):", SN);
+      return;
+    }
+
+    // Ignore scanner double trigger (same code received twice in a short time)
+    const now = Date.now();
+    if (lastScanRef.current.code === SN && now - lastScanRef.current.time < DUPLICATE_WINDOW_MS) {
+      console.log("scan ignored (duplicate within window):", SN);
+      return;
+    }
+    lastScanRef.current = { code: SN, time: now };
+
+    console.log("before SN =", SN);
+    const scanType = pubfunction.getBarcodeType(SN);
+    console.log("scanType", scanType);
+
+    // EAN prefix checker identical to Substring(0,3) == "613"
+    if (SN.substring(0, 3) === "613") {
+      setScanState("error");
+      pubfunction.ShowError("Please scan SN/BOX/PALLET,  this is EAN(starts with 613)!");
+      setTimeout(() => snInputRef.current?.focus(), 100);
+      return;
+    }
+
+    // Already scanned: either accepted during this session, or present in the server list
+    const isAlreadyScanned =
+      submittedCodesRef.current.has(SN) ||
+      scannedListRef.current.some(
+        item => item.scanBarCode && item.scanBarCode.toUpperCase() === SN
+      );
+    if (isAlreadyScanned) {
+      setScanState("error");
+      pubfunction.ShowError(SN + "  This barcode has already been scanned!");
+      setTimeout(() => snInputRef.current?.focus(), 100);
+      return;
+    }
+
+    setScanState("scanning");
+
+    // Lock this screen until we come back (focus event) - nothing else can be scanned meanwhile
+    screenActiveRef.current = false;
+
+    // Display billing confirmation dialog (represented as navigation to details)
+    navigation.navigate("DeliverySNConfirm", {
+      fromWarehouseCode: gs_wareCode,
+      palletCode: scanType === "PALLET" ? SN : "",
+      boxCode: scanType === "BOX" ? SN : "",
+      SN: SN,
+      scanType: scanType,
+      systemDeliveryCode,
+      model,
+      guid,
+      deliveryCode,
+      customerCode,
+      sapMainBillCode,
+      brand,
+      f_modeEAN: f_modeEAN,
+      planQty: planQty,
+      finishQty: finishQty,
+      showConfirm: true,
+    });
+
+    // Safety net: if navigation did not happen, unlock the screen
+    setTimeout(() => {
+      if (navigation.isFocused()) {
+        screenActiveRef.current = true;
+        setScanState("waiting");
+      }
+    }, NAV_LOCK_FALLBACK_MS);
+  };
+
+  // Always expose the latest versions to timers and event listeners
+  handlersRef.current = {
+    palletDeal,
+    applyDeliveryResult,
+    getListFinishBoxList,
+    processScannedInput,
   };
 
   // Setup mount listeners & initialize parameters
@@ -217,42 +434,9 @@ export default function DeliverySN({ navigation, route }: any) {
     // Event listener for updates from confirmation page
     const reloadSub = DeviceEventEmitter.addListener("ON_DELIVERY_CONFIRM_SUCCESS", (voAndData?: any) => {
       if (voAndData) {
-        // Evaluate fields 100% identically to C# palletDeal
-        const currentBillCount = parseInt(voAndData.deliveryCount?.currentBillCount || "0") || 0;
-        const allDeliveryCount = parseInt(voAndData.deliveryCount?.allDeliveryCount || "0") || 0;
-
-        setTxtSource((customerCode || "") + "#" + gs_wareCode);
-        setTxtQty(`${allDeliveryCount}/${currentBillCount}`);
-
-        if (allDeliveryCount >= currentBillCount) {
-          // 发货完成 关闭
-          pubfunction.ShowError("The delivery of documents has already shipped completed!");
-          navigation.goBack();
-          return;
-        }
-
-        if (voAndData.warehouseSumByScanBarCodeList) {
-          let qtyTotal = 0;
-          const listBox = voAndData.warehouseSumByScanBarCodeList.map((item: any, idx: number) => {
-            const count = parseInt(item.goodsCount || "0") || 0;
-            qtyTotal = qtyTotal + count;
-            return {
-              id: idx.toString(),
-              scanBarCode: item.scanBarCode || "",
-              model: item.model || "",
-              color: item.color || "",
-              goodsCount: String(count),
-              scanBarCodeType: item.scanBarCodeType || "",
-            };
-          });
-
-          setScannedList(listBox);
-          setTotalScannedCount(qtyTotal);
-        } else {
-          getListFinishBoxList(true);
-        }
+        if (handlersRef.current.applyDeliveryResult(voAndData)) return;
       } else {
-        getListFinishBoxList(true);
+        handlersRef.current.getListFinishBoxList(true);
       }
 
       snInputRef.current?.clear();
@@ -265,215 +449,53 @@ export default function DeliverySN({ navigation, route }: any) {
     // Listen to confirm OK event from confirm screen
     const confirmSub = DeviceEventEmitter.addListener("ON_DELIVERY_CONFIRM_OK", (data?: { SN: string; scanType: string }) => {
       if (data && data.SN) {
-        palletDeal(data.SN, data.scanType || "sn");
+        handlersRef.current.palletDeal(data.SN, data.scanType || "sn");
       }
     });
 
     const focusSub = navigation.addListener("focus", () => {
+      screenActiveRef.current = true;
+
+      if (!isSubmittingRef.current) {
+        // Back from the confirm screen without validating (cancel): allow a new scan of the same code
+        lastScanRef.current = { code: "", time: 0 };
+        setScanState(prev => (prev === "scanning" ? "waiting" : prev));
+      }
+
       setTimeout(() => {
         snInputRef.current?.focus();
       }, 100);
+    });
+
+    const blurSub = navigation.addListener("blur", () => {
+      screenActiveRef.current = false;
+      clearTimeout(scanTimer.current);
+      snInputRef.current?.clear();
     });
 
     return () => {
       reloadSub.remove();
       confirmSub.remove();
       focusSub();
+      blurSub();
+      clearTimeout(scanTimer.current);
     };
   }, [deliveryCode, systemDeliveryCode]);
 
-  /**
-   * Matches palletDeal inside C#
-   */
-  const palletDeal = async (SN: string, scanType: string) => {
-    setLoading(true);
-    setScanState("scanning");
-    try {
-      const urlCur = `${gs_BaseURL}/warehouse/billInfo/doWarehouseOutStorage`;
-
-      const qoBody = {
-        billCode: systemDeliveryCode || "",
-        billType: "5000",
-        warehouseCode: gs_wareCode,
-        customerCode: customerCode || "",
-        storageCode: "",
-        scanBarCode: pubfunction.PostSpecialStr(SN || ""),
-        scanBarCodeType: scanType || "",
-        scanCount: "",
-        materialCode: model || "",
-        operatorBatch: deliveryCode || "",
-        classCode: gs_classCode || "01",
-        remark: "",
-        workStationType: "delivery",
-        sapMainBillCode: sapMainBillCode || "",
-        guid: guid || "",
-        brand: brand || "",
-        deviceIp:gs_IPAddress,
-      };
-
-      const signedQo = pubfunction.SetUserSignInfo(
-        qoBody,
-        gs_userCode,
-        gs_userName,
-        "2",
-        gs_PasswordSalt,
-        gs_version,
-        "en_US"
-      );
-
-      const formBody = Object.keys(signedQo).map(key => encodeURIComponent(key) + '=' + encodeURIComponent((signedQo as any)[key])).join('&');
-      const response = await fetch(urlCur, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: formBody,
-      });
-
-      if (!response.ok) {
-        pubfunction.ShowError(`HTTP Error: ${response.status}`);
-
-      }
-
-      const resData = await response.json();
-      console.log("REST doWarehouseOutStorage response:", resData);
-
-      if (resData && resData.success && resData.data) {
-        // Evaluate fields 100% identically to C# palletDeal
-        const voAndData = resData.data;
-        const currentBillCount = parseInt(voAndData.deliveryCount?.currentBillCount || "0") || 0;
-        const allDeliveryCount = parseInt(voAndData.deliveryCount?.allDeliveryCount || "0") || 0;
-
-        setTxtSource((customerCode || "") + "#" + gs_wareCode);
-        setTxtQty(`${allDeliveryCount}/${currentBillCount}`);
-
-        if (allDeliveryCount >= currentBillCount) {
-          // 发货完成 关闭
-          pubfunction.ShowError("The delivery of documents has already shipped completed!");
-          navigation.goBack();
-          return;
-        }
-
-        if (voAndData.warehouseSumByScanBarCodeList) {
-          let qtyTotal = 0;
-          const listBox = voAndData.warehouseSumByScanBarCodeList.map((item: any, idx: number) => {
-            const count = parseInt(item.goodsCount || "0") || 0;
-            qtyTotal = qtyTotal + count;
-            return {
-              id: idx.toString(),
-              scanBarCode: item.scanBarCode || "",
-              model: item.model || "",
-              color: item.color || "",
-              goodsCount: String(count),
-              scanBarCodeType: item.scanBarCodeType || "",
-            };
-          });
-
-          setScannedList(listBox);
-          setTotalScannedCount(qtyTotal);
-        } else {
-          getListFinishBoxList(true);
-        }
-
-        snInputRef.current?.clear();
-        setScanState("success");
-      } else {
-        const errMsg = resData ? resData.msg : "Failed to execute out storage";
-        pubfunction.ShowError(errMsg);
-        setScanState("error");
-      }
-    } catch (err: any) {
-      pubfunction.ShowError(err.message || "Failed to execute out storage");
-      setScanState("error");
-    } finally {
-      setLoading(false);
-      setTimeout(() => {
-        snInputRef.current?.focus();
-      }, 150);
-    }
-  };
-
-  /**
-   * Primary processing of scanned parameters 100% equivalent to txtSN_KeyDown callback
-   */
-  const processScannedInput = (scannedCode: string) => {
-    let SN = scannedCode.toUpperCase().trim();
-    if (SN.length === 0) return;
-
-    // FIX WEDGE LAG: Transposition V540 -> 540V (when V is scanned but shift state delays it)
-   
-
-    snInputRef.current?.clear(); // Clear text input immediately
-
-    // Define scanning resolution logic
-    console.log("before SN =", SN);
-    const scanType = pubfunction.getBarcodeType(SN);
-    console.log("scanType", scanType)
-    // EAN prefix checker identical to Substring(0,3) == "613"
-    if (SN.substring(0, 3) === "613") {
-      setScanState("error");
-      pubfunction.ShowError("Please scan SN/BOX/PALLET,  this is EAN(starts with 613)!");
-      setTimeout(() => snInputRef.current?.focus(), 100);
-      return;
-    }
-    
-    const isAlreadyScanned = scannedList.some(item => item.scanBarCode && item.scanBarCode.toUpperCase() === SN);
-    if (isAlreadyScanned) {
-      setScanState("error");
-      pubfunction.ShowError(SN + "  This barcode has already been scanned!");
-      setTimeout(() => snInputRef.current?.focus(), 100);
-      return;
-    }
-
-    setScanState("scanning");
-
-    // Display billing confirmation dialog (represented as navigation to details)
-    navigation.navigate("DeliverySNConfirm", {
-      fromWarehouseCode: gs_wareCode,
-      palletCode: scanType === "PALLET" ? SN : "",
-      boxCode: scanType === "BOX" ? SN : "",
-      SN: SN,
-      scanType: scanType,
-      systemDeliveryCode,
-      model,
-      guid,
-      deliveryCode,
-      customerCode,
-      sapMainBillCode,
-      brand,
-      f_modeEAN: f_modeEAN,
-      planQty: planQty,
-      finishQty: finishQty,
-      showConfirm: true,
-    });
-  };
-
   const handleSnChange = (text: string) => {
     clearTimeout(scanTimer.current);
+    if (text.length === 0) return;
 
+    // Scanner sent a terminator: the scan is complete
     if (text.endsWith("\n") || text.endsWith("\r")) {
-      const clean = text.trim();
-      if (clean.length > 0) {
-        processScannedInput(clean);
-      }
+      handlersRef.current.processScannedInput(text);
       return;
     }
 
-    if (text.trim().length > 0) {
-      scanTimer.current = setTimeout(() => {
-        const clean = text.trim();
-        if (clean.length > 0) {
-          processScannedInput(clean);
-        }
-      }, 500); // 500ms is perfectly safe when uncontrolled
-    }
-  };
-
-  const handleSnSubmit = (e: any) => {
-    const text = e.nativeEvent.text;
-    const clean = text.trim();
-    if (clean.length > 0) {
-      clearTimeout(scanTimer.current);
-      processScannedInput(clean);
-    }
+    // Otherwise wait for a short silence (uses the latest handler, no stale closure)
+    scanTimer.current = setTimeout(() => {
+      handlersRef.current.processScannedInput(text);
+    }, SCAN_DEBOUNCE_MS);
   };
 
   return (
@@ -501,12 +523,12 @@ export default function DeliverySN({ navigation, route }: any) {
         <View style={styles.formCard}>
           {/* txtSource value */}
           <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>SOURCE (TO#FROM)</Text>
+            <Text style={styles.infoLabel}>SOURCE</Text>
             <Text style={styles.infoValue}>{txtSource || "-"}</Text>
           </View>
           {/* txtQty value */}
           <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>QUANTITY (SHIJI/JIHUA)</Text>
+            <Text style={styles.infoLabel}>QUANTITY </Text>
             <Text style={styles.infoValue}>{txtQty || "-"}</Text>
           </View>
           {/* Model EAN display */}
@@ -514,9 +536,6 @@ export default function DeliverySN({ navigation, route }: any) {
             <Text style={styles.infoLabel}>MODEL EAN</Text>
             <Text style={styles.infoValue}>{f_modeEAN || "-"}</Text>
           </View>
-          {/* Info Details */}
-
-
         </View>
 
         {/* Input block - txtSN */}
@@ -532,7 +551,6 @@ export default function DeliverySN({ navigation, route }: any) {
               ref={snInputRef}
               style={[styles.input, { borderWidth: 0 }]}
               onChangeText={handleSnChange}
-              //onSubmitEditing={handleSnSubmit}
               placeholder="Scan Pallet / Box / SN Barcode"
               placeholderTextColor="#64748B"
               autoCapitalize="characters"

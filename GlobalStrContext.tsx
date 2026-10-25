@@ -124,7 +124,7 @@ export const GlobalStrProvider = ({ children }: { children: React.ReactNode }) =
 
   const [gs_PasswordSalt, setPasswordSalt] = useState("abc12345");
   const [gs_randomNumber, setRandomNumber] = useState("2");
-  const [gs_version, setVersion] = useState("1.0.2");
+  const [gs_version, setVersion] = useState("1.0.3");
 
   const [g_webUrl, setWebUrl] = useState("https://mespdamobile.condor.dz/WINCEWeb.asmx");
   const [g_isRealUrl, setIsRealUrl] = useState(true);

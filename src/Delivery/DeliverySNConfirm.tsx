@@ -9,7 +9,6 @@ import {
   ScrollView,
   StatusBar,
   ActivityIndicator,
-  Alert,
   Image,
   Dimensions,
   DeviceEventEmitter,
@@ -29,6 +28,9 @@ interface SNDetail {
   goodsCount: string;
   boxCode: string;
 }
+
+const REQUEST_TIMEOUT_MS = 20000; // RN Android fetch has no timeout by default
+const EAN_DEBOUNCE_MS = 600;
 
 export default function DeliverySNConfirm({ navigation, route }: any) {
   const {
@@ -68,52 +70,85 @@ export default function DeliverySNConfirm({ navigation, route }: any) {
   const eanInputRef = useRef<TextInput>(null);
   const scanTimerRef = useRef<any>(null);
 
+  // ---- Anti double action locks (refs are synchronous, states are not) ----
+  // true while doAddInventoryOldSNAdd is running
+  const isBusyRef = useRef(false);
+  // true once this screen has emitted OK / is closing: nothing else may emit or goBack
+  const isDoneRef = useRef(false);
+
+  /**
+   * Signed POST (form-urlencoded) with timeout.
+   * Returns { ok:false } on HTTP error, throws on network error / timeout.
+   */
+  const postForm = async (url: string, payload: any) => {
+    const signedQo = pubfunction.SetUserSignInfo(
+      payload,
+      gs_userCode,
+      gs_userName,
+      "2",
+      gs_PasswordSalt,
+      gs_version,
+      "en_US"
+    );
+
+    const formBody = Object.keys(signedQo)
+      .map(key => encodeURIComponent(key) + '=' + encodeURIComponent((signedQo as any)[key]))
+      .join('&');
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: formBody,
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        return { ok: false, status: response.status, data: null as any };
+      }
+
+      const data = await response.json();
+      return { ok: true, status: response.status, data };
+    } catch (err: any) {
+      if (err && err.name === "AbortError") {
+        throw new Error("Request timeout, please check the network.");
+      }
+      throw err;
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+
   /**
    * Matches BoxListShow() in C#
    */
   const boxListShow = async (isSilent = false) => {
     if (!isSilent) setLoading(true);
     try {
-      const urlCur = `${gs_BaseURL}/warehouse/billInfo/getScanBarCodeSumInfo`;
       console.log("after in confirm SN =", SN);
       // Build body model equivalent to WarehouseBillScanQO in C#
-      const requestQo = {
-        billCode: "",
-        billType: "",
-        warehouseCode: gs_wareCode,
-        scanBarCode: pubfunction.PostSpecialStr(SN || ""),
-        scanBarCodeType: scanType || "",
-        model: model || "",
-        guid: guid || "",
-      };
-
-      const signedQo = pubfunction.SetUserSignInfo(
-        requestQo,
-        gs_userCode,
-        gs_userName,
-        "2",
-        gs_PasswordSalt,
-        gs_version,
-        "en_US"
+      const { ok, status, data: resData } = await postForm(
+        `${gs_BaseURL}/warehouse/billInfo/getScanBarCodeSumInfo`,
+        {
+          billCode: "",
+          billType: "",
+          warehouseCode: gs_wareCode,
+          scanBarCode: pubfunction.PostSpecialStr(SN || ""),
+          scanBarCodeType: scanType || "",
+          model: model || "",
+          guid: guid || "",
+        }
       );
 
-
-
-      const formBody = Object.keys(signedQo).map(key => encodeURIComponent(key) + '=' + encodeURIComponent((signedQo as any)[key])).join('&');
-      const response = await fetch(urlCur, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: formBody,
-      });
-
-
-      if (!response.ok) {
-        pubfunction.ShowError(`HTTP Error: ${response.status}`);
+      if (!ok) {
+        pubfunction.ShowError(`HTTP Error: ${status}`);
         return;
       }
 
-      const resData = await response.json();
-      console.log("REST getScanBarCodeSumInfo response:", response);
+      console.log("REST getScanBarCodeSumInfo response:", resData);
 
       let rawList: any[] = [];
       if (resData) {
@@ -148,7 +183,6 @@ export default function DeliverySNConfirm({ navigation, route }: any) {
         setShowEanPanel(false);
       } else {
         handleEmptyStockDetails();
-        //pubfunction.ShowError(resData.msg);
       }
     } catch (err: any) {
       handleEmptyStockDetails();
@@ -167,6 +201,7 @@ export default function DeliverySNConfirm({ navigation, route }: any) {
     }, 500);
   };
 
+  // Load details when the screen opens
   useEffect(() => {
     if (SN) {
       boxListShow();
@@ -177,6 +212,19 @@ export default function DeliverySNConfirm({ navigation, route }: any) {
       }
     };
   }, [SN]);
+
+  // Screen lifecycle guard: once the screen is being removed (header back, hardware back,
+  // gesture, or our own goBack), no late response may emit OK or call goBack again.
+  useEffect(() => {
+    isDoneRef.current = false;
+    const removeSub = navigation.addListener("beforeRemove", () => {
+      isDoneRef.current = true;
+    });
+    return () => {
+      removeSub();
+      isDoneRef.current = true;
+    };
+  }, []);
 
   /**
    * Matches CheckModelEAN() in C#
@@ -194,45 +242,38 @@ export default function DeliverySNConfirm({ navigation, route }: any) {
    * Matches OldSNAddIn() in C#
    */
   const oldSNAddIn = async (EAN: string) => {
+    // One request at a time, and never once the screen is closing
+    if (isBusyRef.current || isDoneRef.current) return;
+    isBusyRef.current = true;
     setLoading(true);
     try {
-      const urlCur = `${gs_BaseURL}/inventory/billSn/doAddInventoryOldSNAdd`;
-
-      const qo = {
-        SN: pubfunction.PostSpecialStr(SN || ""),
-        ean: EAN,
-        model: model || "",
-        warehouseCode: gs_wareCode,
-        classCode: gs_classCode || "01",
-        brand: brand || "",
-        guid: guid || "",
-      };
-
-      const signedQo = pubfunction.SetUserSignInfo(
-        qo,
-        gs_userCode,
-        gs_userName,
-        "2",
-        gs_PasswordSalt,
-        gs_version,
-        "en_US"
+      const { ok, status, data: resData } = await postForm(
+        `${gs_BaseURL}/inventory/billSn/doAddInventoryOldSNAdd`,
+        {
+          SN: pubfunction.PostSpecialStr(SN || ""),
+          ean: EAN,
+          model: model || "",
+          warehouseCode: gs_wareCode,
+          classCode: gs_classCode || "01",
+          brand: brand || "",
+          guid: guid || "",
+        }
       );
 
-      const formBody = Object.keys(signedQo).map(key => encodeURIComponent(key) + '=' + encodeURIComponent((signedQo as any)[key])).join('&');
-      const response = await fetch(urlCur, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: formBody,
-      });
-
-      if (!response.ok) {
-        pubfunction.ShowError(`HTTP Error: ${response.status}`);
+      if (!ok) {
+        pubfunction.ShowError(`HTTP Error: ${status}`);
+        setLabelQtyTotal(`HTTP Error: ${status}`);
+        return;
       }
 
-      const resData = await response.json();
       console.log("REST doAddInventoryOldSNAdd response:", resData);
 
       if (resData && resData.success) {
+        // The operator may have left the screen while the request was running.
+        // In that case do not emit OK nor goBack (the SN is now in stock and can simply be scanned again).
+        if (isDoneRef.current) return;
+        isDoneRef.current = true;
+
         // Automatically close and confirm outbound as DialogResult = OK in C#
         DeviceEventEmitter.emit("ON_DELIVERY_CONFIRM_OK", { SN, scanType });
         navigation.goBack();
@@ -241,30 +282,31 @@ export default function DeliverySNConfirm({ navigation, route }: any) {
         setLabelQtyTotal(errMsg);
       }
     } catch (err: any) {
-      setLabelQtyTotal(err.message || "Failed to add old SN");
+      // Unknown outcome (timeout / network): the SN may already have been added
+      setLabelQtyTotal((err.message || "Failed to add old SN") + " - check the SN before trying again.");
     } finally {
+      isBusyRef.current = false;
       setLoading(false);
     }
   };
 
   /**
-   * Matches txtEAN_KeyDown in C# (keyValue == 13 / submit)
+   * Validates and submits a scanned EAN (shared by the debounce handler)
    */
-  const handleEanSubmit = () => {
-    if (scanTimerRef.current) {
-      clearTimeout(scanTimerRef.current);
-    }
-    const EAN = eanCode.toUpperCase().trim();
-    if (EAN.length > 0) {
-      if ((gs_remark || "").toUpperCase() !== "EAN") {
-        pubfunction.ShowError("You don't have permission to scan EAN!");
-        return;
-      }
+  const submitEan = (rawEan: string) => {
+    const EAN = rawEan.toUpperCase().trim();
+    setEanCode("");
 
-      const eanIsOk = checkModelEAN(EAN);
-      if (eanIsOk) {
-        oldSNAddIn(EAN);
-      }
+    // Ignore scans while a request is running or the screen is closing
+    if (!EAN || isBusyRef.current || isDoneRef.current) return;
+
+    if ((gs_remark || "").toUpperCase() !== "EAN") {
+      pubfunction.ShowError("You don't have permission to scan EAN!");
+      return;
+    }
+
+    if (checkModelEAN(EAN)) {
+      oldSNAddIn(EAN);
     }
   };
 
@@ -282,27 +324,30 @@ export default function DeliverySNConfirm({ navigation, route }: any) {
     if (!trimmed) return;
 
     scanTimerRef.current = setTimeout(() => {
-      if ((gs_remark || "").toUpperCase() !== "EAN") {
-        pubfunction.ShowError("You don't have permission to scan EAN!");
-        return;
-      }
-
-      const EAN = trimmed.toUpperCase();
-      const eanIsOk = checkModelEAN(EAN);
-      if (eanIsOk) {
-        oldSNAddIn(EAN);
-      }
-      setEanCode("");
-    }, 600);
+      submitEan(trimmed);
+    }, EAN_DEBOUNCE_MS);
   };
 
   /**
    * Matches button_Confirm_Click in C#
    */
   const handleConfirmStorage = () => {
+    // Double tap / EAN request running / already closing: do nothing
+    if (isDoneRef.current || isBusyRef.current) return;
+    isDoneRef.current = true;
+
     if (details.length >= 1) {
       DeviceEventEmitter.emit("ON_DELIVERY_CONFIRM_OK", { SN, scanType });
     }
+    navigation.goBack();
+  };
+
+  /**
+   * Header back button (guarded against double tap = double pop)
+   */
+  const handleBack = () => {
+    if (isDoneRef.current) return;
+    isDoneRef.current = true;
     navigation.goBack();
   };
 
@@ -313,7 +358,7 @@ export default function DeliverySNConfirm({ navigation, route }: any) {
       {/* Header with standard UI */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <TouchableOpacity onPress={() => navigation.goBack()} activeOpacity={0.7}>
+          <TouchableOpacity onPress={handleBack} activeOpacity={0.7}>
             <Image
               source={require("../../assets/logo/left.png")}
               style={styles.returnLogo}
@@ -359,7 +404,6 @@ export default function DeliverySNConfirm({ navigation, route }: any) {
                 placeholder="Scan / Input product EAN"
                 placeholderTextColor="#94A3B8"
                 autoCapitalize="characters"
-                //onSubmitEditing={handleEanSubmit}
                 blurOnSubmit={false}
                 onBlur={() => eanInputRef.current?.focus()}
                 showSoftInputOnFocus={showKeyboard}
