@@ -48,7 +48,10 @@ export default function DeliverySAP({ navigation }: any) {
     gs_factoryCode,
     g_webUrl,
     g_isRealUrl,
+    gs_factoryindex,
   } = useGlobalStr();
+
+    const styles = createStyles(gs_factoryindex === "zentech" ? "#06b86c" : "#0052cc");
 
   const [BonNo, setBonNo] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
@@ -447,7 +450,7 @@ export default function DeliverySAP({ navigation }: any) {
         </View>
         {loading && (
           <View style={styles.loadingOverlay}>
-            <ActivityIndicator size="large" color="#0052cc" />
+            <ActivityIndicator size="large" color="#06b86c" />
           </View>
         )}
       </View>
@@ -459,10 +462,10 @@ const { width } = Dimensions.get("window");
 const isSmallDevice = width < 360;
 const scale = (size: number) => (width / 375) * size;
 
-const styles = StyleSheet.create({
+const createStyles = (factoryColor: string) => StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F8FAFC" },
   header: {
-    backgroundColor: "#0052cc",
+    backgroundColor: factoryColor,
     paddingHorizontal: width * 0.05,
     height: scale(56),
     flexDirection: "row",
@@ -496,17 +499,17 @@ const styles = StyleSheet.create({
     marginRight: 1,
   },
   content: { flex: 1, padding: 8 },
-  card: { backgroundColor: "#FFF", borderRadius: 16, paddingTop: 10, paddingBottom: 8, padding: 8, marginBottom: 12, elevation: 2, borderWidth: 1, borderColor: "#0052cc" },
+  card: { backgroundColor: "#FFF", borderRadius: 16, paddingTop: 10, paddingBottom: 8, padding: 8, marginBottom: 12, elevation: 2, borderWidth: 1, borderColor: factoryColor },
   inputGroup: { marginBottom: 12 },
-  input: { backgroundColor: "#e2f0eeff", height: 40, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 0, fontSize: 14, color: "#1E293B", fontWeight: "600", borderWidth: 1, borderColor: "#0052cc" },
-  tableCard: { flex: 1, backgroundColor: "#FFF", borderRadius: 16, overflow: "hidden", elevation: 2, borderWidth: 1, borderColor: "#0052cc", marginBottom: 8 },
-  tableHeader: { flexDirection: "row", backgroundColor: "#0052cc", paddingVertical: 10 },
+  input: { backgroundColor: "#e2f0eeff", height: 40, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 0, fontSize: 14, color: "#1E293B", fontWeight: "600", borderWidth: 1, borderColor: factoryColor },
+  tableCard: { flex: 1, backgroundColor: "#FFF", borderRadius: 16, overflow: "hidden", elevation: 2, borderWidth: 1, borderColor: factoryColor, marginBottom: 8 },
+  tableHeader: { flexDirection: "row", backgroundColor: factoryColor, paddingVertical: 10 },
   headerCell: { fontSize: 11, fontWeight: "800", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
   tableRow: { flexDirection: "row", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#F1F5F9", alignItems: "center" },
   cell: { fontSize: 11, color: "#334155", textAlign: "center", fontWeight: "600" },
   emptyText: { textAlign: "center", padding: 40, color: "#94A3B8", fontStyle: "italic", width: 1050 },
   footer: { borderTopWidth: 1, borderTopColor: '#e2e8f0', paddingTop: 2 },
-  detailButton: { height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0052cc' },
+  detailButton: { height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center', backgroundColor: factoryColor },
   detailButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
   errorText: { color: "#EF4444", fontSize: 12, marginBottom: 8, fontWeight: "700" },
   selectedRow: { backgroundColor: "#ffc3c3ff" },

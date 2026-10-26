@@ -31,7 +31,9 @@ interface SNItem {
 export default function PalletNotInSN({ navigation, route }: any) {
   const { palletCode, boxCode } = route.params || {};
   const global = useGlobal();
-  const { gsURL, gs_factoryCode, gs_userName ,operateUserCode, operateUserName, operateWareHouseCode, operateRandomNumber, operateSign, operateVersion,} = global;
+  const { gsURL, gs_factoryCode, gs_userName ,operateUserCode, operateUserName, operateWareHouseCode, operateRandomNumber, operateSign, operateVersion, gs_factoryindex, } = global;
+
+    const styles = createStyles(gs_factoryindex === "zentech" ? "#06b86c" : "#0052cc");
   const BASE_URL = gsURL;
   const [token, setToken] = useState("");
 
@@ -188,7 +190,7 @@ export default function PalletNotInSN({ navigation, route }: any) {
               </View>
 
               {loading ? (
-                <ActivityIndicator size="large" color="#0052cc" style={{ marginTop: 40 }} />
+                <ActivityIndicator size="large" color="#06b86c" style={{ marginTop: 40 }} />
               ) : (
                 <FlatList
                   data={sns}
@@ -210,10 +212,10 @@ const { width } = Dimensions.get("window");
 const isSmallDevice = width < 360;
 const scale = (size: number) => (width / 375) * size;
 
-const styles = StyleSheet.create({
+const createStyles = (factoryColor: string) => StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F8FAFC" },
   header: {
-    backgroundColor: "#0052cc",
+    backgroundColor: factoryColor,
     paddingHorizontal: width * 0.05,
     height: scale(56),
     flexDirection: "row",
@@ -233,7 +235,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: "#0052cc",
+    backgroundColor: factoryColor,
     paddingHorizontal: 12,
     paddingVertical: 4,
     borderRadius: 12,
@@ -250,7 +252,7 @@ const styles = StyleSheet.create({
   },
   content: { flex: 1 },
   tableCard: { flex: 1, backgroundColor: "#FFF", marginHorizontal: 16, borderRadius: 16, overflow: "hidden", elevation: 2, borderWidth: 1, borderColor: "#E2E8F0", marginBottom: 16 },
-  tableHeader: { flexDirection: "row", backgroundColor: "#0052cc", paddingVertical: 10 },
+  tableHeader: { flexDirection: "row", backgroundColor: factoryColor, paddingVertical: 10 },
   headerCell: { fontSize: 12, fontWeight: "800", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
   tableRow: { flexDirection: "row", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#F1F5F9", alignItems: "center" },
   selectedRow: { backgroundColor: "#ffc3c3ff" },

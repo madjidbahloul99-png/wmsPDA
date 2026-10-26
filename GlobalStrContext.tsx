@@ -11,6 +11,9 @@ export type GlobalStrContextType = {
   gs_factoryCode: string;
   setgs_factoryCode: (v: string) => void;
 
+  gs_factoryindex: string;
+  setgs_factoryindex: (v: string) => void;
+
   gs_factoryCodeMES: string;
   setgs_factoryCodeMES: (v: string) => void;
 
@@ -43,12 +46,6 @@ export type GlobalStrContextType = {
 
   gs_IPAddress: string;
   setgs_IPAddress: (v: string) => void;
-
-  gs_Project_ExecutePath: string;
-  setgs_Project_ExecutePath: (v: string) => void;
-
-  appConfig: AppConfig | null;
-  setAppConfig: (v: AppConfig | null) => void;
 
   gs_MESBaseURL: string;
   setgs_MESBaseURL: (v: string) => void;
@@ -84,13 +81,15 @@ export type GlobalStrContextType = {
 /* ==========================================================
    Create Context
 ========================================================== */
-const GlobalStrContext = createContext<GlobalStrContextType | null>(null);
+export const GlobalStrContext = createContext<GlobalStrContextType | null>(null);
 
 /* ==========================================================
    Provider Component
 ========================================================== */
 export const GlobalStrProvider = ({ children }: { children: React.ReactNode }) => {
   const [gs_factoryCode, setFactoryCode] = useState("001");
+  const [gs_factoryindex, _setFactoryindex] = useState("zentech");
+  //const [gs_factoryindex, _setFactoryindex] = useState("other");
   const [gs_factoryCodeMES, setFactoryCodeMES] = useState("001");
 
   const [gs_wareCode, setWareCode] = useState("");
@@ -110,10 +109,6 @@ export const GlobalStrProvider = ({ children }: { children: React.ReactNode }) =
   const [gs_workdate, setWorkdate] = useState("");
   const [gs_IPAddress, setIPAddress] = useState("");
 
-  const [gs_Project_ExecutePath, setProject_ExecutePath] = useState("");
-
-  const [appConfig, setAppConfig] = useState<AppConfig | null>(null);
-
   const [gs_MESBaseURL, setMESBaseURL] = useState("");
 
   const [gs_BaseURL, setBaseURL] = useState("https://wmsapi.condor.dz");
@@ -129,11 +124,14 @@ export const GlobalStrProvider = ({ children }: { children: React.ReactNode }) =
   const [g_webUrl, setWebUrl] = useState("https://mespdamobile.condor.dz/WINCEWeb.asmx");
   const [g_isRealUrl, setIsRealUrl] = useState(true);
 
-  return ( 
+  return (
     <GlobalStrContext.Provider
       value={{
         gs_factoryCode,
         setgs_factoryCode: setFactoryCode,
+
+        gs_factoryindex,
+        setgs_factoryindex: _setFactoryindex,
 
         gs_factoryCodeMES,
         setgs_factoryCodeMES: setFactoryCodeMES,
@@ -167,12 +165,6 @@ export const GlobalStrProvider = ({ children }: { children: React.ReactNode }) =
 
         gs_IPAddress,
         setgs_IPAddress: setIPAddress,
-
-        gs_Project_ExecutePath,
-        setgs_Project_ExecutePath: setProject_ExecutePath,
-
-        appConfig,
-        setAppConfig,
 
         gs_MESBaseURL,
         setgs_MESBaseURL: setMESBaseURL,
@@ -220,3 +212,5 @@ export const useGlobalStr = () => {
   }
   return ctx;
 };
+
+export const useGlobal = useGlobalStr;

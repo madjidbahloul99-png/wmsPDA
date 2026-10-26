@@ -4,7 +4,7 @@ import React, {
     forwardRef,
     useImperativeHandle,
     useEffect,
-
+    useContext,
 } from "react";
 import { Keyboard, AppState } from "react-native";
 import md5 from "md5";
@@ -28,7 +28,7 @@ import {
     BackHandler,
     NativeModules
 } from "react-native";
-import { useGlobalStr } from "../GlobalStrContext";
+import { useGlobalStr, GlobalStrContext } from "../GlobalStrContext";
 import RNFS from 'react-native-fs';
 import * as pubfunction from "./pubfunction";
 import * as RNNetInfo from "react-native-network-info";
@@ -39,6 +39,7 @@ import userIcon from "../assets/logo/user.png";
 import lockIcon from "../assets/logo/lock.png";
 import warehouseIcon from "../assets/logo/warehouse.png";
 import condorLogo from "../assets/logo/condor_logo.png";
+import zentechLogo from "../assets/logo/zentech_logo.png";
 
 type WarehouseItem = {
     id: string;
@@ -136,12 +137,19 @@ const CustomInput = forwardRef<CustomInputRef, any>(
             onBlur,
             onFocus,
             icon,
+            factoryIndex,
+            focusBorderColor: customFocusBorderColor,
         },
         ref
     ) => {
         const [showModal, setShowModal] = useState(false);
         const [isFocused, setIsFocused] = useState(false);
         const hiddenInputRef = useRef<TextInput>(null);
+
+        const globalStr = useContext(GlobalStrContext);
+        const activeFactory = factoryIndex || globalStr?.gs_factoryindex || "zentech";
+        const focusBorderColor =
+            customFocusBorderColor || (activeFactory === "zentech" ? "#06b86c" : "#0052cc");
 
         const defaultInputRef = useRef<TextInput>(null);
         const resolvedRef = inputRef || defaultInputRef;
@@ -183,14 +191,25 @@ const CustomInput = forwardRef<CustomInputRef, any>(
         const handleSelect = (item: any) => {
             onChangeText(item);
             setShowModal(false);
+            setIsFocused(false);
         };
+
+        const isFieldFocused = isFocused || showModal;
 
         return (
             <View style={styles.inputWrapper}>
                 {isSelect ? (
                     <TouchableOpacity
-                        style={[styles.inputContainer, isFocused ? styles.inputFocused : null]}
-                        onPress={() => setShowModal(true)}
+                        style={[
+                            styles.inputContainer,
+                            isFieldFocused
+                                ? [styles.inputFocused, { borderColor: focusBorderColor }]
+                                : null,
+                        ]}
+                        onPress={() => {
+                            setIsFocused(true);
+                            setShowModal(true);
+                        }}
                     >
                         {icon && <Image source={icon} style={styles.inputIcon} />}
                         <Text style={value ? styles.input : styles.placeholderText}>
@@ -200,7 +219,12 @@ const CustomInput = forwardRef<CustomInputRef, any>(
                     </TouchableOpacity>
                 ) : (
                     <View
-                        style={[styles.inputContainer, isFocused ? styles.inputFocused : null]}
+                        style={[
+                            styles.inputContainer,
+                            isFocused
+                                ? [styles.inputFocused, { borderColor: focusBorderColor }]
+                                : null,
+                        ]}
                     >
                         {icon && <Image source={icon} style={styles.inputIcon} />}
                         <TextInput
@@ -237,7 +261,10 @@ const CustomInput = forwardRef<CustomInputRef, any>(
                     <Modal transparent visible={showModal} animationType="fade">
                         <TouchableOpacity
                             style={styles.modalOverlay}
-                            onPress={() => setShowModal(false)}
+                            onPress={() => {
+                                setShowModal(false);
+                                setIsFocused(false);
+                            }}
                         >
                             <View style={styles.modalContent}>
                                 <Text style={styles.modalTitle}>Select {label}</Text>
@@ -264,9 +291,17 @@ const CustomInput = forwardRef<CustomInputRef, any>(
 
                 {isSelect && (
                     <TextInput
-                        style={{ height: 0, width: 0, padding: 0, margin: 0 }}
+                        style={{ height: 0, width: 0, padding: 0, margin: 0, position: "absolute", opacity: 0 }}
                         ref={hiddenInputRef}
                         showSoftInputOnFocus={showSoftInput}
+                        onFocus={() => {
+                            setIsFocused(true);
+                            if (onFocus) onFocus();
+                        }}
+                        onBlur={() => {
+                            setIsFocused(false);
+                            if (onBlur) onBlur();
+                        }}
                     />
                 )}
             </View>
@@ -295,7 +330,8 @@ export default function Login({ navigation }: any) {
         gs_userCode, setgs_userCode,
         gs_userName, setgs_userName,
         setgs_remark,
-        setgs_IPAddress, setgs_MESBaseURL
+        setgs_IPAddress, setgs_MESBaseURL,
+        gs_factoryindex,
     } = useGlobalStr();
 
     const [userVal, setUserVal] = useState("");
@@ -771,9 +807,9 @@ export default function Login({ navigation }: any) {
                             }}
                         >
                             <Image
-                                source={condorLogo}
-                                style={styles.condorLogo}
-                                resizeMode="stretch"
+                                source={gs_factoryindex === "zentech" ? zentechLogo : condorLogo}
+                                style={gs_factoryindex === "zentech" ? styles.zentechLogo : styles.condorLogo}
+                                resizeMode={gs_factoryindex === "zentech" ? "contain" : "stretch"}
                             />
                         </TouchableOpacity>
                         <Text style={styles.wmsText}>GROUP WAREHOUSE MANAGEMENT</Text>
@@ -815,7 +851,7 @@ export default function Login({ navigation }: any) {
 
                     {loading && (
                         <View style={styles.loadingOverlay}>
-                            <ActivityIndicator size="large" color="#0052cc" />
+                            <ActivityIndicator size="large" color={gs_factoryindex === "zentech" ? "#06b86c" : "#0052cc"} />
                             <Text style={styles.loadingText}>Verifying credentials...</Text>
                         </View>
                     )}
@@ -836,6 +872,7 @@ export default function Login({ navigation }: any) {
                             options={classList}
                             onBlur={ensureFocus}
                             icon={calendarIcon}
+                            factoryIndex={gs_factoryindex}
                         />
 
                         {/* User ID */}
@@ -857,6 +894,7 @@ export default function Login({ navigation }: any) {
                                 if (userVal) getWarehouseListByUser(userVal.trim());
                             }}
                             icon={userIcon}
+                            factoryIndex={gs_factoryindex}
                         />
 
                         {/* Password */}
@@ -880,6 +918,7 @@ export default function Login({ navigation }: any) {
                             onFocus={() => setActiveField("password")}
                             onBlur={ensureFocus}
                             icon={lockIcon}
+                            factoryIndex={gs_factoryindex}
                         />
 
                         {/* Warehouse Selector */}
@@ -895,6 +934,7 @@ export default function Login({ navigation }: any) {
                             options={warehouseList}
                             onBlur={ensureFocus}
                             icon={warehouseIcon}
+                            factoryIndex={gs_factoryindex}
                         />
                     </View>
 
@@ -903,10 +943,20 @@ export default function Login({ navigation }: any) {
                     {/* Action buttons */}
                     <View style={styles.buttonContainer}>
                         <LinearGradient
-                            colors={['#85ddf3ff', '#0052cc']}
+                            colors={
+                                gs_factoryindex === "zentech"
+                                    ? ['#06b86c', '#048a50']
+                                    : ['#85ddf3ff', '#0052cc']
+                            }
                             start={{ x: 0, y: 0 }}
                             end={{ x: 1, y: 0 }}
-                            style={styles.gradientButton}
+                            style={[
+                                styles.gradientButton,
+                                {
+                                    backgroundColor:
+                                        gs_factoryindex === "zentech" ? "#06b86c" : "#0052cc",
+                                }
+                            ]}
                         >
                             <TouchableOpacity
                                 style={styles.button}
@@ -947,6 +997,10 @@ const styles = StyleSheet.create({
         marginLeft: -width * 0.05,
     },
     condorLogo: {
+        width: "100%",
+        height: scale(160),
+    },
+    zentechLogo: {
         width: "100%",
         height: scale(160),
     },

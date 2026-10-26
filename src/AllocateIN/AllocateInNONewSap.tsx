@@ -46,7 +46,10 @@ export default function AllocateInNONewSap({ navigation }: any) {
     gs_version,
     g_webUrl,
     g_isRealUrl,
+    gs_factoryindex,
   } = useGlobalStr();
+
+    const styles = createStyles(gs_factoryindex === "zentech" ? "#06b86c" : "#0052cc");
 
   const [txtSN, setTxtSN] = useState("");
   const [lblError, setLblError] = useState("");
@@ -384,7 +387,7 @@ export default function AllocateInNONewSap({ navigation }: any) {
 
       {loading && (
         <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="large" color="#0052cc" />
+          <ActivityIndicator size="large" color="#06b86c" />
         </View>
       )}
     </SafeAreaView>
@@ -394,10 +397,10 @@ export default function AllocateInNONewSap({ navigation }: any) {
 const { width } = Dimensions.get("window");
 const scale = (size: number) => (width / 375) * size;
 
-const styles = StyleSheet.create({
+const createStyles = (factoryColor: string) => StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F8FAFC" },
   header: {
-    backgroundColor: "#0052cc",
+    backgroundColor: factoryColor,
     paddingHorizontal: width * 0.05,
     height: scale(56),
     flexDirection: "row",
@@ -418,7 +421,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     elevation: 2,
     borderWidth: 1,
-    borderColor: "#0052cc",
+    borderColor: factoryColor,
   },
   inputGroup: { marginBottom: 4 },
   input: {
@@ -430,7 +433,7 @@ const styles = StyleSheet.create({
     color: "#1E293B",
     fontWeight: "600",
     borderWidth: 1,
-    borderColor: "#0052cc",
+    borderColor: factoryColor,
   },
   errorText: { color: "red", fontSize: 13, marginTop: 4, fontWeight: "600" },
   listCard: {
@@ -439,13 +442,13 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: "#0052cc",
+    borderColor: factoryColor,
     marginBottom: 8,
     marginTop:8
   },
   listHeader: {
     flexDirection: "row",
-    backgroundColor: "#0052cc",
+    backgroundColor: factoryColor,
     paddingVertical: 10,
     paddingHorizontal: 6,
   },
@@ -472,7 +475,7 @@ const styles = StyleSheet.create({
   },
   emptyText: { textAlign: "center", padding: 40, color: "#94A3B8", fontStyle: "italic" },
   footer: { borderTopWidth: 1, borderTopColor: '#e2e8f0', paddingTop: 8, marginTop: 4 },
-  choiceButton: { height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0052cc' },
+  choiceButton: { height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center', backgroundColor: factoryColor },
   choiceButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '900' },
   selectedRow: { backgroundColor: "#BAE6FD" },
   loadingOverlay: {

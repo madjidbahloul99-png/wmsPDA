@@ -55,8 +55,12 @@ export default function AllocateOutNewSap({ navigation, route }: any) {
     gs_PasswordSalt,
     gs_version,
     gs_classCode,
+    
     gs_IPAddress,
-  } = useGlobalStr();
+    gs_factoryindex,
+} = useGlobalStr();
+
+    const styles = createStyles(gs_factoryindex === "zentech" ? "#06b86c" : "#0052cc");
 
   const [txtSN, setTxtSN] = useState("");
   const [f_modeEAN, setF_modeEAN] = useState("");
@@ -513,7 +517,7 @@ export default function AllocateOutNewSap({ navigation, route }: any) {
 
       {loading && (
         <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="large" color="#0052cc" />
+          <ActivityIndicator size="large" color="#06b86c" />
         </View>
       )}
     </SafeAreaView>
@@ -523,10 +527,10 @@ export default function AllocateOutNewSap({ navigation, route }: any) {
 const { width } = Dimensions.get("window");
 const scale = (size: number) => (width / 375) * size;
 
-const styles = StyleSheet.create({
+const createStyles = (factoryColor: string) => StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F8FAFC" },
   header: {
-    backgroundColor: "#0052cc",
+    backgroundColor: factoryColor,
     paddingHorizontal: width * 0.05,
     height: scale(56),
     flexDirection: "row",
@@ -547,13 +551,13 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     elevation: 2,
     borderWidth: 1,
-    borderColor: "#0052cc",
+    borderColor: factoryColor,
   },
   infoRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     marginBottom: 6,
-    backgroundColor: "#0052cc",
+    backgroundColor: factoryColor,
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 8,
@@ -570,7 +574,7 @@ const styles = StyleSheet.create({
     color: "#1E293B",
     fontWeight: "600",
     borderWidth: 1,
-    borderColor: "#0052cc",
+    borderColor: factoryColor,
   },
   listCard: {
     flex: 1,
@@ -578,12 +582,12 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: "#0052cc",
+    borderColor: factoryColor,
     marginBottom: 8,
   },
   listHeader: {
     flexDirection: "row",
-    backgroundColor: "#0052cc",
+    backgroundColor: factoryColor,
     paddingVertical: 10,
     paddingHorizontal: 6,
   },

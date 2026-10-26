@@ -17,6 +17,12 @@ npm start
 # OR using Yarn
 yarn start
 ```
+# lancer et creer apk
+npx react-native run-android
+
+cd android
+
+.\gradlew assembleRelease --parallel --build-cache
 
 ## Step 2: Build and run your app
 

@@ -57,8 +57,12 @@ export default function AllocateOutSNConfirmBoxNew({ navigation, route }: any) {
     gs_PasswordSalt,
     gs_version,
     gs_remark,
+    
     gs_classCode,
-  } = useGlobalStr();
+    gs_factoryindex,
+} = useGlobalStr();
+
+    const styles = createStyles(gs_factoryindex === "zentech" ? "#06b86c" : "#0052cc");
 
   const [items, setItems] = useState<SumItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -424,7 +428,7 @@ export default function AllocateOutSNConfirmBoxNew({ navigation, route }: any) {
 
       {loading && (
         <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="large" color="#0052cc" />
+          <ActivityIndicator size="large" color={gs_factoryindex === "zentech" ? "#06b86c" : "#0052cc"} />
         </View>
       )}
     </SafeAreaView>
@@ -434,10 +438,10 @@ export default function AllocateOutSNConfirmBoxNew({ navigation, route }: any) {
 const { width } = Dimensions.get("window");
 const scale = (size: number) => (width / 375) * size;
 
-const styles = StyleSheet.create({
+const createStyles = (factoryColor: string) => StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F8FAFC" },
   header: {
-    backgroundColor: "#0052cc",
+    backgroundColor: factoryColor,
     paddingHorizontal: width * 0.05,
     height: scale(56),
     flexDirection: "row",
@@ -458,7 +462,7 @@ const styles = StyleSheet.create({
   },
   infoBlock: {
     flex: 1,
-    backgroundColor: "#0052cc",
+    backgroundColor: factoryColor,
     paddingVertical: 10,
     paddingHorizontal: 12,
     borderRadius: 10,
@@ -476,7 +480,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#1E293B",
     fontWeight: "600",
-    borderColor: "#0052cc",
+    borderColor: factoryColor,
     borderWidth: 1
   },
   statusLabelCard: {
@@ -488,19 +492,19 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     alignItems: "center",
   },
-  statusLabelText: { color: "#0052cc", fontSize: 10, fontWeight: "900", textAlign: 'center' },
+  statusLabelText: { color: factoryColor, fontSize: 10, fontWeight: "900", textAlign: 'center' },
   listCard: {
     flex: 1,
     backgroundColor: "#FFF",
     borderRadius: 16,
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: "#0052cc",
+    borderColor: factoryColor,
     marginBottom: 8,
   },
   listHeader: {
     flexDirection: "row",
-    backgroundColor: "#0052cc",
+    backgroundColor: factoryColor,
     paddingVertical: 10,
     paddingHorizontal: 6,
   },
@@ -536,7 +540,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 4,
     flex: 1,
   },
-  confirmBtn: { backgroundColor: "#0052cc" },
+  confirmBtn: { backgroundColor: factoryColor },
   btnText: { color: "#FFFFFF", fontSize: 15, fontWeight: "900" },
   totalRow: {
     padding: 10,
@@ -548,7 +552,7 @@ const styles = StyleSheet.create({
   totalRowText: {
     fontSize: 13,
     fontWeight: "900",
-    color: "#0052cc",
+    color: factoryColor,
   },
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,

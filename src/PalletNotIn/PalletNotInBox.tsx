@@ -29,7 +29,9 @@ interface BoxItem {
 export default function PalletNotInBox({ navigation, route }: any) {
     const { palletCode } = route.params || {};
     const global = useGlobal();
-    const { gsURL, gs_factoryCode, gs_userName,operateUserCode, operateUserName, operateWareHouseCode, operateRandomNumber, operateSign, operateVersion, } = global;
+    const { gsURL, gs_factoryCode, gs_userName,operateUserCode, operateUserName, operateWareHouseCode, operateRandomNumber, operateSign, operateVersion, gs_factoryindex, } = global;
+
+    const styles = createStyles(gs_factoryindex === "zentech" ? "#06b86c" : "#0052cc");
     const BASE_URL = gsURL;
     const [token, setToken] = useState("");
 
@@ -177,7 +179,7 @@ export default function PalletNotInBox({ navigation, route }: any) {
                             </View>
 
                             {loading ? (
-                                <ActivityIndicator size="large" color="#0052cc" style={{ marginTop: 40 }} />
+                                <ActivityIndicator size="large" color="#06b86c" style={{ marginTop: 40 }} />
                             ) : (
                                 <FlatList
                                     data={boxes}
@@ -215,10 +217,10 @@ const { width } = Dimensions.get("window");
 const isSmallDevice = width < 360;
 const scale = (size: number) => (width / 375) * size;
 
-const styles = StyleSheet.create({
+const createStyles = (factoryColor: string) => StyleSheet.create({
     container: { flex: 1, backgroundColor: "#F8FAFC" },
     header: {
-        backgroundColor: "#0052cc",
+        backgroundColor: factoryColor,
         paddingHorizontal: width * 0.05,
         height: scale(56),
         flexDirection: "row",
@@ -237,7 +239,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        backgroundColor: "#0052cc",
+        backgroundColor: factoryColor,
         paddingHorizontal: 12,
         paddingVertical: 4,
         borderRadius: 12,
@@ -249,7 +251,7 @@ const styles = StyleSheet.create({
     statValue: { color: "#FFFFFF", fontSize: 13, fontWeight: "800" },
     content: { flex: 1 },
     tableCard: { flex: 1, backgroundColor: "#FFF", marginHorizontal: 16, borderRadius: 16, overflow: "hidden", elevation: 2, borderWidth: 1, borderColor: "#E2E8F0", marginBottom: -2 },
-    tableHeader: { flexDirection: "row", backgroundColor: "#0052cc", paddingVertical: 10 },
+    tableHeader: { flexDirection: "row", backgroundColor: factoryColor, paddingVertical: 10 },
     headerCell: { fontSize: 10, fontWeight: "800", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
     tableRow: { flexDirection: "row", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#F1F5F9", alignItems: "center" },
     selectedRow: { backgroundColor: "#ffc3c3ff" },
@@ -258,8 +260,8 @@ const styles = StyleSheet.create({
     cellSub: { fontSize: 10, color: "#64748B", textAlign: "center" },
     footer: { padding: 16, borderTopWidth: 1, borderTopColor: '#e2e8f0' },
     actionBtn: { height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
-    btnPrimary: { backgroundColor: '#0052cc' },
-    btnDisabled: { backgroundColor: '#0052cc' },
+    btnPrimary: { backgroundColor: factoryColor },
+    btnDisabled: { backgroundColor: factoryColor },
     btnSecondary: { backgroundColor: '#f1f5f9', borderWidth: 1, borderColor: '#e2e8f0' },
     btnTextPrimary: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
     btnTextSecondary: { color: '#475569', fontSize: 15, fontWeight: '700' },

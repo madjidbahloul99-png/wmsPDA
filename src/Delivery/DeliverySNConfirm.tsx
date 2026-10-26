@@ -57,8 +57,12 @@ export default function DeliverySNConfirm({ navigation, route }: any) {
     gs_PasswordSalt,
     gs_version,
     gs_remark,
+    
     gs_classCode,
-  } = useGlobalStr();
+    gs_factoryindex,
+} = useGlobalStr();
+
+    const styles = createStyles(gs_factoryindex === "zentech" ? "#06b86c" : "#0052cc");
 
   const [loading, setLoading] = useState(false);
   const [details, setDetails] = useState<SNDetail[]>([]);
@@ -432,7 +436,7 @@ export default function DeliverySNConfirm({ navigation, route }: any) {
 
               <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={true}>
                 {loading ? (
-                  <ActivityIndicator size="large" color="#0052cc" style={{ marginTop: 40 }} />
+                  <ActivityIndicator size="large" color="#06b86c" style={{ marginTop: 40 }} />
                 ) : details.length === 0 ? (
                   <Text style={styles.emptyText}>Waiting for details load or Exception bypass...</Text>
                 ) : (
@@ -481,10 +485,10 @@ export default function DeliverySNConfirm({ navigation, route }: any) {
 const { width } = Dimensions.get("window");
 const scale = (size: number) => (width / 375) * size;
 
-const styles = StyleSheet.create({
+const createStyles = (factoryColor: string) => StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F8FAFC" },
   header: {
-    backgroundColor: "#0052cc",
+    backgroundColor: factoryColor,
     paddingHorizontal: width * 0.05,
     height: scale(56),
     flexDirection: "row",
@@ -499,7 +503,7 @@ const styles = StyleSheet.create({
   userNameText: { color: "#FFFFFF", fontSize: scale(11), fontWeight: "700" },
   content: { flex: 1, padding: 12 },
   modelTagBanner: {
-    backgroundColor: "#0052cc",
+    backgroundColor: factoryColor,
     paddingVertical: 10,
     paddingHorizontal: 14,
     borderRadius: 10,
@@ -537,14 +541,14 @@ const styles = StyleSheet.create({
   eanCard: {
     marginBottom: 8,
   },
-  eanHeading: { fontSize: 9, fontWeight: "900", color: "#0052cc", marginBottom: 5 },
+  eanHeading: { fontSize: 9, fontWeight: "900", color: factoryColor, marginBottom: 5 },
   eanInputRow: { flexDirection: "row" },
   eanInput: {
     flex: 1,
     backgroundColor: "#FFFFFF",
     height: 40,
     borderWidth: 1,
-    borderColor: "#0052cc",
+    borderColor: factoryColor,
     borderRadius: 8,
     paddingHorizontal: 12,
     fontSize: 12,
@@ -553,7 +557,7 @@ const styles = StyleSheet.create({
   },
   eanBtn: {
     width: 60,
-    backgroundColor: "#0052cc",
+    backgroundColor: factoryColor,
     height: 38,
     borderRadius: 8,
     marginLeft: 6,
@@ -568,10 +572,10 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     elevation: 3,
     borderWidth: 1,
-    borderColor: "#0052cc",
+    borderColor: factoryColor,
     marginBottom: 12,
   },
-  tableHeader: { flexDirection: "row", backgroundColor: "#0052cc", paddingVertical: 10 },
+  tableHeader: { flexDirection: "row", backgroundColor: factoryColor, paddingVertical: 10 },
   headerCell: { fontSize: 10, fontWeight: "900", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
   tableRow: { flexDirection: "row", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#E2E8F0", alignItems: "center" },
   cell: { fontSize: 10, color: "#1E293B", textAlign: "center", fontWeight: "700" },

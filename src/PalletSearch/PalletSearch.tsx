@@ -37,9 +37,13 @@ export default function PalletSearch({ navigation }: any) {
         gs_wareCode,
         gs_userCode,
         gs_userName,
-        gs_PasswordSalt,
-        gs_version,
-    } = useGlobalStr();
+    gs_PasswordSalt,
+        
+    gs_version,
+    gs_factoryindex,
+} = useGlobalStr();
+
+    const styles = createStyles(gs_factoryindex === "zentech" ? "#06b86c" : "#0052cc");
 
     const [txtSN, setTxtSN] = useState("");
     const [items, setItems] = useState<BoxItem[]>([]);
@@ -258,7 +262,7 @@ export default function PalletSearch({ navigation }: any) {
 
             {loading && (
                 <View style={styles.loadingOverlay}>
-                    <ActivityIndicator size="large" color="#0052cc" />
+                    <ActivityIndicator size="large" color={gs_factoryindex === "zentech" ? "#06b86c" : "#0052cc"} />
                 </View>
             )}
         </SafeAreaView>
@@ -268,10 +272,10 @@ export default function PalletSearch({ navigation }: any) {
 const { width } = Dimensions.get("window");
 const scale = (size: number) => (width / 375) * size;
 
-const styles = StyleSheet.create({
+const createStyles = (factoryColor: string) => StyleSheet.create({
     container: { flex: 1, backgroundColor: "#F8FAFC" },
     header: {
-        backgroundColor: "#0052cc",
+        backgroundColor: factoryColor,
         paddingHorizontal: width * 0.05,
         height: scale(56),
         flexDirection: "row",
@@ -292,7 +296,7 @@ const styles = StyleSheet.create({
         marginBottom: 8,
         elevation: 2,
         borderWidth: 1,
-        borderColor: "#0052cc",
+        borderColor: factoryColor,
     },
     inputGroup: { marginBottom: 12 },
     input: {
@@ -304,9 +308,9 @@ const styles = StyleSheet.create({
         color: "#1E293B",
         fontWeight: "600",
         borderWidth: 1,
-        borderColor: "#0052cc",
+        borderColor: factoryColor,
     },
-    totalQtyBox: { backgroundColor: "#0052cc", padding: 12, borderRadius: 8, flexDirection: "row", justifyContent: "space-between", marginTop: 8, marginBottom: 12 },
+    totalQtyBox: { backgroundColor: factoryColor, padding: 12, borderRadius: 8, flexDirection: "row", justifyContent: "space-between", marginTop: 8, marginBottom: 12 },
     totalQtyLabel: { color: "#FFFFFF", fontSize: 14, fontWeight: "700" },
     totalQtyValue: { color: "#FFFFFF", fontSize: 14, fontWeight: "900" },
     listCard: {
@@ -315,12 +319,12 @@ const styles = StyleSheet.create({
         borderRadius: 16,
         overflow: "hidden",
         borderWidth: 1,
-        borderColor: "#0052cc",
+        borderColor: factoryColor,
         marginBottom: 8,
     },
     listHeader: {
         flexDirection: "row",
-        backgroundColor: "#0052cc",
+        backgroundColor: factoryColor,
         paddingVertical: 10,
         paddingHorizontal: 6,
     },

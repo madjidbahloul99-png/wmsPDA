@@ -40,8 +40,12 @@ export default function GDSInventory({ navigation }: any) {
     g_webUrl,
     g_isRealUrl,
     gs_PasswordSalt,
+    
     gs_version,
-  } = useGlobalStr();
+    gs_factoryindex,
+} = useGlobalStr();
+
+    const styles = createStyles(gs_factoryindex === "zentech" ? "#06b86c" : "#0052cc");
 
   // Screen global variables / states matching C# variables
   const [f_billCode, setFBillCode] = useState("");
@@ -591,7 +595,7 @@ export default function GDSInventory({ navigation }: any) {
         {/* Action Panel Buttons */}
         <View style={styles.actionButtonsRow}>
           <TouchableOpacity
-            style={[styles.controlBtn, { backgroundColor: "#0052cc" }]}
+            style={[styles.controlBtn, { backgroundColor: "#06b86c" }]}
             onPress={btnChoice_Click}
           >
             <Text style={styles.controlBtnText}>Choice </Text>
@@ -602,7 +606,7 @@ export default function GDSInventory({ navigation }: any) {
 
       {loading && (
         <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="large" color="#0052cc" />
+          <ActivityIndicator size="large" color="#06b86c" />
         </View>
       )}
     </SafeAreaView>
@@ -612,10 +616,10 @@ export default function GDSInventory({ navigation }: any) {
 const { width } = Dimensions.get("window");
 const scale = (size: number) => (width / 375) * size;
 
-const styles = StyleSheet.create({
+const createStyles = (factoryColor: string) => StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F8FAFC" },
   header: {
-    backgroundColor: "#0052cc",
+    backgroundColor: factoryColor,
     paddingHorizontal: width * 0.05,
     height: scale(56),
     flexDirection: "row",
@@ -630,11 +634,11 @@ const styles = StyleSheet.create({
   userNameText: { color: "#FFFFFF", fontSize: scale(12), fontWeight: "700" },
   content: { flex: 1, padding: 8 },
   infoCard: {
-    backgroundColor: "#0052cc",
+    backgroundColor: factoryColor,
     borderRadius: 12,
     padding: 10,
     borderWidth: 1,
-    borderColor: "#0052cc",
+    borderColor: factoryColor,
     marginBottom: 6,
   },
   infoRow: {
@@ -662,7 +666,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 8,
     borderWidth: 1,
-    borderColor: "#0052cc",
+    borderColor: factoryColor,
     marginBottom: 6,
   },
   inputLabel: {
@@ -680,7 +684,7 @@ const styles = StyleSheet.create({
     color: "#1E293B",
     fontWeight: "700",
     borderWidth: 1,
-    borderColor: "#0052cc",
+    borderColor: factoryColor,
     paddingVertical: 0,
     marginBottom: 6,
   },
@@ -695,14 +699,14 @@ const styles = StyleSheet.create({
     height: scale(36),
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#0052cc",
+    borderColor: factoryColor,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 10,
   },
   inlineSaveBtn: {
-    backgroundColor: "#0052cc",
+    backgroundColor: factoryColor,
     height: scale(36),
     borderRadius: 8,
     paddingHorizontal: 16,
@@ -727,7 +731,7 @@ const styles = StyleSheet.create({
   },
   comboChevron: {
     fontSize: 10,
-    color: "#0052cc",
+    color: factoryColor,
     fontWeight: "900",
   },
   modalOverlay: {
@@ -751,7 +755,7 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 16,
     fontWeight: "800",
-    color: "#0052cc",
+    color: factoryColor,
     marginBottom: 12,
     textAlign: "center",
   },
@@ -777,12 +781,12 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: "#0052cc",
+    borderColor: factoryColor,
     marginBottom: 6,
   },
   listHeader: {
     flexDirection: "row",
-    backgroundColor: "#0052cc",
+    backgroundColor: factoryColor,
     paddingVertical: 8,
     paddingHorizontal: 4,
   },

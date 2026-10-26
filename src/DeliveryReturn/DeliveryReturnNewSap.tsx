@@ -43,8 +43,12 @@ export default function DeliveryReturnNewSap({ navigation, route }: any) {
     gs_PasswordSalt,
     gs_version,
     gs_classCode,
+    
     gs_IPAddress,
-  } = useGlobalStr();
+    gs_factoryindex,
+} = useGlobalStr();
+
+    const styles = createStyles(gs_factoryindex === "zentech" ? "#06b86c" : "#0052cc");
 
   // Screen States
   const [txtSource, setTxtSource] = useState("");
@@ -450,7 +454,7 @@ export default function DeliveryReturnNewSap({ navigation, route }: any) {
 
       {loading && (
         <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="large" color="#0052cc" />
+          <ActivityIndicator size="large" color="#06b86c" />
         </View>
       )}
     </SafeAreaView>
@@ -460,10 +464,10 @@ export default function DeliveryReturnNewSap({ navigation, route }: any) {
 const { width } = Dimensions.get("window");
 const scale = (size: number) => (width / 375) * size;
 
-const styles = StyleSheet.create({
+const createStyles = (factoryColor: string) => StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F8FAFC" },
   header: {
-    backgroundColor: "#0052cc",
+    backgroundColor: factoryColor,
     paddingHorizontal: width * 0.05,
     height: scale(56),
     flexDirection: "row",
@@ -482,11 +486,11 @@ const styles = StyleSheet.create({
     padding: 8,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#0052cc",
+    borderColor: factoryColor,
     marginBottom: 8,
   },
   infoRowItem: {
-    backgroundColor: "#0052cc",
+    backgroundColor: factoryColor,
     padding: 10,
     borderRadius: 8,
     marginBottom: 6,
@@ -513,7 +517,7 @@ const styles = StyleSheet.create({
     color: "#1E293B",
     fontWeight: "700",
     borderWidth: 1,
-    borderColor: "#0052cc",
+    borderColor: factoryColor,
   },
   listCard: {
     flex: 1,
@@ -521,12 +525,12 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: "#0052cc",
+    borderColor: factoryColor,
     marginBottom: 8,
   },
   listHeader: {
     flexDirection: "row",
-    backgroundColor: "#0052cc",
+    backgroundColor: factoryColor,
     paddingVertical: 10,
     paddingHorizontal: 6,
   },
@@ -567,7 +571,7 @@ const styles = StyleSheet.create({
   totalText: {
     fontSize: 13,
     fontWeight: "900",
-    color: "#0052cc",
+    color: factoryColor,
   },
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,

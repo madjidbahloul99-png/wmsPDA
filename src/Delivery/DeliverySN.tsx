@@ -72,8 +72,11 @@ export default function DeliverySN({ navigation, route }: any) {
     gs_PasswordSalt,
     gs_version,
     gs_classCode,
-    gs_IPAddress
+    gs_IPAddress,
+    gs_factoryindex,
   } = useGlobalStr();
+
+    const styles = createStyles(gs_factoryindex === "zentech" ? "#06b86c" : "#0052cc");
 
   // globalstr variables mapped to C# fields
   const [f_modeEAN, setFModeEan] = useState("ean Error");
@@ -543,7 +546,7 @@ export default function DeliverySN({ navigation, route }: any) {
           <View style={{
             borderRadius: 10,
             borderWidth: scanState === "waiting" ? 1 : 2,
-            borderColor: scanState === "waiting" ? "#0052cc" : scanState === "scanning" ? "#f59e0b" : scanState === "success" ? "#16a34a" : "#dc2626",
+            borderColor: scanState === "waiting" ? "#06b86c" : scanState === "scanning" ? "#f59e0b" : scanState === "success" ? "#16a34a" : "#dc2626",
             backgroundColor: "#e2f0eeff",
             elevation: 4,
           }}>
@@ -578,9 +581,9 @@ export default function DeliverySN({ navigation, route }: any) {
               </View>
 
               <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={true}>
-                {loading ? (
-                  <ActivityIndicator size="large" color="#0052cc" style={{ marginTop: 40 }} />
-                ) : scannedList.length === 0 ? (
+{loading ? (
+        <ActivityIndicator size="large" color={gs_factoryindex === "zentech" ? "#06b86c" : "#0052cc"} style={{ marginTop: 40 }} />
+      ) : scannedList.length === 0 ? (
                   <Text style={styles.emptyText}>No items scanned yet.</Text>
                 ) : (
                   scannedList.map((item, index) => (
@@ -616,10 +619,10 @@ export default function DeliverySN({ navigation, route }: any) {
 const { width } = Dimensions.get("window");
 const scale = (size: number) => (width / 375) * size;
 
-const styles = StyleSheet.create({
+const createStyles = (factoryColor: string) => StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F8FAFC" },
   header: {
-    backgroundColor: "#0052cc",
+    backgroundColor: factoryColor,
     paddingHorizontal: width * 0.05,
     height: scale(56),
     flexDirection: "row",
@@ -640,13 +643,13 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     elevation: 3,
     borderWidth: 1,
-    borderColor: "#0052cc",
+    borderColor: factoryColor,
   },
   infoRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    backgroundColor: "#0052cc",
+    backgroundColor: factoryColor,
     paddingHorizontal: 12,
     height: 34,
     borderRadius: 10,
@@ -673,16 +676,16 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     elevation: 3,
     borderWidth: 1,
-    borderColor: "#0052cc",
+    borderColor: factoryColor,
     marginBottom: 12,
   },
-  tableHeader: { flexDirection: "row", backgroundColor: "#0052cc", paddingVertical: 10 },
+  tableHeader: { flexDirection: "row", backgroundColor: factoryColor, paddingVertical: 10 },
   headerCell: { fontSize: 10, fontWeight: "900", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
   tableRow: { flexDirection: "row", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#E2E8F0", alignItems: "center" },
   cell: { fontSize: 10, color: "#1E293B", textAlign: "center", fontWeight: "700" },
   emptyText: { textAlign: "center", padding: 40, color: "#94A3B8", fontStyle: "italic", width: 620 },
   footerRow: {
-    backgroundColor: "#0052cc",
+    backgroundColor: factoryColor,
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderRadius: 10,

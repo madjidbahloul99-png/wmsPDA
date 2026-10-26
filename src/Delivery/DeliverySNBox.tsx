@@ -37,8 +37,12 @@ export default function DeliverySNBox({ navigation, route }: any) {
     gs_userCode,
     gs_userName,
     gs_PasswordSalt,
+    
     gs_version,
-  } = useGlobalStr();
+    gs_factoryindex,
+} = useGlobalStr();
+
+    const styles = createStyles(gs_factoryindex === "zentech" ? "#06b86c" : "#0052cc");
 
   // State variables mapping to C# form controls
   const [f_qty, setFQty] = useState(String(f_qty_initial));
@@ -277,7 +281,7 @@ export default function DeliverySNBox({ navigation, route }: any) {
           ) : null}
         </View>
 
-        {loading && <ActivityIndicator size="small" color="#0052cc" style={styles.spinner} />}
+        {loading && <ActivityIndicator size="small" color="#06b86c" style={styles.spinner} />}
 
         <View style={styles.footer}>
           <TouchableOpacity
@@ -296,10 +300,10 @@ export default function DeliverySNBox({ navigation, route }: any) {
 const { width } = Dimensions.get("window");
 const scale = (size: number) => (width / 375) * size;
 
-const styles = StyleSheet.create({
+const createStyles = (factoryColor: string) => StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F8FAFC" },
   header: {
-    backgroundColor: "#0052cc",
+    backgroundColor: factoryColor,
     paddingHorizontal: width * 0.05,
     height: scale(56),
     flexDirection: "row",
@@ -318,7 +322,7 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: "#0052cc",
+    borderColor: factoryColor,
     elevation: 4,
     marginBottom: 20,
   },
@@ -326,7 +330,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    backgroundColor: "#0052cc",
+    backgroundColor: factoryColor,
     paddingHorizontal: 15,
     height: 38,
     borderRadius: 10,
@@ -348,7 +352,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#e2f0eeff",
     height: 44,
     borderWidth: 1,
-    borderColor: "#0052cc",
+    borderColor: factoryColor,
     borderRadius: 10,
     paddingHorizontal: 15,
     fontSize: 14,

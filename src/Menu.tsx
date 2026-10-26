@@ -168,7 +168,10 @@ export default function Menu({ navigation }: any) {
     gs_userName,
     gs_wareName,
     gs_PasswordSalt,
+    gs_factoryindex,
   } = useGlobalStr();
+
+    const styles = createStyles(gs_factoryindex === "zentech" ? "#06b86c" : "#0052cc");
 
   const [filteredMenu, setFilteredMenu] = useState<BaseMenuVo[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
@@ -282,7 +285,7 @@ export default function Menu({ navigation }: any) {
 
       {loading && (
         <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="large" color="#0052cc" />
+          <ActivityIndicator size="large" color={gs_factoryindex === "zentech" ? "#06b86c" : "#0052cc"} />
           <Text style={styles.loadingText}>Loading permissions...</Text>
         </View>
       )}
@@ -357,13 +360,13 @@ export default function Menu({ navigation }: any) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (factoryColor: string) => StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: "#F8FAFC",
   },
   header: {
-    backgroundColor: "#0052cc",
+    backgroundColor: factoryColor,
     paddingHorizontal: width * 0.05,
     height: scale(56),
     flexDirection: "row",
@@ -388,7 +391,7 @@ const styles = StyleSheet.create({
   },
   subHeader: {
     flexDirection: 'row',
-    backgroundColor: '#0052cc',
+    backgroundColor: factoryColor,
     paddingHorizontal: 20,
     paddingBottom: 12,
     justifyContent: 'space-between',
@@ -438,7 +441,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     minHeight: scale(160),
     elevation: 3,
-    shadowColor: "#0052cc",
+    shadowColor: factoryColor,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
@@ -492,7 +495,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
     fontSize: scale(14),
     fontWeight: "600",
-    color: "#0052cc",
+    color: factoryColor,
   },
   emptyContainer: {
     width: "100%",
@@ -519,7 +522,7 @@ const styles = StyleSheet.create({
   footerButton: {
     flex: 1,
     height: scale(38),
-    backgroundColor: "#0052cc",
+    backgroundColor: factoryColor,
     borderRadius: 8,
     justifyContent: "center",
     alignItems: "center",
