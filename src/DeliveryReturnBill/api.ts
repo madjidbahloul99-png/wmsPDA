@@ -134,22 +134,52 @@ const requestGet = async (
   params: Record<string, string>,
 ): Promise<ApiEnvelope> => {
   if (!DELIVERY_RETURN_BILL_API_ENABLED) {
-    throw new Error('Delivery Return Bill API is disabled until the server endpoints are published.');
+    console.warn('[DeliveryReturnBill] GET blocked: API feature is disabled.');
+    throw new Error('Delivery Return Bill API is disabled.');
   }
   const token = await AsyncStorage.getItem('userToken');
-  console.log('requestGet', path, params, token);
-  const headers: Record<string, string> = {};
-  if (token) headers.Authorization = `Bearer ${token}`;
+  if (!token) {
+    console.warn('[DeliveryReturnBill] GET blocked: no JWT token is available.');
+    throw new Error(
+      'JWT login failed. Delivery Return Bill is unavailable for this session.',
+    );
+  }
+  console.info('[DeliveryReturnBill] GET started:', path, {
+    params: Object.fromEntries(
+      Object.entries(params).filter(([key]) => {
+        const normalizedKey = key.toLowerCase();
+        return (
+          !normalizedKey.startsWith('operate') &&
+          normalizedKey !== 'usercode' &&
+          normalizedKey !== 'username'
+        );
+      }),
+    ),
+    tokenAvailable: Boolean(token),
+  });
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${token}`,
+  };
   const url = `${ctx.gs_BaseURL}${path}?${buildQuery(params)}`;
-  const response = await fetch(url, { method: 'GET', headers });
+  let response: Response;
+  try {
+    response = await fetch(url, { method: 'GET', headers });
+  } catch (error) {
+    console.error('[DeliveryReturnBill] GET network error:', path, error);
+    throw error;
+  }
   let resData: any = null;
   try {
     resData = await response.json();
   } catch {
     // no body or no json, the status tells the outcome
   }
-  console.log('requestGet', url, response.status, resData);
   const envelope = readEnvelope(resData, response.status);
+  console.info('[DeliveryReturnBill] GET response:', path, {
+    status: response.status,
+    code: envelope.code,
+    message: envelope.message,
+  });
   if (!envelope.ok) {
     if (envelope.message) {
       throw new Error(envelope.message);
@@ -169,19 +199,35 @@ const requestPost = async (
   body: Record<string, any>,
 ): Promise<ApiEnvelope> => {
   if (!DELIVERY_RETURN_BILL_API_ENABLED) {
-    throw new Error('Delivery Return Bill API is disabled until the server endpoints are published.');
+    console.warn('[DeliveryReturnBill] POST blocked: API feature is disabled.');
+    throw new Error('Delivery Return Bill API is disabled.');
   }
   const token = await AsyncStorage.getItem('userToken');
+  if (!token) {
+    console.warn('[DeliveryReturnBill] POST blocked: no JWT token is available.');
+    throw new Error(
+      'JWT login failed. Delivery Return Bill is unavailable for this session.',
+    );
+  }
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    Authorization: `Bearer ${token}`,
   };
-  if (token) headers.Authorization = `Bearer ${token}`;
   const url = `${ctx.gs_BaseURL}${path}`;
-  const response = await fetch(url, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(body),
+  console.info('[DeliveryReturnBill] POST started:', path, {
+    tokenAvailable: Boolean(token),
   });
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+    });
+  } catch (error) {
+    console.error('[DeliveryReturnBill] POST network error:', path, error);
+    throw error;
+  }
   let resData: any = null;
   try {
     resData = await response.json();
@@ -189,6 +235,11 @@ const requestPost = async (
     // no body or no json, the status tells the outcome
   }
   const envelope = readEnvelope(resData, response.status);
+  console.info('[DeliveryReturnBill] POST response:', path, {
+    status: response.status,
+    code: envelope.code,
+    message: envelope.message,
+  });
   if (!envelope.ok) {
     if (envelope.message) {
       throw new Error(envelope.message);

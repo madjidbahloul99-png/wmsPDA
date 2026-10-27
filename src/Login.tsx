@@ -515,8 +515,14 @@ export default function Login({ navigation }: any) {
                 url += `&version=${gs_version}`;
                 url += `&languageType=${language}`;
 
+                console.info("[Login] Legacy login request started.");
                 const res = await fetch(url);
                 const data = await res.json();
+                console.info("[Login] Legacy login response:", {
+                    status: res.status,
+                    success: Boolean(data?.success),
+                    message: data?.msg || "",
+                });
 
                 if (data && data.success) {
                     const vo = typeof data.data === 'string' ? JSON.parse(data.data) : data.data;
@@ -528,6 +534,7 @@ export default function Login({ navigation }: any) {
                     lastError = data?.msg || "Login details verification failed.";
                 }
             } catch (err: any) {
+                console.error("[Login] Legacy login request failed.", err);
                 pubfunction.ShowError("Login attempt failed for candidate");
                 lastError = `Cannot verify credentials`;
             }
@@ -735,7 +742,7 @@ export default function Login({ navigation }: any) {
                 await loginWithJwt(gs_BaseURL, userVal, loginRes.passwordCandidate);
             } catch (error) {
                 // JWT auth is optional for the legacy app session while the new API is unavailable.
-                console.warn("JWT login failed; continuing with legacy login.", error);
+                console.warn("[Login] JWT authentication failed; continuing with legacy login.", error);
             }
 
             try {

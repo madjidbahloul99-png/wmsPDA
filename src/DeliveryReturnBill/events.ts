@@ -11,4 +11,3 @@
 export const EVENT_RETURNED = "ON_DELIVERY_RETURN_BILL_RETURNED";
 
 /** Emitted to refresh the scanned bill and its models. */
-export const EVENT_REFRESH = "ON_DELIVERY_RETURN_BILL_REFRESH";

@@ -18,7 +18,7 @@ import { useGlobalStr } from "../../GlobalStrContext";
 import * as pubfunction from "../pubfunction";
 import { ApiContext, checkSNTraceability } from "./api";
 import { ReturnContext, TraceabilityRecord } from "./types";
-import { EVENT_REFRESH, EVENT_RETURNED } from "./events";
+import { EVENT_RETURNED } from "./events";
 
 /**
  * Page 2 - Scan the SN of the returned product and check its delivery traceability.
@@ -266,7 +266,6 @@ export default function DeliveryReturnBillSN({ navigation, route }: any) {
   };
 
   const handleBack = () => {
-    DeviceEventEmitter.emit(EVENT_REFRESH);
     navigation.goBack();
   };
 

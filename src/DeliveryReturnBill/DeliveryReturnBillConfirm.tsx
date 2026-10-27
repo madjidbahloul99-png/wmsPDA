@@ -16,7 +16,7 @@ import { useGlobalStr } from "../../GlobalStrContext";
 import * as pubfunction from "../pubfunction";
 import { ApiContext, confirmReturn } from "./api";
 import { ReturnContext, TraceabilityRecord } from "./types";
-import { EVENT_REFRESH, EVENT_RETURNED } from "./events";
+import { EVENT_RETURNED } from "./events";
 
 /**
  * Page 4 - Confirm the return of a product that has a delivery traceability.
@@ -126,7 +126,6 @@ export default function DeliveryReturnBillConfirm({ navigation, route }: any) {
   };
 
   const handleExitClick = () => {
-    DeviceEventEmitter.emit(EVENT_REFRESH);
     navigation.goBack();
   };
 

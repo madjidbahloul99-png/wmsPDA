@@ -12,14 +12,13 @@ import {
   ActivityIndicator,
   Image,
   Dimensions,
-  DeviceEventEmitter,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect } from "@react-navigation/native";
 import { useGlobalStr } from "../../GlobalStrContext";
 import * as pubfunction from "../pubfunction";
 import { ApiContext, getBillModels } from "./api";
 import { BillModelGroup, BillModelRow, ReturnContext } from "./types";
-import { EVENT_REFRESH } from "./events";
 
 /** One line of the table, a customer of a model. */
 type TableItem = {
@@ -87,6 +86,32 @@ export default function DeliveryReturnBillSelect({ navigation }: any) {
   // True while a request is in flight, a ref is always up to date (no stale closure)
   const busyRef = useRef(false);
 
+  useEffect(() => {
+    let isActive = true;
+
+    const notifyIfJwtUnavailable = async () => {
+      try {
+        const token = await AsyncStorage.getItem("userToken");
+        if (isActive && !token) {
+          pubfunction.ShowError(
+            "JWT login failed. Delivery Return Bill is unavailable for this session. Check the network/VPN and log in again.",
+          );
+        }
+      } catch {
+        if (isActive) {
+          pubfunction.ShowError(
+            "JWT login failed. Delivery Return Bill is unavailable for this session. Check the network/VPN and log in again.",
+          );
+        }
+      }
+    };
+
+    notifyIfJwtUnavailable();
+    return () => {
+      isActive = false;
+    };
+  }, []);
+
   const ensureFocus = () => {
     txtBillRef.current?.focus();
   };
@@ -147,25 +172,14 @@ export default function DeliveryReturnBillSelect({ navigation }: any) {
     [apiCtx]
   );
 
-  // Register the refresh event and focus the scan input
+  // Clean up a pending scan timer on unmount.
   useEffect(() => {
-    const refreshSub = DeviceEventEmitter.addListener(EVENT_REFRESH, () => {
-      if (f_billCode) {
-        loadBillModels(f_billCode);
-      }
-    });
-
-    setTimeout(() => {
-      txtBillRef.current?.focus();
-    }, 300);
-
     return () => {
-      refreshSub.remove();
       if (scanTimer.current) {
         clearTimeout(scanTimer.current);
       }
     };
-  }, [f_billCode, loadBillModels]);
+  }, []);
 
   // Reload the bill when the screen comes back (products could have been returned)
   useFocusEffect(

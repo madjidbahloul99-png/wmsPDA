@@ -215,14 +215,20 @@ describe("DeliveryReturnBill api (real WMS API)", () => {
     expect(options.headers["Authorization"]).toBe("Bearer jwt-token");
   });
 
-  it("sends only an unsigned request when no token is stored", async () => {
+  it("blocks GET and POST requests when no token is stored", async () => {
     setToken(null);
-    mockFetch({ code: 200, message: "success", data: [] });
+    const fetchMock = jest.fn();
+    (globalThis as any).fetch = fetchMock;
 
-    await getBillModels(ctx, { sapMainBillCode: "2026062030" });
+    await expect(
+      getBillModels(ctx, { sapMainBillCode: "2026062030" })
+    ).rejects.toThrow("JWT login failed. Delivery Return Bill is unavailable for this session.");
 
-    const options = (globalThis as any).fetch.mock.calls[0][1];
-    expect(options.headers["Authorization"]).toBeUndefined();
+    await expect(
+      confirmReturn(ctx, { context, sn: "1326168351000021" })
+    ).rejects.toThrow("JWT login failed. Delivery Return Bill is unavailable for this session.");
+
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("asks to log in again on HTTP 401", async () => {
