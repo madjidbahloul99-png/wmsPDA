@@ -367,12 +367,9 @@ export default function Login({ navigation }: any) {
 
                 setUserVal(u);
                 setDisplayUserVal(u);
-                
                 setPasswordVal(p);
-                
                 setHideUserCode(false);
                 isScanningRef.current = false;
-                
                 getWarehouseListByUser(u);
                 setTimeout(() => {
                     warehouseRef.current?.focus();
@@ -384,10 +381,8 @@ export default function Login({ navigation }: any) {
                 userRef.current?.clear();
                 setUserVal("");
                 setDisplayUserVal("");
-                
                 passwordRef.current?.clear();
                 setPasswordVal("");
-                
                 setHideUserCode(false);
                 isScanningRef.current = false;
             } else {

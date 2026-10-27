@@ -24,8 +24,8 @@
  * user as "Authorization: Bearer <token>", the token is stored in
  * AsyncStorage ("userToken") by the login flow.
  */
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import * as pubfunction from "../pubfunction";
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as pubfunction from '../pubfunction';
 import {
   BillModelGroup,
   BillModelRow,
@@ -36,17 +36,17 @@ import {
   ReturnResult,
   TraceabilityCheckResult,
   TraceabilityRecord,
-} from "./types";
+} from './types';
 
 /** Base path of the feature on the WMS API. */
-export const API_PATH = "/api/DeliveryReturn";
+export const API_PATH = '/api/DeliveryReturn';
 
 /** Scan types of the save request. */
-export const SCAN_TYPE_TRACE = "TRACE";
-export const SCAN_TYPE_EAN = "EAN";
+export const SCAN_TYPE_TRACE = 'TRACE';
+export const SCAN_TYPE_EAN = 'EAN';
 
 /** Status of the goods movement, "C" = the unit was already returned. */
-export const GOODS_MOVEMENT_STATUS_DONE = "C";
+export const GOODS_MOVEMENT_STATUS_DONE = 'C';
 
 /** Everything the API layer needs from the global context. */
 export interface ApiContext {
@@ -72,10 +72,12 @@ export interface ApiContext {
  * the "operate*" naming, not the legacy "operator*" one.
  */
 export const getOperateSign = (ctx: ApiContext): Record<string, string> => {
-  const userCode = ctx.gs_userCode || "admin";
+  const userCode = ctx.gs_userCode || 'admin';
   const userName = ctx.gs_userName || userCode;
-  const randomNumber = "2";
-  const sign = pubfunction.MD5(userCode + userName + randomNumber + ctx.gs_PasswordSalt);
+  const randomNumber = '2';
+  const sign = pubfunction.MD5(
+    userCode + userName + randomNumber + ctx.gs_PasswordSalt,
+  );
   return {
     operateUserCode: userCode,
     operateUserName: userName,
@@ -103,14 +105,14 @@ interface ApiEnvelope {
  * the exception middleware serializes { Code, Message, Data }, both are accepted.
  */
 const readEnvelope = (resData: any, httpStatus: number): ApiEnvelope => {
-  const raw = resData && typeof resData === "object" ? resData : {};
+  const raw = resData && typeof resData === 'object' ? resData : {};
   const code = raw.code !== undefined ? raw.code : raw.Code;
   const message = raw.message !== undefined ? raw.message : raw.Message;
   const data = raw.data !== undefined ? raw.data : raw.Data;
   return {
     ok: Number(code) === 200,
     code: Number(code !== undefined ? code : httpStatus),
-    message: message === undefined || message === null ? "" : String(message),
+    message: message === undefined || message === null ? '' : String(message),
     data,
   };
 };
@@ -119,35 +121,37 @@ const readEnvelope = (resData: any, httpStatus: number): ApiEnvelope => {
 const buildQuery = (params: Record<string, string>): string =>
   Object.keys(params)
     .map(
-      (key) =>
-        encodeURIComponent(key) + "=" + encodeURIComponent(params[key] ?? "")
+      key =>
+        encodeURIComponent(key) + '=' + encodeURIComponent(params[key] ?? ''),
     )
-    .join("&");
+    .join('&');
 
 /** GET against api/DeliveryReturn, throws an Error with the server message. */
 const requestGet = async (
   ctx: ApiContext,
   path: string,
-  params: Record<string, string>
+  params: Record<string, string>,
 ): Promise<ApiEnvelope> => {
-  const token = await AsyncStorage.getItem("userToken");
+  const token = await AsyncStorage.getItem('userToken');
+  console.log('requestGet', path, params, token);
   const headers: Record<string, string> = {};
   if (token) headers.Authorization = `Bearer ${token}`;
   const url = `${ctx.gs_BaseURL}${path}?${buildQuery(params)}`;
-  const response = await fetch(url, { method: "GET", headers });
+  const response = await fetch(url, { method: 'GET', headers });
   let resData: any = null;
   try {
     resData = await response.json();
   } catch {
     // no body or no json, the status tells the outcome
   }
+  console.log('requestGet', url, response.status, resData);
   const envelope = readEnvelope(resData, response.status);
   if (!envelope.ok) {
     if (envelope.message) {
       throw new Error(envelope.message);
     }
     if (response.status === 401) {
-      throw new Error("Session expired, please log in again");
+      throw new Error('Session expired, please log in again');
     }
     throw new Error(`HTTP Error: ${response.status}`);
   }
@@ -158,14 +162,16 @@ const requestGet = async (
 const requestPost = async (
   ctx: ApiContext,
   path: string,
-  body: Record<string, any>
+  body: Record<string, any>,
 ): Promise<ApiEnvelope> => {
-  const token = await AsyncStorage.getItem("userToken");
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const token = await AsyncStorage.getItem('userToken');
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
   if (token) headers.Authorization = `Bearer ${token}`;
   const url = `${ctx.gs_BaseURL}${path}`;
   const response = await fetch(url, {
-    method: "POST",
+    method: 'POST',
     headers,
     body: JSON.stringify(body),
   });
@@ -181,7 +187,7 @@ const requestPost = async (
       throw new Error(envelope.message);
     }
     if (response.status === 401) {
-      throw new Error("Session expired, please log in again");
+      throw new Error('Session expired, please log in again');
     }
     throw new Error(`HTTP Error: ${response.status}`);
   }
@@ -196,18 +202,18 @@ const requestPost = async (
 const pickText = (row: any, keys: string[]): string => {
   for (const key of keys) {
     const value = row ? row[key] : undefined;
-    if (value !== undefined && value !== null && String(value) !== "") {
+    if (value !== undefined && value !== null && String(value) !== '') {
       return String(value);
     }
   }
-  return "";
+  return '';
 };
 
 /** Returns the first numeric value among the aliases of a field. */
 const pickNumber = (row: any, keys: string[]): number | null => {
   for (const key of keys) {
     const value = row ? row[key] : undefined;
-    if (value !== undefined && value !== null && value !== "") {
+    if (value !== undefined && value !== null && value !== '') {
       const parsed = parseFloat(value);
       if (!isNaN(parsed)) return parsed;
     }
@@ -230,57 +236,61 @@ const pickNumber = (row: any, keys: string[]): number | null => {
  */
 export const mapRawLine = (raw: any): ReturnBillLine => {
   const movementStatus = pickText(raw, [
-    "GOODS_MOVEMENT_STATUS",
-    "goodsMovementStatus",
-    "movementStatus",
+    'GOODS_MOVEMENT_STATUS',
+    'goodsMovementStatus',
+    'movementStatus',
   ]);
-  const planQty = pickNumber(raw, ["qty", "Qty", "BILL_COUNT", "billCount"]);
+  const planQty = pickNumber(raw, ['qty', 'Qty', 'BILL_COUNT', 'billCount']);
   const billCount = planQty !== null && planQty > 0 ? planQty : 1;
-  const okQty = pickNumber(raw, ["qtyOk", "QtyOk", "OK_QTY"]);
+  const okQty = pickNumber(raw, ['qtyOk', 'QtyOk', 'OK_QTY']);
   const doneQty =
-    okQty !== null ? okQty : movementStatus === GOODS_MOVEMENT_STATUS_DONE ? billCount : 0;
+    okQty !== null
+      ? okQty
+      : movementStatus === GOODS_MOVEMENT_STATUS_DONE
+      ? billCount
+      : 0;
 
   return {
     // the plan row id (planId of the save), the GUID is the answer of today
-    lineId: pickText(raw, ["id", "Id", "ID", "GUID", "guid", "planId"]),
+    lineId: pickText(raw, ['id', 'Id', 'ID', 'GUID', 'guid', 'planId']),
     // the SAP return bill (the scanned code), the delivery bill when present
     mainBillCode: pickText(raw, [
-      "MAIN_BILL_CODE",
-      "mainBillCode",
-      "systemDeliveryCode",
+      'MAIN_BILL_CODE',
+      'mainBillCode',
+      'systemDeliveryCode',
     ]),
     // the delivery bill the goods went out with
     outBillCode: pickText(raw, [
-      "OUT_BILL_CODE",
-      "outBillCode",
-      "deliveryCode",
+      'OUT_BILL_CODE',
+      'outBillCode',
+      'deliveryCode',
     ]),
     // the operation batch column of the lists
-    deliveryCode: pickText(raw, ["deliveryCode"]),
+    deliveryCode: pickText(raw, ['deliveryCode']),
     warehouseCode: pickText(raw, [
-      "WAREHOUSE_CODE",
-      "warehouseCode",
-      "deliveryWareHouseCode",
+      'WAREHOUSE_CODE',
+      'warehouseCode',
+      'deliveryWareHouseCode',
     ]),
-    toWarehouseCode: pickText(raw, ["TO_WAREHOUSE_CODE", "toWarehouseCode"]),
-    customerCode: pickText(raw, ["CUSTOMER_CODE", "customerCode"]),
-    customerName: pickText(raw, ["CUSTOMER_NAME", "customerName"]),
-    cityCode: pickText(raw, ["CITY_CODE", "cityCode"]),
-    cityName: pickText(raw, ["CITY_NAME", "cityName"]),
-    address: pickText(raw, ["ADDRESS", "address"]),
-    customerType: pickText(raw, ["CUSTOMER_TYPE", "customerType"]),
-    model: pickText(raw, ["MODEL", "model"]),
-    modelDesc: pickText(raw, ["MODEL_DESC", "modelDesc"]),
-    color: pickText(raw, ["COLOR_NAME", "colorName", "color"]),
-    ean: pickText(raw, ["CODE_EAN", "ean"]).toUpperCase().trim(),
-    brand: pickText(raw, ["BRAND", "brand"]),
-    materialType: pickText(raw, ["MATERIAL_TYPE", "materialType"]),
-    deliveryDate: pickText(raw, ["DELIVERY_DATE", "deliveryDate"]),
+    toWarehouseCode: pickText(raw, ['TO_WAREHOUSE_CODE', 'toWarehouseCode']),
+    customerCode: pickText(raw, ['CUSTOMER_CODE', 'customerCode']),
+    customerName: pickText(raw, ['CUSTOMER_NAME', 'customerName']),
+    cityCode: pickText(raw, ['CITY_CODE', 'cityCode']),
+    cityName: pickText(raw, ['CITY_NAME', 'cityName']),
+    address: pickText(raw, ['ADDRESS', 'address']),
+    customerType: pickText(raw, ['CUSTOMER_TYPE', 'customerType']),
+    model: pickText(raw, ['MODEL', 'model']),
+    modelDesc: pickText(raw, ['MODEL_DESC', 'modelDesc']),
+    color: pickText(raw, ['COLOR_NAME', 'colorName', 'color']),
+    ean: pickText(raw, ['CODE_EAN', 'ean']).toUpperCase().trim(),
+    brand: pickText(raw, ['BRAND', 'brand']),
+    materialType: pickText(raw, ['MATERIAL_TYPE', 'materialType']),
+    deliveryDate: pickText(raw, ['DELIVERY_DATE', 'deliveryDate']),
     billCount,
-    priceHt: pickNumber(raw, ["PRICE_HT", "priceHt"]) ?? 0,
+    priceHt: pickNumber(raw, ['PRICE_HT', 'priceHt']) ?? 0,
     movementStatus,
-    movementDate: pickText(raw, ["GOODS_MOVEMENT_DATE", "movementDate"]),
-    movementType: pickText(raw, ["DELIVERY_OR_ALLOCATEOUT", "movementType"]),
+    movementDate: pickText(raw, ['GOODS_MOVEMENT_DATE', 'movementDate']),
+    movementType: pickText(raw, ['DELIVERY_OR_ALLOCATEOUT', 'movementType']),
     planQty: billCount,
     doneQty,
   };
@@ -288,10 +298,10 @@ export const mapRawLine = (raw: any): ReturnBillLine => {
 
 /** Maps one line of the EAN lookup (the answer of CheckEAN). */
 export const mapEANCandidate = (raw: any): EANCandidate => ({
-  model: pickText(raw, ["model", "MODEL"]),
-  modelDesc: pickText(raw, ["modelDesc", "MODEL_DESC"]),
-  colorName: pickText(raw, ["colorName", "COLOR_NAME"]),
-  ean: pickText(raw, ["ean", "CODE_EAN"]),
+  model: pickText(raw, ['model', 'MODEL']),
+  modelDesc: pickText(raw, ['modelDesc', 'MODEL_DESC']),
+  colorName: pickText(raw, ['colorName', 'COLOR_NAME']),
+  ean: pickText(raw, ['ean', 'CODE_EAN']),
 });
 
 /**
@@ -303,7 +313,7 @@ export const mapEANCandidate = (raw: any): EANCandidate => ({
 export const aggregateByModel = (lines: ReturnBillLine[]): BillModelGroup[] => {
   const modelGroups: { [key: string]: ReturnBillLine[] } = {};
 
-  lines.forEach((line) => {
+  lines.forEach(line => {
     const key = `${line.model}|${line.color}|${line.ean}`;
     if (!modelGroups[key]) {
       modelGroups[key] = [];
@@ -315,9 +325,8 @@ export const aggregateByModel = (lines: ReturnBillLine[]): BillModelGroup[] => {
     const group = modelGroups[key];
     const first = group[0];
 
-    // One row per customer of the model
     const customerGroups: { [key: string]: ReturnBillLine[] } = {};
-    group.forEach((line) => {
+    group.forEach(line => {
       const customerKey = `${line.customerCode}|${line.customerName}|${line.outBillCode}`;
       if (!customerGroups[customerKey]) {
         customerGroups[customerKey] = [];
@@ -325,46 +334,48 @@ export const aggregateByModel = (lines: ReturnBillLine[]): BillModelGroup[] => {
       customerGroups[customerKey].push(line);
     });
 
-    const rows: BillModelRow[] = Object.keys(customerGroups).map((customerKey, rowIdx) => {
-      const customerLines = customerGroups[customerKey];
-      const customer = customerLines[0];
+    const rows: BillModelRow[] = Object.keys(customerGroups).map(
+      (customerKey, rowIdx) => {
+        const customerLines = customerGroups[customerKey];
+        const customer = customerLines[0];
 
-      let planQty = 0;
-      let doneQty = 0;
-      customerLines.forEach((line) => {
-        planQty += line.planQty;
-        doneQty += line.doneQty;
-      });
+        let planQty = 0;
+        let doneQty = 0;
+        customerLines.forEach(line => {
+          planQty += line.planQty;
+          doneQty += line.doneQty;
+        });
 
-      return {
-        id: `${idx}-${rowIdx}`,
-        lineId: customer.lineId,
-        systemDeliveryCode: customer.outBillCode,
-        deliveryCode: customer.outBillCode,
-        model: customer.model,
-        modelDesc: customer.modelDesc,
-        color: customer.color,
-        ean: customer.ean,
-        brand: customer.brand,
-        customerCode: customer.customerCode,
-        customerName: customer.customerName,
-        cityName: customer.cityName,
-        address: customer.address,
-        customerType: customer.customerType,
-        // the batch of the operation, the delivery bill when present
-        operatorBatch: customer.deliveryCode || customer.lineId,
-        sapMainBillCode: customer.mainBillCode,
-        fromck: customer.warehouseCode,
-        toWarehouseCode: customer.toWarehouseCode,
-        deliveryDate: customer.deliveryDate,
-        movementStatus: customer.movementStatus,
-        movementDate: customer.movementDate,
-        movementType: customer.movementType,
-        planQty,
-        doneQty,
-        diffQty: planQty - doneQty,
-      };
-    });
+        return {
+          id: `${idx}-${rowIdx}`,
+          lineId: customer.lineId,
+          systemDeliveryCode: customer.outBillCode,
+          deliveryCode: customer.outBillCode,
+          model: customer.model,
+          modelDesc: customer.modelDesc,
+          color: customer.color,
+          ean: customer.ean,
+          brand: customer.brand,
+          customerCode: customer.customerCode,
+          customerName: customer.customerName,
+          cityName: customer.cityName,
+          address: customer.address,
+          customerType: customer.customerType,
+          // the batch of the operation, the delivery bill when present
+          operatorBatch: customer.deliveryCode || customer.lineId,
+          sapMainBillCode: customer.mainBillCode,
+          fromck: customer.warehouseCode,
+          toWarehouseCode: customer.toWarehouseCode,
+          deliveryDate: customer.deliveryDate,
+          movementStatus: customer.movementStatus,
+          movementDate: customer.movementDate,
+          movementType: customer.movementType,
+          planQty,
+          doneQty,
+          diffQty: planQty - doneQty,
+        };
+      },
+    );
 
     const planQty = rows.reduce((sum, row) => sum + row.planQty, 0);
     const doneQty = rows.reduce((sum, row) => sum + row.doneQty, 0);
@@ -397,17 +408,17 @@ export const aggregateByModel = (lines: ReturnBillLine[]): BillModelGroup[] => {
  */
 export async function getBillModels(
   ctx: ApiContext,
-  params: { sapMainBillCode: string }
+  params: { sapMainBillCode: string },
 ): Promise<BillModelGroup[]> {
   const envelope = await requestGet(ctx, `${API_PATH}/ScanReturnBill`, {
     returnBillCode: params.sapMainBillCode,
     warehouseCode: ctx.gs_wareCode,
-    userCode: ctx.gs_userCode || "admin",
-    userName: ctx.gs_userName || "",
+    userCode: ctx.gs_userCode || 'admin',
+    userName: ctx.gs_userName || '',
     ...getOperateSign(ctx),
   });
   const rows: any[] = Array.isArray(envelope.data) ? envelope.data : [];
-  return aggregateByModel(rows.map((raw) => mapRawLine(raw)));
+  return aggregateByModel(rows.map(raw => mapRawLine(raw)));
 }
 
 /* ==========================================================================
@@ -425,42 +436,42 @@ export async function getBillModels(
  */
 export async function checkSNTraceability(
   ctx: ApiContext,
-  params: { sn: string; mainBillCode: string; model: string }
+  params: { sn: string; mainBillCode: string; model: string },
 ): Promise<TraceabilityCheckResult> {
   const envelope = await requestGet(ctx, `${API_PATH}/ValidateProductSN`, {
     sn: params.sn,
-    modelCode: params.model || "",
+    modelCode: params.model || '',
     ...getOperateSign(ctx),
   });
   const res = envelope.data || {};
   const traceabilityExists = res.traceabilityExists === true;
   const trace: TraceabilityRecord = {
     sn: params.sn,
-    lineId: "",
-    mainBillCode: "",
-    outBillCode: pickText(res, ["outBillCode", "out_bill_code"]),
-    sapMainBillCode: pickText(res, ["sapMainBillCode", "sap_main_bill_code"]),
-    sapUuid: pickText(res, ["sapUuid", "sap_uuid"]),
-    model: pickText(res, ["model"]) || params.model,
-    modelDesc: "",
-    color: "",
-    ean: "",
-    brand: "",
-    customerCode: "",
-    customerName: "",
+    lineId: '',
+    mainBillCode: '',
+    outBillCode: pickText(res, ['outBillCode', 'out_bill_code']),
+    sapMainBillCode: pickText(res, ['sapMainBillCode', 'sap_main_bill_code']),
+    sapUuid: pickText(res, ['sapUuid', 'sap_uuid']),
+    model: pickText(res, ['model']) || params.model,
+    modelDesc: '',
+    color: '',
+    ean: '',
+    brand: '',
+    customerCode: '',
+    customerName: '',
     warehouseCode: ctx.gs_wareCode,
-    toWarehouseCode: "",
-    deliveryDate: "",
-    movementStatus: "",
-    movementDate: "",
-    movementType: "",
-    productStatus: "",
-    palletCode: "",
-    boxCode: "",
-    imei1: "",
-    imei2: "",
-    imei3: "",
-    goodsCount: "",
+    toWarehouseCode: '',
+    deliveryDate: '',
+    movementStatus: '',
+    movementDate: '',
+    movementType: '',
+    productStatus: '',
+    palletCode: '',
+    boxCode: '',
+    imei1: '',
+    imei2: '',
+    imei3: '',
+    goodsCount: '',
   };
   return {
     found: traceabilityExists,
@@ -468,8 +479,8 @@ export async function checkSNTraceability(
     requiresEan: !traceabilityExists,
     error: traceabilityExists
       ? undefined
-      : pickText(res, ["message"]) ||
-        "No delivery found for this SN, please scan the EAN",
+      : pickText(res, ['message']) ||
+        'No delivery found for this SN, please scan the EAN',
   };
 }
 
@@ -486,7 +497,7 @@ export async function checkSNTraceability(
  */
 export async function lookupByEAN(
   ctx: ApiContext,
-  params: { ean: string; mainBillCode: string }
+  params: { ean: string; mainBillCode: string },
 ): Promise<EANLookupResult> {
   const envelope = await requestGet(ctx, `${API_PATH}/CheckEAN`, {
     ean: params.ean,
@@ -495,8 +506,8 @@ export async function lookupByEAN(
   const rows: any[] = Array.isArray(envelope.data) ? envelope.data : [];
   const seen: { [key: string]: boolean } = {};
   const candidates = rows
-    .map((raw) => mapEANCandidate(raw))
-    .filter((candidate) => {
+    .map(raw => mapEANCandidate(raw))
+    .filter(candidate => {
       const key = `${candidate.model}|${candidate.colorName}|${candidate.ean}`;
       if (seen[key]) return false;
       seen[key] = true;
@@ -507,7 +518,7 @@ export async function lookupByEAN(
     message:
       candidates.length > 0
         ? `${candidates.length} model(s) found, please select one.`
-        : "EAN not found",
+        : 'EAN not found',
   };
 }
 
@@ -525,32 +536,32 @@ const buildSaveBody = (
     ean: string;
     scanType: string;
     trace?: TraceabilityRecord | null;
-  }
+  },
 ): Record<string, any> => ({
-  returnBillCode: payload.context.f_billCode || "",
-  planId: payload.context.f_lineId || "",
-  warehouseCode: ctx.gs_wareCode || "",
+  returnBillCode: payload.context.f_billCode || '',
+  planId: payload.context.f_lineId || '',
+  warehouseCode: ctx.gs_wareCode || '',
   sn: payload.sn,
   model: payload.model,
-  ean: payload.ean || "",
+  ean: payload.ean || '',
   scanType: payload.scanType,
-  outBillCode: (payload.trace && payload.trace.outBillCode) || "",
+  outBillCode: (payload.trace && payload.trace.outBillCode) || '',
   sapMainBillCode:
     (payload.trace && payload.trace.sapMainBillCode) ||
     payload.context.f_sapMainBillCode ||
-    "",
-  sapUuid: (payload.trace && payload.trace.sapUuid) || "",
-  userCode: ctx.gs_userCode || "admin",
-  userName: ctx.gs_userName || "",
+    '',
+  sapUuid: (payload.trace && payload.trace.sapUuid) || '',
+  userCode: ctx.gs_userCode || 'admin',
+  userName: ctx.gs_userName || '',
   ...getOperateSign(ctx),
 });
 
 /** Maps the answer of the save (SaveReturnDetailResponse). */
 const mapSaveResponse = (res: any): ReturnResult => ({
   success: true,
-  planQty: pickNumber(res, ["qty"]) ?? 0,
-  actualQty: pickNumber(res, ["qtyOk"]) ?? 0,
-  productStatus: res.billFinished === true ? "BILL FINISHED" : "RETURNED",
+  planQty: pickNumber(res, ['qty']) ?? 0,
+  actualQty: pickNumber(res, ['qtyOk']) ?? 0,
+  productStatus: res.billFinished === true ? 'BILL FINISHED' : 'RETURNED',
   billFinished: res.billFinished === true,
 });
 
@@ -567,7 +578,7 @@ export async function confirmReturn(
     context: ReturnContext;
     sn: string;
     trace?: TraceabilityRecord | null;
-  }
+  },
 ): Promise<ReturnResult> {
   const envelope = await requestPost(
     ctx,
@@ -576,10 +587,10 @@ export async function confirmReturn(
       context: payload.context,
       sn: payload.sn,
       model: payload.context.f_model,
-      ean: "",
+      ean: '',
       scanType: SCAN_TYPE_TRACE,
       trace: payload.trace || null,
-    })
+    }),
   );
   return mapSaveResponse(envelope.data || {});
 }
@@ -597,7 +608,7 @@ export async function submitReturnWithEAN(
     sn: string;
     ean: string;
     model: string;
-  }
+  },
 ): Promise<ReturnResult> {
   const envelope = await requestPost(
     ctx,
@@ -609,7 +620,7 @@ export async function submitReturnWithEAN(
       ean: payload.ean,
       scanType: SCAN_TYPE_EAN,
       trace: null,
-    })
+    }),
   );
   return mapSaveResponse(envelope.data || {});
 }
