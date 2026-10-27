@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useGlobalStr } from "../GlobalStrContext";
 import * as pubfunction from "./pubfunction";
+import { clearJwtToken } from "./utils/jwtAuth";
 
 // Interface representing the BaseMenuVo object
 interface BaseMenuVo {
@@ -244,7 +245,8 @@ export default function Menu({ navigation }: any) {
     getMenuListJava();
   }, []);
 
-  const handleReturn = () => {
+  const handleReturn = async () => {
+    await clearJwtToken();
     navigation.goBack();
   };
 

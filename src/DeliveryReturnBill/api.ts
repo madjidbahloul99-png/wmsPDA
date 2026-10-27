@@ -26,6 +26,7 @@
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as pubfunction from '../pubfunction';
+import { DELIVERY_RETURN_BILL_API_ENABLED } from '../utils/deliveryReturnBillConfig';
 import {
   BillModelGroup,
   BillModelRow,
@@ -132,6 +133,9 @@ const requestGet = async (
   path: string,
   params: Record<string, string>,
 ): Promise<ApiEnvelope> => {
+  if (!DELIVERY_RETURN_BILL_API_ENABLED) {
+    throw new Error('Delivery Return Bill API is disabled until the server endpoints are published.');
+  }
   const token = await AsyncStorage.getItem('userToken');
   console.log('requestGet', path, params, token);
   const headers: Record<string, string> = {};
@@ -164,6 +168,9 @@ const requestPost = async (
   path: string,
   body: Record<string, any>,
 ): Promise<ApiEnvelope> => {
+  if (!DELIVERY_RETURN_BILL_API_ENABLED) {
+    throw new Error('Delivery Return Bill API is disabled until the server endpoints are published.');
+  }
   const token = await AsyncStorage.getItem('userToken');
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',

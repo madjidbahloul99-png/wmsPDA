@@ -32,6 +32,7 @@ import { useGlobalStr } from "../GlobalStrContext";
 import RNFS from 'react-native-fs';
 import * as pubfunction from "./pubfunction";
 import * as RNNetInfo from "react-native-network-info";
+import { loginWithJwt } from "./utils/jwtAuth";
 
 // Import assets
 import calendarIcon from "../assets/logo/calendar-day.png";
@@ -522,7 +523,7 @@ export default function Login({ navigation }: any) {
                     setgs_userCode(uCode);
                     setgs_userName(vo?.userName || uCode);
                     setgs_remark(vo?.remark || "");
-                    return { success: true, user: vo };
+                    return { success: true, user: vo, passwordCandidate: pwdCandidate };
                 } else {
                     lastError = data?.msg || "Login details verification failed.";
                 }
@@ -533,7 +534,7 @@ export default function Login({ navigation }: any) {
         }
 
         pubfunction.ShowError(lastError);
-        return { success: false };
+        return { success: false, passwordCandidate: "" };
     };
 
     // Sync React standard global context parameters to the utility modules static object
@@ -730,6 +731,13 @@ export default function Login({ navigation }: any) {
         setLoading(false);
 
         if (loginRes.success) {
+            try {
+                await loginWithJwt(gs_BaseURL, userVal, loginRes.passwordCandidate);
+            } catch (error) {
+                // JWT auth is optional for the legacy app session while the new API is unavailable.
+                console.warn("JWT login failed; continuing with legacy login.", error);
+            }
+
             try {
                 const netInfo = RNNetInfo?.NetworkInfo;
                 const ip = (netInfo && typeof netInfo.getIPAddress === "function")
