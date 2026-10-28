@@ -25,12 +25,7 @@ import {
 import { ApiContext } from "../src/DeliveryReturnBill/api";
 import { ReturnContext, TraceabilityRecord } from "../src/DeliveryReturnBill/types";
 import { MD5 } from "../src/pubfunction";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-
-/** Sets the JWT the login flow stores in AsyncStorage ("userToken"). */
-const setToken = (token: string | null) => {
-  (AsyncStorage as any).getItem = jest.fn(() => Promise.resolve(token));
-};
+import { DELIVERY_RETURN_BILL_API_KEY } from "../src/utils/deliveryReturnBillConfig";
 
 const ctx: ApiContext = {
   gs_BaseURL: "http://localhost",
@@ -120,10 +115,6 @@ const mockFetch = (body: any, status = 200) => {
 };
 
 describe("DeliveryReturnBill api (real WMS API)", () => {
-  beforeEach(() => {
-    setToken("jwt-token");
-  });
-
   afterEach(() => {
     jest.restoreAllMocks();
   });
@@ -209,26 +200,11 @@ describe("DeliveryReturnBill api (real WMS API)", () => {
     expect(url).toContain(`operateSign=${MD5("user" + "name" + "2" + "salt")}`);
     expect(url).toContain(`operateVersion=${ctx.gs_version}`);
 
-    // the JWT of the logged user rides along on every GET
+    // Delivery Return Bill uses the configured static header; JWT is not required.
     const options = (globalThis as any).fetch.mock.calls[0][1];
     expect(options.method).toBe("GET");
-    expect(options.headers["Authorization"]).toBe("Bearer jwt-token");
-  });
-
-  it("blocks GET and POST requests when no token is stored", async () => {
-    setToken(null);
-    const fetchMock = jest.fn();
-    (globalThis as any).fetch = fetchMock;
-
-    await expect(
-      getBillModels(ctx, { sapMainBillCode: "2026062030" })
-    ).rejects.toThrow("JWT login failed. Delivery Return Bill is unavailable for this session.");
-
-    await expect(
-      confirmReturn(ctx, { context, sn: "1326168351000021" })
-    ).rejects.toThrow("JWT login failed. Delivery Return Bill is unavailable for this session.");
-
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(options.headers["X-Api-Key"]).toBe(DELIVERY_RETURN_BILL_API_KEY);
+    expect(options.headers["Authorization"]).toBeUndefined();
   });
 
   it("asks to log in again on HTTP 401", async () => {
@@ -403,7 +379,8 @@ describe("DeliveryReturnBill api (real WMS API)", () => {
     expect(url).toBe(`${ctx.gs_BaseURL}${API_PATH}/SaveReturnDetail`);
     expect(options.method).toBe("POST");
     expect(options.headers["Content-Type"]).toBe("application/json");
-    expect(options.headers["Authorization"]).toBe("Bearer jwt-token");
+    expect(options.headers["X-Api-Key"]).toBe(DELIVERY_RETURN_BILL_API_KEY);
+    expect(options.headers["Authorization"]).toBeUndefined();
 
     const body = JSON.parse(options.body);
     expect(body.returnBillCode).toBe("2026062030");

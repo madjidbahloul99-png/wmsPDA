@@ -20,13 +20,15 @@
  * as the legacy pubfunction.GetUserSign, only the field names differ (this
  * API reads the "operate*" names).
  *
- * The controller is [Authorize]: every request sends the JWT of the logged
- * user as "Authorization: Bearer <token>", the token is stored in
- * AsyncStorage ("userToken") by the login flow.
+ * Requests authenticate with the configured X-Api-Key header.
+ * JWT login remains in the app so this feature can switch back to bearer auth
+ * when the API server is ready for it.
  */
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as pubfunction from '../pubfunction';
-import { DELIVERY_RETURN_BILL_API_ENABLED } from '../utils/deliveryReturnBillConfig';
+import {
+  DELIVERY_RETURN_BILL_API_ENABLED,
+  DELIVERY_RETURN_BILL_API_KEY,
+} from '../utils/deliveryReturnBillConfig';
 import {
   BillModelGroup,
   BillModelRow,
@@ -137,12 +139,9 @@ const requestGet = async (
     console.warn('[DeliveryReturnBill] GET blocked: API feature is disabled.');
     throw new Error('Delivery Return Bill API is disabled.');
   }
-  const token = await AsyncStorage.getItem('userToken');
-  if (!token) {
-    console.warn('[DeliveryReturnBill] GET blocked: no JWT token is available.');
-    throw new Error(
-      'JWT login failed. Delivery Return Bill is unavailable for this session.',
-    );
+  if (!DELIVERY_RETURN_BILL_API_KEY) {
+    console.warn('[DeliveryReturnBill] GET blocked: static API key is not configured.');
+    throw new Error('Delivery Return Bill API key is not configured in this build.');
   }
   console.info('[DeliveryReturnBill] GET started:', path, {
     params: Object.fromEntries(
@@ -155,10 +154,10 @@ const requestGet = async (
         );
       }),
     ),
-    tokenAvailable: Boolean(token),
+    apiKeyAvailable: true,
   });
   const headers: Record<string, string> = {
-    Authorization: `Bearer ${token}`,
+    'X-Api-Key': DELIVERY_RETURN_BILL_API_KEY,
   };
   const url = `${ctx.gs_BaseURL}${path}?${buildQuery(params)}`;
   let response: Response;
@@ -202,20 +201,17 @@ const requestPost = async (
     console.warn('[DeliveryReturnBill] POST blocked: API feature is disabled.');
     throw new Error('Delivery Return Bill API is disabled.');
   }
-  const token = await AsyncStorage.getItem('userToken');
-  if (!token) {
-    console.warn('[DeliveryReturnBill] POST blocked: no JWT token is available.');
-    throw new Error(
-      'JWT login failed. Delivery Return Bill is unavailable for this session.',
-    );
+  if (!DELIVERY_RETURN_BILL_API_KEY) {
+    console.warn('[DeliveryReturnBill] POST blocked: static API key is not configured.');
+    throw new Error('Delivery Return Bill API key is not configured in this build.');
   }
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    Authorization: `Bearer ${token}`,
+    'X-Api-Key': DELIVERY_RETURN_BILL_API_KEY,
   };
   const url = `${ctx.gs_BaseURL}${path}`;
   console.info('[DeliveryReturnBill] POST started:', path, {
-    tokenAvailable: Boolean(token),
+    apiKeyAvailable: true,
   });
   let response: Response;
   try {

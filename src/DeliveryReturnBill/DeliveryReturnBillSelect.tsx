@@ -13,7 +13,6 @@ import {
   Image,
   Dimensions,
 } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect } from "@react-navigation/native";
 import { useGlobalStr } from "../../GlobalStrContext";
 import * as pubfunction from "../pubfunction";
@@ -85,32 +84,6 @@ export default function DeliveryReturnBillSelect({ navigation }: any) {
   const scanTimer = useRef<any>(null);
   // True while a request is in flight, a ref is always up to date (no stale closure)
   const busyRef = useRef(false);
-
-  useEffect(() => {
-    let isActive = true;
-
-    const notifyIfJwtUnavailable = async () => {
-      try {
-        const token = await AsyncStorage.getItem("userToken");
-        if (isActive && !token) {
-          pubfunction.ShowError(
-            "JWT login failed. Delivery Return Bill is unavailable for this session. Check the network/VPN and log in again.",
-          );
-        }
-      } catch {
-        if (isActive) {
-          pubfunction.ShowError(
-            "JWT login failed. Delivery Return Bill is unavailable for this session. Check the network/VPN and log in again.",
-          );
-        }
-      }
-    };
-
-    notifyIfJwtUnavailable();
-    return () => {
-      isActive = false;
-    };
-  }, []);
 
   const ensureFocus = () => {
     txtBillRef.current?.focus();
