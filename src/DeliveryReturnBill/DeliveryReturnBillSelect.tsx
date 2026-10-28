@@ -1,5 +1,11 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { SafeAreaView } from "react-native-safe-area-context";
+import React, {
+  useState,
+  useRef,
+  useEffect,
+  useCallback,
+  useMemo,
+} from 'react';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   View,
   Text,
@@ -12,12 +18,12 @@ import {
   ActivityIndicator,
   Image,
   Dimensions,
-} from "react-native";
-import { useFocusEffect } from "@react-navigation/native";
-import { useGlobalStr } from "../../GlobalStrContext";
-import * as pubfunction from "../pubfunction";
-import { ApiContext, getBillModels } from "./api";
-import { BillModelGroup, BillModelRow, ReturnContext } from "./types";
+} from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
+import { useGlobalStr } from '../../GlobalStrContext';
+import * as pubfunction from '../pubfunction';
+import { ApiContext, getBillModels } from './api';
+import { BillModelGroup, BillModelRow, ReturnContext } from './types';
 
 /** One line of the table, a customer of a model. */
 type TableItem = {
@@ -38,7 +44,7 @@ type TableItem = {
  */
 export default function DeliveryReturnBillSelect({ navigation }: any) {
   const {
-    gs_BaseURL,
+    gs_deliveryReturnAPI,
     gs_wareCode,
     gs_userCode,
     gs_userName,
@@ -50,7 +56,7 @@ export default function DeliveryReturnBillSelect({ navigation }: any) {
 
   const apiCtx: ApiContext = useMemo(
     () => ({
-      gs_BaseURL,
+      gs_deliveryReturnAPI,
       gs_wareCode,
       gs_userCode,
       gs_userName,
@@ -60,7 +66,7 @@ export default function DeliveryReturnBillSelect({ navigation }: any) {
       gs_IPAddress,
     }),
     [
-      gs_BaseURL,
+      gs_deliveryReturnAPI,
       gs_wareCode,
       gs_userCode,
       gs_userName,
@@ -68,17 +74,17 @@ export default function DeliveryReturnBillSelect({ navigation }: any) {
       gs_version,
       gs_classCode,
       gs_IPAddress,
-    ]
+    ],
   );
 
   // Screen states
-  const [txtBill, setTxtBill] = useState("");
-  const [labelError, setLabelError] = useState("");
+  const [txtBill, setTxtBill] = useState('');
+  const [labelError, setLabelError] = useState('');
   const [groups, setGroups] = useState<BillModelGroup[]>([]);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [showKeyboard] = useState(false);
-  const [f_billCode, setFBillCode] = useState("");
+  const [f_billCode, setFBillCode] = useState('');
 
   const txtBillRef = useRef<TextInput>(null);
   const scanTimer = useRef<any>(null);
@@ -94,33 +100,35 @@ export default function DeliveryReturnBillSelect({ navigation }: any) {
    */
   const loadBillModels = useCallback(
     async (billCode: string) => {
-      const cleanCode = (billCode || "").trim().toUpperCase();
+      const cleanCode = (billCode || '').trim().toUpperCase();
       if (!cleanCode) return;
 
       setLoading(true);
       busyRef.current = true;
-      setLabelError("");
+      setLabelError('');
 
       try {
-        const rows = await getBillModels(apiCtx, { sapMainBillCode: cleanCode });
+        const rows = await getBillModels(apiCtx, {
+          sapMainBillCode: cleanCode,
+        });
 
         if (rows.length === 0) {
           setGroups([]);
           setSelectedKey(null);
-          setFBillCode("");
+          setFBillCode('');
           setLabelError(`No return bill found for ${cleanCode}`);
           return;
         }
 
         // The destination customer cannot be empty (same check as the delivery flow)
-        const hasEmptyCustomer = rows.some((group) =>
-          group.rows.some((row) => !row.customerCode)
+        const hasEmptyCustomer = rows.some(group =>
+          group.rows.some(row => !row.customerCode),
         );
         if (hasEmptyCustomer) {
-          pubfunction.ShowError("The destination customer cannot be empty!");
+          pubfunction.ShowError('The destination customer cannot be empty!');
           setGroups([]);
           setSelectedKey(null);
-          setFBillCode("");
+          setFBillCode('');
           return;
         }
 
@@ -132,8 +140,8 @@ export default function DeliveryReturnBillSelect({ navigation }: any) {
         setSelectedKey(null);
         setFBillCode(cleanCode);
       } catch (err: any) {
-        setLabelError(err.message || "Network error");
-        pubfunction.ShowError(err.message || "Network error");
+        setLabelError(err.message || 'Network error');
+        pubfunction.ShowError(err.message || 'Network error');
       } finally {
         busyRef.current = false;
         setLoading(false);
@@ -142,7 +150,7 @@ export default function DeliveryReturnBillSelect({ navigation }: any) {
         }, 120);
       }
     },
-    [apiCtx]
+    [apiCtx],
   );
 
   // Clean up a pending scan timer on unmount.
@@ -163,7 +171,7 @@ export default function DeliveryReturnBillSelect({ navigation }: any) {
       if (f_billCode) {
         loadBillModels(f_billCode);
       }
-    }, [f_billCode, loadBillModels])
+    }, [f_billCode, loadBillModels]),
   );
 
   const processBillInput = (scannedText: string) => {
@@ -173,23 +181,26 @@ export default function DeliveryReturnBillSelect({ navigation }: any) {
     if (scanTimer.current) {
       clearTimeout(scanTimer.current);
     }
-    const code = (scannedText || "").replace(/[\r\n]/g, "").trim().toUpperCase();
+    const code = (scannedText || '')
+      .replace(/[\r\n]/g, '')
+      .trim()
+      .toUpperCase();
     if (!code) return;
 
-    setTxtBill("");
+    setTxtBill('');
     loadBillModels(code);
   };
 
   const handleTextChange = (text: string) => {
     setTxtBill(text);
-    setLabelError("");
+    setLabelError('');
 
     if (scanTimer.current) {
       clearTimeout(scanTimer.current);
     }
 
-    if (text.includes("\n") || text.includes("\r")) {
-      const clean = text.replace(/[\r\n]/g, "").trim();
+    if (text.includes('\n') || text.includes('\r')) {
+      const clean = text.replace(/[\r\n]/g, '').trim();
       if (clean.length > 0) {
         processBillInput(clean);
       }
@@ -214,8 +225,8 @@ export default function DeliveryReturnBillSelect({ navigation }: any) {
    */
   const tableData: TableItem[] = useMemo(() => {
     const items: TableItem[] = [];
-    groups.forEach((group) => {
-      group.rows.forEach((row) => {
+    groups.forEach(group => {
+      group.rows.forEach(row => {
         items.push({
           // The key is a business key, it stays the same when the list is reloaded
           key: `${row.customerCode}|${row.model}|${row.systemDeliveryCode}`,
@@ -230,19 +241,21 @@ export default function DeliveryReturnBillSelect({ navigation }: any) {
   /** The customer line that was selected. */
   const selectedItem: TableItem | null = useMemo(() => {
     if (!selectedKey) return null;
-    return tableData.find((entry) => entry.key === selectedKey) || null;
+    return tableData.find(entry => entry.key === selectedKey) || null;
   }, [selectedKey, tableData]);
 
-  const selectedRow: BillModelRow | null = selectedItem ? selectedItem.row : null;
+  const selectedRow: BillModelRow | null = selectedItem
+    ? selectedItem.row
+    : null;
 
   /** Summary of the scanned bill. */
   const summary = useMemo(() => {
     let customers = 0;
     let units = 0;
     const seen: { [key: string]: boolean } = {};
-    groups.forEach((group) => {
+    groups.forEach(group => {
       units += group.planQty;
-      group.rows.forEach((row) => {
+      group.rows.forEach(row => {
         const key = `${row.customerCode}|${row.customerName}`;
         if (!seen[key]) {
           seen[key] = true;
@@ -261,7 +274,7 @@ export default function DeliveryReturnBillSelect({ navigation }: any) {
     if (busyRef.current) return;
 
     if (!selectedRow || !selectedItem) {
-      pubfunction.ShowError("Please select a row first!");
+      pubfunction.ShowError('Please select a row first!');
       return;
     }
 
@@ -284,7 +297,7 @@ export default function DeliveryReturnBillSelect({ navigation }: any) {
       f_address: selected.address,
       f_customerType: selected.customerType,
       f_operatorBatch: selected.operatorBatch,
-      f_wareCode: gs_wareCode || "",
+      f_wareCode: gs_wareCode || '',
       f_toWarehouseCode: selected.toWarehouseCode,
       f_deliveryDate: selected.deliveryDate,
       f_movementStatus: selected.movementStatus,
@@ -297,7 +310,7 @@ export default function DeliveryReturnBillSelect({ navigation }: any) {
       f_diffQty: group.diffQty,
     };
 
-    navigation.navigate("DeliveryReturnBillSN", context);
+    navigation.navigate('DeliveryReturnBillSN', context);
   };
 
   const renderItem = React.useCallback(
@@ -306,16 +319,16 @@ export default function DeliveryReturnBillSelect({ navigation }: any) {
       const isSelected = selectedKey === item.key;
 
       // Blue when something was already returned, red when nothing was returned yet
-      let textColor = "#1E293B";
+      let textColor = '#1E293B';
       if (row.diffQty > 0) {
-        textColor = row.doneQty > 0 ? "#0052cc" : "#EF4444";
+        textColor = row.doneQty > 0 ? '#0052cc' : '#EF4444';
       }
 
       return (
         <TouchableOpacity
           style={[
             styles.tableRow,
-            { backgroundColor: index % 2 === 0 ? "#FFFFFF" : "#F8FAFC" },
+            { backgroundColor: index % 2 === 0 ? '#FFFFFF' : '#F8FAFC' },
             isSelected && styles.selectedRow,
           ]}
           onPress={() => setSelectedKey(item.key)}
@@ -327,16 +340,22 @@ export default function DeliveryReturnBillSelect({ navigation }: any) {
             {row.model}
           </Text>
           <Text style={[styles.cell, { color: textColor, width: 90 }]}>
-            {row.color || "-"}
+            {row.color || '-'}
           </Text>
-          <Text style={[styles.cell, { color: textColor, width: 50 }]}>{row.planQty}</Text>
-          <Text style={[styles.cell, { color: textColor, width: 50 }]}>{row.doneQty}</Text>
-          <Text style={[styles.cell, { color: textColor, width: 50 }]}>{row.diffQty}</Text>
-          <Text style={[styles.cell, { color: textColor, width: 100 }]}>
-            {row.fromck || "-"}
+          <Text style={[styles.cell, { color: textColor, width: 50 }]}>
+            {row.planQty}
+          </Text>
+          <Text style={[styles.cell, { color: textColor, width: 50 }]}>
+            {row.doneQty}
+          </Text>
+          <Text style={[styles.cell, { color: textColor, width: 50 }]}>
+            {row.diffQty}
           </Text>
           <Text style={[styles.cell, { color: textColor, width: 100 }]}>
-            {row.toWarehouseCode || gs_wareCode || "-"}
+            {row.fromck || '-'}
+          </Text>
+          <Text style={[styles.cell, { color: textColor, width: 100 }]}>
+            {row.toWarehouseCode || gs_wareCode || '-'}
           </Text>
           <Text style={[styles.cell, { color: textColor, width: 90 }]}>
             {row.customerCode}
@@ -353,7 +372,7 @@ export default function DeliveryReturnBillSelect({ navigation }: any) {
         </TouchableOpacity>
       );
     },
-    [selectedKey, gs_wareCode]
+    [selectedKey, gs_wareCode],
   );
 
   return (
@@ -363,15 +382,18 @@ export default function DeliveryReturnBillSelect({ navigation }: any) {
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <TouchableOpacity onPress={() => navigation.goBack()} activeOpacity={0.7}>
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            activeOpacity={0.7}
+          >
             <Image
-              source={require("../../assets/logo/left.png")}
+              source={require('../../assets/logo/left.png')}
               style={styles.returnLogo}
               resizeMode="contain"
             />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>
-            Delivery Return Bill {gs_wareCode || ""}
+            Delivery Return Bill {gs_wareCode || ''}
           </Text>
         </View>
         <View style={styles.headerRight}>
@@ -399,10 +421,6 @@ export default function DeliveryReturnBillSelect({ navigation }: any) {
           />
           {labelError ? (
             <Text style={styles.infoText}>{labelError}</Text>
-          ) : groups.length > 0 ? (
-            <Text style={styles.summaryText}>
-              {`Bill ${f_billCode} - ${summary.customers} customer(s) - ${summary.models} model(s) - ${summary.units} unit(s)`}
-            </Text>
           ) : null}
         </View>
 
@@ -411,7 +429,9 @@ export default function DeliveryReturnBillSelect({ navigation }: any) {
           <ScrollView horizontal showsHorizontalScrollIndicator={true}>
             <View>
               <View style={styles.tableHeader}>
-                <Text style={[styles.headerCell, { width: 120 }]}>BILL CODE</Text>
+                <Text style={[styles.headerCell, { width: 120 }]}>
+                  BILL CODE
+                </Text>
                 <Text style={[styles.headerCell, { width: 110 }]}>Model</Text>
                 <Text style={[styles.headerCell, { width: 90 }]}>Color</Text>
                 <Text style={[styles.headerCell, { width: 50 }]}>Plan</Text>
@@ -420,18 +440,24 @@ export default function DeliveryReturnBillSelect({ navigation }: any) {
                 <Text style={[styles.headerCell, { width: 100 }]}>From WH</Text>
                 <Text style={[styles.headerCell, { width: 100 }]}>To WH</Text>
                 <Text style={[styles.headerCell, { width: 90 }]}>Customer</Text>
-                <Text style={[styles.headerCell, { width: 160 }]}>Customer Name</Text>
+                <Text style={[styles.headerCell, { width: 160 }]}>
+                  Customer Name
+                </Text>
                 <Text style={[styles.headerCell, { width: 150 }]}>Batch</Text>
-                <Text style={[styles.headerCell, { width: 120 }]}>SAP BILL</Text>
+                <Text style={[styles.headerCell, { width: 120 }]}>
+                  SAP BILL
+                </Text>
               </View>
 
               <FlatList
                 data={tableData}
                 renderItem={renderItem}
-                keyExtractor={(item) => item.key}
+                keyExtractor={item => item.key}
                 ListEmptyComponent={
                   <Text style={styles.emptyText}>
-                    {loading ? "Loading..." : "Waiting for the SAP return bill..."}
+                    {loading
+                      ? 'Loading...'
+                      : 'Waiting for the SAP return bill...'}
                   </Text>
                 }
                 style={{ flex: 1 }}
@@ -447,7 +473,10 @@ export default function DeliveryReturnBillSelect({ navigation }: any) {
         {/* Footer controls */}
         <View style={styles.footer}>
           <TouchableOpacity
-            style={[styles.choiceButton, loading && styles.choiceButtonDisabled]}
+            style={[
+              styles.choiceButton,
+              loading && styles.choiceButtonDisabled,
+            ]}
             onPress={handleChoiceClick}
             disabled={loading}
           >
@@ -465,95 +494,115 @@ export default function DeliveryReturnBillSelect({ navigation }: any) {
   );
 }
 
-const { width } = Dimensions.get("window");
+const { width } = Dimensions.get('window');
 const scale = (size: number) => (width / 375) * size;
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F8FAFC" },
+  container: { flex: 1, backgroundColor: '#F8FAFC' },
   header: {
-    backgroundColor: "#0052cc",
+    backgroundColor: '#0052cc',
     paddingHorizontal: width * 0.05,
     height: scale(56),
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     elevation: 4,
   },
-  headerLeft: { flexDirection: "row", alignItems: "center" },
-  returnLogo: { width: scale(24), height: scale(24), marginRight: 10, tintColor: "#FFFFFF" },
-  headerTitle: { color: "#FFFFFF", fontSize: scale(15), fontWeight: "900" },
-  headerRight: { flexDirection: "row", alignItems: "center" },
-  userNameText: { color: "#FFFFFF", fontSize: scale(12), fontWeight: "700" },
+  headerLeft: { flexDirection: 'row', alignItems: 'center' },
+  returnLogo: {
+    width: scale(24),
+    height: scale(24),
+    marginRight: 10,
+    tintColor: '#FFFFFF',
+  },
+  headerTitle: { color: '#FFFFFF', fontSize: scale(15), fontWeight: '900' },
+  headerRight: { flexDirection: 'row', alignItems: 'center' },
+  userNameText: { color: '#FFFFFF', fontSize: scale(12), fontWeight: '700' },
   content: { flex: 1, padding: 8 },
   inputGroup: { marginBottom: 8 },
   input: {
-    backgroundColor: "#e2f0eeff",
+    backgroundColor: '#e2f0eeff',
     height: 40,
     borderRadius: 10,
     paddingHorizontal: 12,
     fontSize: 14,
-    color: "#1E293B",
-    fontWeight: "600",
+    color: '#1E293B',
+    fontWeight: '600',
     borderWidth: 1,
-    borderColor: "#0052cc",
+    borderColor: '#0052cc',
   },
-  infoText: { color: "#EF4444", fontSize: 13, marginTop: 4, marginLeft: 4, fontWeight: "800" },
+  infoText: {
+    color: '#EF4444',
+    fontSize: 13,
+    marginTop: 4,
+    marginLeft: 4,
+    fontWeight: '800',
+  },
   summaryText: {
-    color: "#0052cc",
+    color: '#0052cc',
     fontSize: 12,
-    fontWeight: "800",
+    fontWeight: '800',
     marginTop: 4,
     marginLeft: 4,
   },
   tableCard: {
     flex: 1,
-    backgroundColor: "#FFF",
+    backgroundColor: '#FFF',
     borderRadius: 16,
-    overflow: "hidden",
+    overflow: 'hidden',
     elevation: 2,
     borderWidth: 1,
-    borderColor: "#0052cc",
+    borderColor: '#0052cc',
     marginBottom: 8,
   },
-  tableHeader: { flexDirection: "row", backgroundColor: "#0052cc", paddingVertical: 10 },
+  tableHeader: {
+    flexDirection: 'row',
+    backgroundColor: '#0052cc',
+    paddingVertical: 10,
+  },
   headerCell: {
     fontSize: 11,
-    fontWeight: "800",
-    color: "#FFFFFF",
-    textAlign: "center",
-    textTransform: "uppercase",
+    fontWeight: '800',
+    color: '#FFFFFF',
+    textAlign: 'center',
+    textTransform: 'uppercase',
   },
   tableRow: {
-    flexDirection: "row",
+    flexDirection: 'row',
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#F1F5F9",
-    alignItems: "center",
+    borderBottomColor: '#F1F5F9',
+    alignItems: 'center',
   },
-  cell: { fontSize: 11, color: "#1E293B", textAlign: "center", fontWeight: "600" },
+  cell: {
+    fontSize: 11,
+    color: '#1E293B',
+    textAlign: 'center',
+    fontWeight: '600',
+  },
   emptyText: {
-    textAlign: "center",
+    textAlign: 'center',
     padding: 40,
-    color: "#94A3B8",
-    fontStyle: "italic",
+    color: '#94A3B8',
+    fontStyle: 'italic',
     width: 1000,
   },
-  footer: { borderTopWidth: 1, borderTopColor: "#e2e8f0", paddingTop: 2 },
+  footer: { borderTopWidth: 1, borderTopColor: '#e2e8f0', paddingTop: 2 },
   choiceButton: {
     height: 44,
     borderRadius: 12,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#0052cc",
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#0052cc',
   },
   choiceButtonDisabled: { opacity: 0.5 },
-  choiceButtonText: { color: "#FFFFFF", fontSize: 15, fontWeight: "900" },
-  selectedRow: { backgroundColor: "#BAE6FD" },
+  choiceButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '900' },
+  selectedRow: { backgroundColor: '#BAE6FD' },
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(255, 255, 255, 0.5)",
-    justifyContent: "center",
-    alignItems: "center",
+    backgroundColor: 'rgba(255, 255, 255, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
     zIndex: 1000,
   },
 });

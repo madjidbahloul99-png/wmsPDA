@@ -53,7 +53,7 @@ export const GOODS_MOVEMENT_STATUS_DONE = 'C';
 
 /** Everything the API layer needs from the global context. */
 export interface ApiContext {
-  gs_BaseURL: string;
+  gs_deliveryReturnAPI: string;
   gs_wareCode: string;
   gs_userCode: string;
   gs_userName: string;
@@ -163,11 +163,9 @@ const requestGet = async (
   const headers: Record<string, string> = {
     'X-Api-Key': DELIVERY_RETURN_BILL_API_KEY,
   };
-  const url = `${ctx.gs_BaseURL}${path}?${buildQuery(
-    params,
-  )}`;
+  const url = `${ctx.gs_deliveryReturnAPI}${path}?${buildQuery(params)}`;
   const loggableParams = getLoggableParams(params);
-  const loggableUrl = `${ctx.gs_BaseURL}${path}?${buildQuery(
+  const loggableUrl = `${ctx.gs_deliveryReturnAPI}${path}?${buildQuery(
     loggableParams,
   )}`;
   console.info('[DeliveryReturnBill] request:', {
@@ -234,7 +232,7 @@ const requestPost = async (
     'Content-Type': 'application/json',
     'X-Api-Key': DELIVERY_RETURN_BILL_API_KEY,
   };
-  const url = `${ctx.gs_BaseURL}${path}`;
+  const url = `${ctx.gs_deliveryReturnAPI}${path}`;
   console.info('[DeliveryReturnBill] request:', {
     method: 'POST',
     url,

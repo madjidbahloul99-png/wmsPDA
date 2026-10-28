@@ -28,7 +28,7 @@ import { MD5 } from "../src/pubfunction";
 import { DELIVERY_RETURN_BILL_API_KEY } from "../src/utils/deliveryReturnBillConfig";
 
 const ctx: ApiContext = {
-  gs_BaseURL: "http://localhost",
+  gs_deliveryReturnAPI: "http://localhost",
   gs_wareCode: "DA06-9000",
   gs_userCode: "user",
   gs_userName: "name",
@@ -191,7 +191,7 @@ describe("DeliveryReturnBill api (real WMS API)", () => {
 
     // the request carried the path, the parameters and the operate* sign
     const url = decodeURIComponent((globalThis as any).fetch.mock.calls[0][0]);
-    expect(url).toContain(`${ctx.gs_BaseURL}${API_PATH}/ScanReturnBill?`);
+    expect(url).toContain(`${ctx.gs_deliveryReturnAPI}${API_PATH}/ScanReturnBill?`);
     expect(url).toContain("returnBillCode=2026062030");
     expect(url).toContain(`warehouseCode=${ctx.gs_wareCode}`);
     expect(url).toContain("operateUserCode=user");
@@ -376,7 +376,7 @@ describe("DeliveryReturnBill api (real WMS API)", () => {
 
     // the POST carries the JSON body of SaveReturnDetailRequest
     const [url, options] = (globalThis as any).fetch.mock.calls[0];
-    expect(url).toBe(`${ctx.gs_BaseURL}${API_PATH}/SaveReturnDetail`);
+    expect(url).toBe(`${ctx.gs_deliveryReturnAPI}${API_PATH}/SaveReturnDetail`);
     expect(options.method).toBe("POST");
     expect(options.headers["Content-Type"]).toBe("application/json");
     expect(options.headers["X-Api-Key"]).toBe(DELIVERY_RETURN_BILL_API_KEY);

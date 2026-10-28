@@ -59,6 +59,9 @@ export type GlobalStrContextType = {
   gs_BaseURL_WEB: string;
   setgs_BaseURL_WEB: (v: string) => void;
 
+  gs_deliveryReturnAPI: string;
+  setgs_deliveryReturnAPI: (v: string) => void;
+
   gs_PADURL: string;
   setgs_PADURL: (v: string) => void;
 
@@ -122,6 +125,10 @@ export const GlobalStrProvider = ({
 
   const [gs_BaseURL, setBaseURL] = useState('https://wmsapi.condor.dz');
   const [gs_BaseURL_WEB, setBaseURL_WEB] = useState('https://wmsapi.condor.dz');
+
+  const [gs_deliveryReturnAPI, setDeliveryReturnAPI] = useState(
+    'https://mespdamobile.condor.dz/WMSPDANEW',
+  );
 
   const [gs_PADURL, setPADURL] = useState('https://mesdownload.condor.dz');
   const [gs_PADURL_WEB, setPADURL_WEB] = useState(
@@ -190,6 +197,9 @@ export const GlobalStrProvider = ({
 
         gs_BaseURL_WEB,
         setgs_BaseURL_WEB: setBaseURL_WEB,
+
+        gs_deliveryReturnAPI,
+        setgs_deliveryReturnAPI: setDeliveryReturnAPI,
 
         gs_PADURL,
         setgs_PADURL: setPADURL,

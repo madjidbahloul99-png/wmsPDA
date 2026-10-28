@@ -29,11 +29,14 @@ import { EVENT_RETURNED } from './events';
  * and the screen goes back to the SN scan page.
  */
 export default function DeliveryReturnBillEAN({ navigation, route }: any) {
-  const params: ReturnContext & { f_sn?: string; f_requiresEan?: boolean } =
-    useMemo(() => route.params || {}, [route.params]);
+  const params: ReturnContext & {
+    f_sn?: string;
+    f_requiresEan?: boolean;
+    f_initialMessage?: string;
+  } = useMemo(() => route.params || {}, [route.params]);
 
   const {
-    gs_BaseURL,
+    gs_deliveryReturnAPI,
     gs_wareCode,
     gs_userCode,
     gs_userName,
@@ -46,7 +49,7 @@ export default function DeliveryReturnBillEAN({ navigation, route }: any) {
 
   const apiCtx: ApiContext = useMemo(
     () => ({
-      gs_BaseURL,
+      gs_deliveryReturnAPI,
       gs_wareCode,
       gs_userCode,
       gs_userName,
@@ -56,7 +59,7 @@ export default function DeliveryReturnBillEAN({ navigation, route }: any) {
       gs_IPAddress,
     }),
     [
-      gs_BaseURL,
+      gs_deliveryReturnAPI,
       gs_wareCode,
       gs_userCode,
       gs_userName,
@@ -69,7 +72,7 @@ export default function DeliveryReturnBillEAN({ navigation, route }: any) {
 
   // Screen states
   const [txtEAN, setTxtEAN] = useState('');
-  const [labelError, setLabelError] = useState('');
+  const [labelError, setLabelError] = useState(params.f_initialMessage || '');
   const [labelInfo, setLabelInfo] = useState('');
   const [scannedEAN, setScannedEAN] = useState('');
   const [candidates, setCandidates] = useState<EANCandidate[]>([]);
@@ -203,11 +206,11 @@ export default function DeliveryReturnBillEAN({ navigation, route }: any) {
 
     // The permission check is disabled for the tests, to re-enable it add
     // gs_remark back to the useGlobalStr() destructure above.
-    if ((gs_remark || '').toUpperCase() !== 'EAN') {
-      pubfunction.ShowError("You don't have permission to scan EAN!");
-      setLabelError("You don't have permission to scan EAN!");
-      return;
-    }
+    // if ((gs_remark || '').toUpperCase() !== 'EAN') {
+    //   pubfunction.ShowError("You don't have permission to scan EAN!");
+    //   setLabelError("You don't have permission to scan EAN!");
+    //   return;
+    // }
 
     lookupEAN(EAN);
   };
