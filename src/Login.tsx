@@ -30,8 +30,9 @@ import {
 } from "react-native";
 import { useGlobalStr, GlobalStrContext } from "../GlobalStrContext";
 import RNFS from 'react-native-fs';
-import * as pubfunction from "./pubfunction";
-import * as RNNetInfo from "react-native-network-info";
+import * as pubfunction from './pubfunction';
+import * as RNNetInfo from 'react-native-network-info';
+import { loginWithJwt } from './utils/jwtAuth';
 
 // Import assets
 import calendarIcon from "../assets/logo/calendar-day.png";
@@ -42,79 +43,84 @@ import condorLogo from "../assets/logo/condor_logo.png";
 import zentechLogo from "../assets/logo/zentech_logo.png";
 
 type WarehouseItem = {
-    id: string;
-    text: string;
-    otherInfo?: string;
-    factoryCode?: string;
-    mes3g?: string;
-    mesLan?: string;
+  id: string;
+  text: string;
+  otherInfo?: string;
+  factoryCode?: string;
+  mes3g?: string;
+  mesLan?: string;
 };
 
 type ClassItem = {
-    id: string;
-    text: string;
+  id: string;
+  text: string;
 };
 
 type CustomInputRef = {
-    focus: () => void;
+  focus: () => void;
 };
 
 /**
  * Global general normalization function for keyboard wedge-emulated scanners.
  * On AZERTY/QWERTY scanners, rapid keyboard emulation timing often leads to shift-state race conditions.
- * Typically, trailing special characters (like * , - + / = ! ; :) and numeric blocks (like 1, 2, 3) 
+ * Typically, trailing special characters (like * , - + / = ! ; :) and numeric blocks (like 1, 2, 3)
  * get transposed when they are typed back-to-back at very high speeds.
  * For example, "123**" (typed on AZERTY requiring Shift and then releasing Shift) might get registered as "**123"
  * or vice versa, because the shift down/up events get interleaved with the keys.
  * This global helper detects these trailing transpositions and recovers the correct order.
  */
 export const normalizeWedgePassword = (pass: string): string => {
-    if (!pass) return "";
+  if (!pass) return '';
 
-    // 1. Swap trailing AZERTY unshifted characters (*, -, +, /, =, !, ,, ;, :) and digit blocks
-    // e.g. "**123" -> "123**"
-    const patternEndSymbolDigit = /([*\-+/=!,,;: ]+)([0-9]+)$/;
-    if (patternEndSymbolDigit.test(pass)) {
-        return pass.replace(patternEndSymbolDigit, "$2$1");
-    }
+  // 1. Swap trailing AZERTY unshifted characters (*, -, +, /, =, !, ,, ;, :) and digit blocks
+  // e.g. "**123" -> "123**"
+  const patternEndSymbolDigit = /([*\-+/=!,,;: ]+)([0-9]+)$/;
+  if (patternEndSymbolDigit.test(pass)) {
+    return pass.replace(patternEndSymbolDigit, '$2$1');
+  }
 
-    // 2. Clear any stray carriage returns or other common wedge artifacts
-    return pass.replace(/[\r\n]/g, "").trim();
+  // 2. Clear any stray carriage returns or other common wedge artifacts
+  return pass.replace(/[\r\n]/g, '').trim();
 };
 
 export const getNormalizedPasswordCandidates = (pass: string): string[] => {
-    if (!pass) return [""];
-    const candidates = [pass];
+  if (!pass) return [''];
+  const candidates = [pass];
 
-    const corrected1 = normalizeWedgePassword(pass);
-    if (corrected1 && !candidates.includes(corrected1)) {
-        candidates.push(corrected1);
-    }
+  const corrected1 = normalizeWedgePassword(pass);
+  if (corrected1 && !candidates.includes(corrected1)) {
+    candidates.push(corrected1);
+  }
 
-    // Secondary candidate: Swap any trailing non-alphanumeric special characters with the last digits block
-    const patternGeneralSymbolsDigits = /([!@#$%^&*()_+=\-[\]{};':",./<>?|]+)([0-9]+)$/;
-    if (patternGeneralSymbolsDigits.test(pass)) {
-        const matched = pass.match(patternGeneralSymbolsDigits);
-        if (matched) {
-            const symbols = matched[1];
-            const digits = matched[2];
-            // If symbols start with `@` (like "@**123"), keep it intact and only swap the trailing layout parts
-            if (symbols.startsWith("@") && symbols.length > 1) {
-                const subSymbols = symbols.substring(1);
-                const correctedValue = pass.slice(0, -matched[0].length) + "@" + digits + subSymbols;
-                if (!candidates.includes(correctedValue)) {
-                    candidates.push(correctedValue);
-                }
-            } else {
-                const correctedValue = pass.replace(patternGeneralSymbolsDigits, "$2$1");
-                if (!candidates.includes(correctedValue)) {
-                    candidates.push(correctedValue);
-                }
-            }
+  // Secondary candidate: Swap any trailing non-alphanumeric special characters with the last digits block
+  const patternGeneralSymbolsDigits =
+    /([!@#$%^&*()_+=\-[\]{};':",./<>?|]+)([0-9]+)$/;
+  if (patternGeneralSymbolsDigits.test(pass)) {
+    const matched = pass.match(patternGeneralSymbolsDigits);
+    if (matched) {
+      const symbols = matched[1];
+      const digits = matched[2];
+      // If symbols start with `@` (like "@**123"), keep it intact and only swap the trailing layout parts
+      if (symbols.startsWith('@') && symbols.length > 1) {
+        const subSymbols = symbols.substring(1);
+        const correctedValue =
+          pass.slice(0, -matched[0].length) + '@' + digits + subSymbols;
+        if (!candidates.includes(correctedValue)) {
+          candidates.push(correctedValue);
         }
+      } else {
+        const correctedValue = pass.replace(
+          patternGeneralSymbolsDigits,
+          '$2$1',
+        );
+        if (!candidates.includes(correctedValue)) {
+          candidates.push(correctedValue);
+        }
+      }
     }
+  }
 
-    return candidates;
+  return candidates;
 };
 
 /* =====================
@@ -155,38 +161,38 @@ const CustomInput = forwardRef<CustomInputRef, any>(
         const resolvedRef = inputRef || defaultInputRef;
         const localValueRef = useRef(value || "");
 
-        const appState = useRef(AppState.currentState);
+    const appState = useRef(AppState.currentState);
 
-        useEffect(() => {
-            const subscription = AppState.addEventListener("change", (nextState) => {
-                if (
-                    appState.current.match(/inactive|background/) &&
-                    nextState === "active"
-                ) {
-                    Keyboard.dismiss();
-                }
+    useEffect(() => {
+      const subscription = AppState.addEventListener('change', nextState => {
+        if (
+          appState.current.match(/inactive|background/) &&
+          nextState === 'active'
+        ) {
+          Keyboard.dismiss();
+        }
 
-                appState.current = nextState;
-            });
+        appState.current = nextState;
+      });
 
-            return () => subscription.remove();
-        }, []);
+      return () => subscription.remove();
+    }, []);
 
-        useEffect(() => {
-            if (value !== localValueRef.current) {
-                localValueRef.current = value || "";
-            }
-        }, [value]);
+    useEffect(() => {
+      if (value !== localValueRef.current) {
+        localValueRef.current = value || '';
+      }
+    }, [value]);
 
-        useImperativeHandle(ref, () => ({
-            focus: () => {
-                if (isSelect) {
-                    hiddenInputRef.current?.focus();
-                } else {
-                    resolvedRef?.current?.focus();
-                }
-            },
-        }));
+    useImperativeHandle(ref, () => ({
+      focus: () => {
+        if (isSelect) {
+          hiddenInputRef.current?.focus();
+        } else {
+          resolvedRef?.current?.focus();
+        }
+      },
+    }));
 
         const handleSelect = (item: any) => {
             onChangeText(item);
@@ -334,458 +340,504 @@ export default function Login({ navigation }: any) {
         gs_factoryindex,
     } = useGlobalStr();
 
-    const [userVal, setUserVal] = useState("");
-    const [passwordVal, setPasswordVal] = useState("");
-    const [displayUserVal, setDisplayUserVal] = useState("");
-    const scanTimer = useRef<any>(null);
-    const lastKeyTime = useRef<number>(0);
-    const [loading, setLoading] = useState(false);
-    const [newVersionLabel, setNewVersionLabel] = useState("");
+  const [userVal, setUserVal] = useState('');
+  const [passwordVal, setPasswordVal] = useState('');
+  const [displayUserVal, setDisplayUserVal] = useState('');
+  const scanTimer = useRef<any>(null);
+  const lastKeyTime = useRef<number>(0);
+  const [loading, setLoading] = useState(false);
+  const [newVersionLabel, setNewVersionLabel] = useState('');
 
-    const [classList, setClassList] = useState<ClassItem[]>([]);
-    const [selectedClass, setSelectedClass] = useState<ClassItem | null>(null);
+  const [classList, setClassList] = useState<ClassItem[]>([]);
+  const [selectedClass, setSelectedClass] = useState<ClassItem | null>(null);
 
-    const [warehouseList, setWarehouseList] = useState<WarehouseItem[]>([]);
-    const [selectedWarehouse, setSelectedWarehouse] = useState<WarehouseItem | null>(null);
+  const [warehouseList, setWarehouseList] = useState<WarehouseItem[]>([]);
+  const [selectedWarehouse, setSelectedWarehouse] =
+    useState<WarehouseItem | null>(null);
 
-    const [updateStatus, setUpdateStatus] = useState("");
-    const [newVersion, setNewVersion] = useState(false);
-    const [downloadProgress, setDownloadProgress] = useState(0);
-    const [downloadedBytes, setDownloadedBytes] = useState(0);
-    const [totalBytes, setTotalBytes] = useState(0);
-    const [newApkUrl, setNewApkUrl] = useState<string | null>(null);
+  const [updateStatus, setUpdateStatus] = useState('');
+  const [newVersion, setNewVersion] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState(0);
+  const [downloadedBytes, setDownloadedBytes] = useState(0);
+  const [totalBytes, setTotalBytes] = useState(0);
+  const [newApkUrl, setNewApkUrl] = useState<string | null>(null);
 
-    const userRef = useRef<TextInput>(null);
-    const passwordRef = useRef<TextInput>(null);
-    const warehouseRef = useRef<CustomInputRef>(null);
-    const classRef = useRef<CustomInputRef>(null);
+  const userRef = useRef<TextInput>(null);
+  const passwordRef = useRef<TextInput>(null);
+  const warehouseRef = useRef<CustomInputRef>(null);
+  const classRef = useRef<CustomInputRef>(null);
 
-    const [activeField, setActiveField] = useState<"user" | "password" | "warehouse" | "class">("class");
-    const activeFieldRef = useRef(activeField);
+  const [activeField, setActiveField] = useState<
+    'user' | 'password' | 'warehouse' | 'class'
+  >('class');
+  const activeFieldRef = useRef(activeField);
 
-    const [hideUserCode, setHideUserCode] = useState(false);
-    const isScanningRef = useRef(false);
+  const [hideUserCode, setHideUserCode] = useState(false);
+  const isScanningRef = useRef(false);
 
-    useEffect(() => {
-        activeFieldRef.current = activeField;
-    }, [activeField]);
+  useEffect(() => {
+    activeFieldRef.current = activeField;
+  }, [activeField]);
 
-    const ensureFocus = () => {
+  const ensureFocus = () => {
+    setTimeout(() => {
+      if (activeFieldRef.current === 'user') userRef.current?.focus();
+      else if (activeFieldRef.current === 'password')
+        passwordRef.current?.focus();
+      else if (activeFieldRef.current === 'warehouse')
+        warehouseRef.current?.focus();
+      else if (activeFieldRef.current === 'class') classRef.current?.focus();
+    }, 120);
+  };
+
+  // Signature generator
+  const getUserSign = (addchar: string) => {
+    return pubfunction.GetUserSign(addchar);
+  };
+
+  const processScan = (rawInput: string, isScanner = true) => {
+    const cleanCode = rawInput.replace(/[\r\n]/g, '').trim();
+    if (cleanCode.length === 0) {
+      setHideUserCode(false);
+      isScanningRef.current = false;
+      return;
+    }
+
+    if (cleanCode.includes('|')) {
+      const parts = cleanCode.split('|');
+      if (parts.length >= 2) {
+        const u = parts[0].trim();
+        let p = parts.slice(1).join('|').trim();
+
+        // Normalize scanned/emulated characters transposition
+        p = normalizeWedgePassword(p);
+
+        setUserVal(u);
+        setDisplayUserVal(u);
+        setPasswordVal(p);
+        setHideUserCode(false);
+        isScanningRef.current = false;
+        getWarehouseListByUser(u);
         setTimeout(() => {
-            if (activeFieldRef.current === "user") userRef.current?.focus();
-            else if (activeFieldRef.current === "password") passwordRef.current?.focus();
-            else if (activeFieldRef.current === "warehouse") warehouseRef.current?.focus();
-            else if (activeFieldRef.current === "class") classRef.current?.focus();
-        }, 120);
-    };
+          warehouseRef.current?.focus();
+        }, 150);
+      }
+    } else {
+      if (isScanner) {
+        pubfunction.ShowError('Invalid QR code or barcode format.');
+        userRef.current?.clear();
+        setUserVal('');
+        setDisplayUserVal('');
+        passwordRef.current?.clear();
+        setPasswordVal('');
+        setHideUserCode(false);
+        isScanningRef.current = false;
+      } else {
+        setUserVal(cleanCode);
+        setDisplayUserVal(cleanCode);
+        setHideUserCode(false);
+        isScanningRef.current = false;
+        getWarehouseListByUser(cleanCode);
+        setTimeout(() => {
+          passwordRef.current?.focus();
+        }, 150);
+      }
+    }
+  };
 
-    // Signature generator
-    const getUserSign = (addchar: string) => {
-        return pubfunction.GetUserSign(addchar);
-    };
+  // Handler for typing and barcode scanning
+  const handleUserCodeChange = (text: string) => {
+    const now = Date.now();
+    const diff = now - lastKeyTime.current;
+    lastKeyTime.current = now;
 
-    const processScan = (rawInput: string, isScanner = true) => {
-        const cleanCode = rawInput.replace(/[\r\n]/g, "").trim();
-        if (cleanCode.length === 0) {
-            setHideUserCode(false);
-            isScanningRef.current = false;
-            return;
+    clearTimeout(scanTimer.current);
+
+    if (text.endsWith('\n') || text.endsWith('\r')) {
+      processScan(text, isScanningRef.current);
+      isScanningRef.current = false;
+      return;
+    }
+
+    if (text.includes('|') || (diff < 50 && text.length > 1)) {
+      isScanningRef.current = true;
+    } else if (text.length <= 1) {
+      isScanningRef.current = false;
+    }
+
+    setHideUserCode(isScanningRef.current);
+    setUserVal(text);
+    setDisplayUserVal(text);
+
+    if (isScanningRef.current) {
+      scanTimer.current = setTimeout(() => {
+        processScan(text, true);
+      }, 400);
+    }
+  };
+
+  // Load Classes
+  const getClassListJava = async (baseURL: string) => {
+    try {
+      const signParams = getUserSign('?');
+      const url = `${baseURL}/basedata/class/getComboList${signParams}`;
+
+      const res = await fetch(url);
+      const data = await res.json();
+
+      if (data && data.list) {
+        const list =
+          typeof data.list === 'string' ? JSON.parse(data.list) : data.list;
+        const mapped = list.map((c: any) => ({
+          id: c.id,
+          text: c.text,
+        }));
+        setClassList(mapped);
+        if (mapped.length > 0) {
+          setSelectedClass(mapped[0]);
         }
+      } else if (data && !data.success) {
+        pubfunction.ShowError(data.msg || 'Failed to load classes list');
+      }
+    } catch (err) {
+      pubfunction.ShowError(
+        'Unable to load the shift list. Please check your network connection and try again.',
+      );
+    }
+  };
 
-        if (cleanCode.includes("|")) {
-            const parts = cleanCode.split("|");
-            if (parts.length >= 2) {
-                const u = parts[0].trim();
-                let p = parts.slice(1).join("|").trim();
+  // Load warehouses by user code
+  const getWarehouseListByUser = async (uCode: string) => {
+    try {
+      pubfunction.globalstr.gs_userCode = uCode;
+      pubfunction.globalstr.gs_userName = uCode;
+      let urlCur = `${gs_BaseURL}/basedata/warehouseAuth/getAuthWarehouseComb`;
+      urlCur += pubfunction.GetUserSign('?');
 
-                // Normalize scanned/emulated characters transposition
-                p = normalizeWedgePassword(p);
+      const res = await fetch(urlCur);
+      const data = await res.json();
 
-                setUserVal(u);
-                setDisplayUserVal(u);
-                
-                setPasswordVal(p);
-                
-                setHideUserCode(false);
-                isScanningRef.current = false;
-                
-                getWarehouseListByUser(u);
-                setTimeout(() => {
-                    warehouseRef.current?.focus();
-                }, 150);
-            }
-        } else {
-            if (isScanner) {
-                pubfunction.ShowError("Invalid QR code or barcode format.");
-                userRef.current?.clear();
-                setUserVal("");
-                setDisplayUserVal("");
-                
-                passwordRef.current?.clear();
-                setPasswordVal("");
-                
-                setHideUserCode(false);
-                isScanningRef.current = false;
-            } else {
-                setUserVal(cleanCode);
-                setDisplayUserVal(cleanCode);
-                setHideUserCode(false);
-                isScanningRef.current = false;
-                getWarehouseListByUser(cleanCode);
-                setTimeout(() => {
-                    passwordRef.current?.focus();
-                }, 150);
-            }
+      if (data && data.list) {
+        const list =
+          typeof data.list === 'string' ? JSON.parse(data.list) : data.list;
+        const mapped = list.map((w: any) => ({
+          id: w.id,
+          text: w.text,
+          otherInfo: w.otherInfo,
+          factoryCode: w.factoryCode,
+          mes3g: w.mes3g,
+          mesLan: w.mesLan,
+        }));
+        setWarehouseList(mapped);
+        if (mapped.length > 0) {
+          setSelectedWarehouse(mapped[0]);
         }
-    };
+      } else if (data && !data.success) {
+        pubfunction.ShowError(data.msg || 'Failed to load warehouses');
+      }
+    } catch (err) {
+      pubfunction.ShowError('getWarehouseListByUser error');
+    }
+  };
 
-    // Handler for typing and barcode scanning
-    const handleUserCodeChange = (text: string) => {
-        const now = Date.now();
-        const diff = now - lastKeyTime.current;
-        lastKeyTime.current = now;
+  // Authenticate user with selected warehouse
+  const getUserInfoWarehouseAuth = async (
+    uCode: string,
+    pass: string,
+    wCode: string,
+    cCode: string,
+  ) => {
+    const candidates = getNormalizedPasswordCandidates(pass);
+    let lastError = 'Login details verification failed.';
 
-        clearTimeout(scanTimer.current);
+    for (const pwdCandidate of candidates) {
+      try {
+        const operatorUser = uCode;
+        const operatorUserName = '';
 
-        if (text.endsWith("\n") || text.endsWith("\r")) {
-            processScan(text, isScanningRef.current);
-            isScanningRef.current = false;
-            return;
-        }
+        const pwd = pubfunction.GetPasswordEncrypt(pwdCandidate);
+        const signStr = pubfunction.MD5(
+          operatorUser + operatorUserName + gs_randomNumber + gs_PasswordSalt,
+        );
+        const language = 'en_US';
 
-        if (text.includes("|") || (diff < 50 && text.length > 1)) {
-            isScanningRef.current = true;
-        } else if (text.length <= 1) {
-            isScanningRef.current = false;
-        }
+        let url = `${gs_BaseURL}/user/doLoginWithWarehouse`;
+        url += `?operatorUser=${operatorUser}`;
+        url += `&operatorUserName=${operatorUserName}`;
+        url += `&password=${pwd}`;
+        url += `&warehouseCode=${wCode}`;
+        url += `&classCode=${cCode}`;
+        url += `&randomNumber=${gs_randomNumber}`;
+        url += `&sign=${signStr}`;
+        url += `&version=${gs_version}`;
+        url += `&languageType=${language}`;
 
-        setHideUserCode(isScanningRef.current);
-        setUserVal(text);
-        setDisplayUserVal(text);
-
-        if (isScanningRef.current) {
-            scanTimer.current = setTimeout(() => {
-                processScan(text, true);
-            }, 400);
-        }
-    };
-
-    // Load Classes
-    const getClassListJava = async (baseURL: string) => {
-        try {
-            const signParams = getUserSign("?");
-            const url = `${baseURL}/basedata/class/getComboList${signParams}`;
-
-            const res = await fetch(url);
-            const data = await res.json();
-
-            if (data && data.list) {
-                const list = typeof data.list === 'string' ? JSON.parse(data.list) : data.list;
-                const mapped = list.map((c: any) => ({
-                    id: c.id,
-                    text: c.text
-                }));
-                setClassList(mapped);
-                if (mapped.length > 0) {
-                    setSelectedClass(mapped[0]);
-                }
-            } else if (data && !data.success) {
-                pubfunction.ShowError(data.msg || "Failed to load classes list");
-            }
-        } catch (err) {
-            pubfunction.ShowError("Unable to load the shift list. Please check your network connection and try again.");
-        }
-    };
-
-    // Load warehouses by user code
-    const getWarehouseListByUser = async (uCode: string) => {
-        try {
-            pubfunction.globalstr.gs_userCode = uCode;
-            pubfunction.globalstr.gs_userName = uCode;
-            let urlCur = `${gs_BaseURL}/basedata/warehouseAuth/getAuthWarehouseComb`;
-            urlCur += pubfunction.GetUserSign("?");
-
-            const res = await fetch(urlCur);
-            const data = await res.json();
-
-            if (data && data.list) {
-                const list = typeof data.list === 'string' ? JSON.parse(data.list) : data.list;
-                const mapped = list.map((w: any) => ({
-                    id: w.id,
-                    text: w.text,
-                    otherInfo: w.otherInfo,
-                    factoryCode: w.factoryCode,
-                    mes3g: w.mes3g,
-                    mesLan: w.mesLan
-                }));
-                setWarehouseList(mapped);
-                if (mapped.length > 0) {
-                    setSelectedWarehouse(mapped[0]);
-                }
-            } else if (data && !data.success) {
-                pubfunction.ShowError(data.msg || "Failed to load warehouses");
-            }
-        } catch (err) {
-            pubfunction.ShowError("getWarehouseListByUser error");
-        }
-    };
-
-    // Authenticate user with selected warehouse
-    const getUserInfoWarehouseAuth = async (uCode: string, pass: string, wCode: string, cCode: string) => {
-        const candidates = getNormalizedPasswordCandidates(pass);
-        let lastError = "Login details verification failed.";
-
-        for (const pwdCandidate of candidates) {
-            try {
-                const operatorUser = uCode;
-                const operatorUserName = "";
-
-                const pwd = pubfunction.GetPasswordEncrypt(pwdCandidate);
-                const signStr = pubfunction.MD5(operatorUser + operatorUserName + gs_randomNumber + gs_PasswordSalt);
-                const language = "en_US";
-
-                let url = `${gs_BaseURL}/user/doLoginWithWarehouse`;
-                url += `?operatorUser=${operatorUser}`;
-                url += `&operatorUserName=${operatorUserName}`;
-                url += `&password=${pwd}`;
-                url += `&warehouseCode=${wCode}`;
-                url += `&classCode=${cCode}`;
-                url += `&randomNumber=${gs_randomNumber}`;
-                url += `&sign=${signStr}`;
-                url += `&version=${gs_version}`;
-                url += `&languageType=${language}`;
-
-                const res = await fetch(url);
-                const data = await res.json();
-
-                if (data && data.success) {
-                    const vo = typeof data.data === 'string' ? JSON.parse(data.data) : data.data;
-                    setgs_userCode(uCode);
-                    setgs_userName(vo?.userName || uCode);
-                    setgs_remark(vo?.remark || "");
-                    return { success: true, user: vo };
-                } else {
-                    lastError = data?.msg || "Login details verification failed.";
-                }
-            } catch (err: any) {
-                pubfunction.ShowError("Login attempt failed for candidate");
-                lastError = `Cannot verify credentials`;
-            }
-        }
-
-        pubfunction.ShowError(lastError);
-        return { success: false };
-    };
-
-    // Sync React standard global context parameters to the utility modules static object
-    useEffect(() => {
-        pubfunction.globalstr.gs_userCode = gs_userCode || "";
-        pubfunction.globalstr.gs_userName = gs_userName || "";
-        pubfunction.globalstr.gs_randomNumber = gs_randomNumber || "2";
-        pubfunction.globalstr.gs_PasswordSalt = gs_PasswordSalt || "abc12345";
-        pubfunction.globalstr.gs_version = gs_version || "1.0.0";
-    }, [gs_userCode, gs_userName, gs_randomNumber, gs_PasswordSalt, gs_version]);
-
-    // Component did mount / Frm_login_Load
-    useEffect(() => {
-        const loadFormConfig = async () => {
-            try {
-                // Check version update and classes list
-                await getClassListJava(gs_BaseURL);
-
-                checkUpdate();
-
-                // Set focus on usercode input
-                setTimeout(() => {
-                    userRef.current?.focus();
-                    setActiveField("user");
-                }, 500);
-
-            } catch (err) {
-                pubfunction.ShowError("Connect error, Please change URL link!");
-            }
-        };
-
-        loadFormConfig();
-
-        // Listen for screen focus (e.g. returning from Menu.tsx) to refresh/reset the login form
-        const focusSub = navigation?.addListener?.("focus", () => {
-            resetLoginForm();
+        console.info('[Login] Legacy login request started.');
+        const res = await fetch(url);
+        const data = await res.json();
+        console.info('[Login] Legacy login response:', {
+          status: res.status,
+          success: Boolean(data?.success),
+          message: data?.msg || '',
         });
 
-        return () => {
-            if (focusSub) focusSub();
-        };
-    }, [navigation]);
-
-    const resetLoginForm = () => {
-        setUserVal("");
-        setDisplayUserVal("");
-        setPasswordVal("");
-        setSelectedWarehouse(null);
-        setWarehouseList([]);
-        setActiveField("user");
-        setTimeout(() => {
-            userRef.current?.focus();
-        }, 200);
-    };
-
-    // Update logic
-    const checkUpdate = async () => {
-        try {
-            const res = await fetch(`https://mespdamobile.condor.dz/WMSPDANEW/api/updateAC/latest`);
-            const json = await res.json();
-
-            if (json.message === "success" && json.data) {
-                const serverVersion = json.data.version;
-                const apkUrl = json.data.url;
-                const required = json.data.forceUpdate;
-
-                const currentVersion = gs_version;
-
-                if (currentVersion !== serverVersion) {
-                    setNewVersion(true);
-                    setNewApkUrl(apkUrl);
-                } else {
-                    setNewApkUrl(null);
-                }
-            }
-        } catch (err) {
-            console.log("Update error:", err);
-        }
-    };
-
-    const downloadAndInstall = (apkUrl: string) => {
-        setUpdateStatus("downloading");
-        setDownloadProgress(0);
-        setDownloadedBytes(0);
-        setTotalBytes(0);
-
-        // Sauvegarder dans le dossier public "Téléchargements" (Downloads) d'Android
-        const destPath = `${Platform.OS === 'android' ? RNFS.DownloadDirectoryPath : RNFS.DocumentDirectoryPath}/WMS_UpdateAC_${Date.now()}.apk`;
-
-        const downloadOptions = {
-            fromUrl: apkUrl,
-            toFile: destPath,
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Android; Mobile) WMS-App',
-                'Accept': 'application/vnd.android.package-archive, application/octet-stream, */*'
-            },
-            progressInterval: 500,
-            progress: (res: any) => {
-                const totalNum = Number(res.contentLength);
-                const receivedNum = Number(res.bytesWritten);
-                setDownloadedBytes(receivedNum);
-                setTotalBytes(totalNum);
-                if (totalNum > 0) {
-                    const percentage = Math.floor((receivedNum / totalNum) * 100);
-                    setDownloadProgress(percentage);
-                }
-            },
-            connectionTimeout: 120000,
-            readTimeout: 120000,
-        };
-
-        const ret = RNFS.downloadFile(downloadOptions);
-
-        ret.promise.then((res) => {
-            if (res.statusCode === 200) {
-                setUpdateStatus("");
-                setDownloadProgress(0);
-                setDownloadedBytes(0);
-                setTotalBytes(0);
-
-                // 👉 Lancement automatique de l'installation via le module natif
-                if (Platform.OS === "android" && NativeModules.ApkInstaller) {
-                    NativeModules.ApkInstaller.installApk(destPath)
-                        .then(() => {
-                            console.log("Installation lancée automatiquement");
-                        })
-                        .catch((err: any) => {
-                            console.log("Install error:", err);
-                            Alert.alert(
-                                "Installation manuelle requise",
-                                "Le fichier a été sauvegardé dans 'Téléchargements'. Veuillez l'ouvrir manuellement pour installer."
-                            );
-                        });
-                } else {
-                    Alert.alert(
-                        "Téléchargement terminé",
-                        "Le fichier de mise à jour a été sauvegardé dans le dossier 'Téléchargements' (Downloads) de votre téléphone.\n\nVeuillez ouvrir votre gestionnaire de fichiers pour l'installer manuellement."
-                    );
-                }
-            } else {
-                throw new Error(`Server returned status: ${res.statusCode}`);
-            }
-        })
-            .catch((err) => {
-                console.log("Download error:", err);
-                setUpdateStatus("");
-                Alert.alert(
-                    "Réseau instable",
-                    "Le téléchargement a été interrompu. Nous ouvrons le navigateur pour finaliser la mise à jour..."
-                );
-                Linking.openURL(apkUrl);
-            });
-    };
-
-    // Handle Login Button Click
-    const handleLogin = async () => {
-        if (!selectedWarehouse) {
-            pubfunction.ShowError("The user does not have Warehouse permissions to operate!");
-            return;
-        }
-
-        const mesURL = selectedWarehouse.mesLan || selectedWarehouse.mes3g;
-
-        if (!mesURL) {
-            pubfunction.ShowError("Please config warehouse url first !");
-            return;
-        }
-
-        // Apply settings to context
-        setgs_wareCode(selectedWarehouse.id);
-        setgs_wareName(selectedWarehouse.text);
-        setgs_wareType(selectedWarehouse.otherInfo || "");
-        setgs_factoryCode(selectedWarehouse.factoryCode || "001");
-        setgs_factoryCodeMES("001");
-        setgs_MESBaseURL(mesURL);
-
-        let finalClassCode = "BC01";
-        let finalClassName = "Jour";
-        if (selectedClass) {
-            finalClassCode = selectedClass.id;
-            finalClassName = selectedClass.text;
-        }
-        setgs_classCode(finalClassCode);
-        setgs_className(finalClassName);
-
-        const todayDate = new Date().toISOString().split("T")[0];
-        setgs_workdate(todayDate);
-
-        setgs_groupCode("BZ001");
-        setgs_groupName("class A");
-
-        setLoading(true);
-        const loginRes = await getUserInfoWarehouseAuth(userVal, passwordVal, selectedWarehouse.id, finalClassCode);
-        setLoading(false);
-
-        if (loginRes.success) {
-            try {
-                const netInfo = RNNetInfo?.NetworkInfo;
-                const ip = (netInfo && typeof netInfo.getIPAddress === "function")
-                    ? await netInfo.getIPAddress()
-                    : "";
-                setgs_IPAddress(ip || "s");
-            } catch (err) {
-                pubfunction.ShowError("Error retrieving IP Address, fallback to default:" + err);
-                setgs_IPAddress("");
-            }
-            navigation.navigate("Menu");
+        if (data && data.success) {
+          const vo =
+            typeof data.data === 'string' ? JSON.parse(data.data) : data.data;
+          setgs_userCode(uCode);
+          setgs_userName(vo?.userName || uCode);
+          setgs_remark(vo?.remark || '');
+          return { success: true, user: vo, passwordCandidate: pwdCandidate };
         } else {
-            resetLoginForm();
+          lastError = data?.msg || 'Login details verification failed.';
         }
+      } catch (err: any) {
+        console.error('[Login] Legacy login request failed.', err);
+        pubfunction.ShowError('Login attempt failed for candidate');
+        lastError = `Cannot verify credentials`;
+      }
+    }
+
+    pubfunction.ShowError(lastError);
+    return { success: false, passwordCandidate: '' };
+  };
+
+  // Sync React standard global context parameters to the utility modules static object
+  useEffect(() => {
+    pubfunction.globalstr.gs_userCode = gs_userCode || '';
+    pubfunction.globalstr.gs_userName = gs_userName || '';
+    pubfunction.globalstr.gs_randomNumber = gs_randomNumber || '2';
+    pubfunction.globalstr.gs_PasswordSalt = gs_PasswordSalt || 'abc12345';
+    pubfunction.globalstr.gs_version = gs_version || '1.0.0';
+  }, [gs_userCode, gs_userName, gs_randomNumber, gs_PasswordSalt, gs_version]);
+
+  // Component did mount / Frm_login_Load
+  useEffect(() => {
+    const loadFormConfig = async () => {
+      try {
+        // Check version update and classes list
+        await getClassListJava(gs_BaseURL);
+
+        checkUpdate();
+
+        // Set focus on usercode input
+        setTimeout(() => {
+          userRef.current?.focus();
+          setActiveField('user');
+        }, 500);
+      } catch (err) {
+        pubfunction.ShowError('Connect error, Please change URL link!');
+      }
     };
+
+    loadFormConfig();
+
+    // Listen for screen focus (e.g. returning from Menu.tsx) to refresh/reset the login form
+    const focusSub = navigation?.addListener?.('focus', () => {
+      resetLoginForm();
+    });
+
+    return () => {
+      if (focusSub) focusSub();
+    };
+  }, [navigation]);
+
+  const resetLoginForm = () => {
+    setUserVal('');
+    setDisplayUserVal('');
+    setPasswordVal('');
+    setSelectedWarehouse(null);
+    setWarehouseList([]);
+    setActiveField('user');
+    setTimeout(() => {
+      userRef.current?.focus();
+    }, 200);
+  };
+
+  // Update logic
+  const checkUpdate = async () => {
+    try {
+      const res = await fetch(
+        `https://mespdamobile.condor.dz/WMSPDANEW/api/updateAC/latest`,
+      );
+      const json = await res.json();
+
+      if (json.message === 'success' && json.data) {
+        const serverVersion = json.data.version;
+        const apkUrl = json.data.url;
+        const required = json.data.forceUpdate;
+
+        const currentVersion = gs_version;
+
+        if (currentVersion !== serverVersion) {
+          setNewVersion(true);
+          setNewApkUrl(apkUrl);
+        } else {
+          setNewApkUrl(null);
+        }
+      }
+    } catch (err) {
+      console.log('Update error:', err);
+    }
+  };
+
+  const downloadAndInstall = (apkUrl: string) => {
+    setUpdateStatus('downloading');
+    setDownloadProgress(0);
+    setDownloadedBytes(0);
+    setTotalBytes(0);
+
+    // Sauvegarder dans le dossier public "Téléchargements" (Downloads) d'Android
+    const destPath = `${
+      Platform.OS === 'android'
+        ? RNFS.DownloadDirectoryPath
+        : RNFS.DocumentDirectoryPath
+    }/WMS_UpdateAC_${Date.now()}.apk`;
+
+    const downloadOptions = {
+      fromUrl: apkUrl,
+      toFile: destPath,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Android; Mobile) WMS-App',
+        Accept:
+          'application/vnd.android.package-archive, application/octet-stream, */*',
+      },
+      progressInterval: 500,
+      progress: (res: any) => {
+        const totalNum = Number(res.contentLength);
+        const receivedNum = Number(res.bytesWritten);
+        setDownloadedBytes(receivedNum);
+        setTotalBytes(totalNum);
+        if (totalNum > 0) {
+          const percentage = Math.floor((receivedNum / totalNum) * 100);
+          setDownloadProgress(percentage);
+        }
+      },
+      connectionTimeout: 120000,
+      readTimeout: 120000,
+    };
+
+    const ret = RNFS.downloadFile(downloadOptions);
+
+    ret.promise
+      .then(res => {
+        if (res.statusCode === 200) {
+          setUpdateStatus('');
+          setDownloadProgress(0);
+          setDownloadedBytes(0);
+          setTotalBytes(0);
+
+          // 👉 Lancement automatique de l'installation via le module natif
+          if (Platform.OS === 'android' && NativeModules.ApkInstaller) {
+            NativeModules.ApkInstaller.installApk(destPath)
+              .then(() => {
+                console.log('Installation lancée automatiquement');
+              })
+              .catch((err: any) => {
+                console.log('Install error:', err);
+                Alert.alert(
+                  'Installation manuelle requise',
+                  "Le fichier a été sauvegardé dans 'Téléchargements'. Veuillez l'ouvrir manuellement pour installer.",
+                );
+              });
+          } else {
+            Alert.alert(
+              'Téléchargement terminé',
+              "Le fichier de mise à jour a été sauvegardé dans le dossier 'Téléchargements' (Downloads) de votre téléphone.\n\nVeuillez ouvrir votre gestionnaire de fichiers pour l'installer manuellement.",
+            );
+          }
+        } else {
+          throw new Error(`Server returned status: ${res.statusCode}`);
+        }
+      })
+      .catch(err => {
+        console.log('Download error:', err);
+        setUpdateStatus('');
+        Alert.alert(
+          'Réseau instable',
+          'Le téléchargement a été interrompu. Nous ouvrons le navigateur pour finaliser la mise à jour...',
+        );
+        Linking.openURL(apkUrl);
+      });
+  };
+
+  // Handle Login Button Click
+  const handleLogin = async () => {
+    if (!selectedWarehouse) {
+      pubfunction.ShowError(
+        'The user does not have Warehouse permissions to operate!',
+      );
+      return;
+    }
+
+    const mesURL = selectedWarehouse.mesLan || selectedWarehouse.mes3g;
+
+    if (!mesURL) {
+      pubfunction.ShowError('Please config warehouse url first !');
+      return;
+    }
+
+    // Apply settings to context
+    setgs_wareCode(selectedWarehouse.id);
+    setgs_wareName(selectedWarehouse.text);
+    setgs_wareType(selectedWarehouse.otherInfo || '');
+    setgs_factoryCode(selectedWarehouse.factoryCode || '001');
+    setgs_factoryCodeMES('001');
+    setgs_MESBaseURL(mesURL);
+
+    let finalClassCode = 'BC01';
+    let finalClassName = 'Jour';
+    if (selectedClass) {
+      finalClassCode = selectedClass.id;
+      finalClassName = selectedClass.text;
+    }
+    setgs_classCode(finalClassCode);
+    setgs_className(finalClassName);
+
+    const todayDate = new Date().toISOString().split('T')[0];
+    setgs_workdate(todayDate);
+
+    setgs_groupCode('BZ001');
+    setgs_groupName('class A');
+
+    setLoading(true);
+    const loginRes = await getUserInfoWarehouseAuth(
+      userVal,
+      passwordVal,
+      selectedWarehouse.id,
+      finalClassCode,
+    );
+    setLoading(false);
+
+    if (loginRes.success) {
+      try {
+        // await loginWithJwt(gs_BaseURL, userVal, loginRes.passwordCandidate);
+      } catch (error) {
+        // JWT auth is optional for the legacy app session while the new API is unavailable.
+        console.warn(
+          '[Login] JWT authentication failed; continuing with legacy login.',
+          error,
+        );
+      }
+
+      try {
+        const netInfo = RNNetInfo?.NetworkInfo;
+        const ip =
+          netInfo && typeof netInfo.getIPAddress === 'function'
+            ? await netInfo.getIPAddress()
+            : '';
+        setgs_IPAddress(ip || 's');
+      } catch (err) {
+        pubfunction.ShowError(
+          'Error retrieving IP Address, fallback to default:' + err,
+        );
+        setgs_IPAddress('');
+      }
+      navigation.navigate('Menu');
+    } else {
+      resetLoginForm();
+    }
+  };
 
     return (
         <SafeAreaView style={styles.screen}>
@@ -814,40 +866,45 @@ export default function Login({ navigation }: any) {
                         </TouchableOpacity>
                         <Text style={styles.wmsText}>GROUP WAREHOUSE MANAGEMENT</Text>
 
-                        {/* Download & Version Container */}
-                        <View style={styles.headerDownloadRow}>
-                            {newVersion && newApkUrl && (
-                                <LinearGradient
-                                    colors={['#0052cc', '#22c55e']}
-                                    start={{ x: 0, y: 0 }}
-                                    end={{ x: 1, y: 0 }}
-                                    style={styles.downloadGradientButton}
-                                >
-                                    <TouchableOpacity
-                                        onPress={() => downloadAndInstall(newApkUrl)}
-                                        style={styles.downloadButton}
-                                        activeOpacity={0.7}
-                                    >
-                                        <Text style={styles.downloadButtonText}>Download new</Text>
-                                    </TouchableOpacity>
-                                </LinearGradient>
-                            )}
-                            <Text style={styles.headerVersion}>Version {gs_version}</Text>
-                        </View>
-                    </View>
+            {/* Download & Version Container */}
+            <View style={styles.headerDownloadRow}>
+              {newVersion && newApkUrl && (
+                <LinearGradient
+                  colors={['#0052cc', '#22c55e']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.downloadGradientButton}
+                >
+                  <TouchableOpacity
+                    onPress={() => downloadAndInstall(newApkUrl)}
+                    style={styles.downloadButton}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.downloadButtonText}>Download new</Text>
+                  </TouchableOpacity>
+                </LinearGradient>
+              )}
+              <Text style={styles.headerVersion}>Version {gs_version}</Text>
+            </View>
+          </View>
 
-                    {updateStatus === "downloading" && (
-                        <View style={styles.updateOverlay}>
-                            <View style={styles.updateCard}>
-                                <ActivityIndicator size="large" color="#0052cc" />
-                                <Text style={styles.updateTitle}>Téléchargement en cours...</Text>
-                                <Text style={styles.updateProgressText}>{downloadProgress}%</Text>
-                                <Text style={styles.updateSizeText}>
-                                    {(downloadedBytes / 1024 / 1024).toFixed(1)} MB / {(totalBytes / 1024 / 1024).toFixed(1)} MB
-                                </Text>
-                            </View>
-                        </View>
-                    )}
+          {updateStatus === 'downloading' && (
+            <View style={styles.updateOverlay}>
+              <View style={styles.updateCard}>
+                <ActivityIndicator size="large" color="#0052cc" />
+                <Text style={styles.updateTitle}>
+                  Téléchargement en cours...
+                </Text>
+                <Text style={styles.updateProgressText}>
+                  {downloadProgress}%
+                </Text>
+                <Text style={styles.updateSizeText}>
+                  {(downloadedBytes / 1024 / 1024).toFixed(1)} MB /{' '}
+                  {(totalBytes / 1024 / 1024).toFixed(1)} MB
+                </Text>
+              </View>
+            </View>
+          )}
 
                     {loading && (
                         <View style={styles.loadingOverlay}>
@@ -976,7 +1033,7 @@ export default function Login({ navigation }: any) {
 /* =====================
    Styles 
 ===================== */
-const { width, height } = Dimensions.get("window");
+const { width, height } = Dimensions.get('window');
 const isSmallDevice = width < 360;
 const scale = (size: number) => (width / 375) * size;
 
