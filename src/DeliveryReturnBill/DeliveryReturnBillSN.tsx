@@ -219,6 +219,10 @@ export default function DeliveryReturnBillSN({ navigation, route }: any) {
         mainBillCode: params.f_billCode || '',
         model: params.f_model || '',
       });
+      console.info(
+        '[DeliveryReturnBillSN] checkSNTraceability result:',
+        result,
+      );
 
       if (result.found && result.traces.length > 0) {
         // Traceability found, straight to the confirmation

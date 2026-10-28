@@ -111,6 +111,7 @@ export default function DeliveryReturnBillSelect({ navigation }: any) {
         const rows = await getBillModels(apiCtx, {
           sapMainBillCode: cleanCode,
         });
+        console.info('[DeliveryReturnBill] getBillModels result:', rows);
 
         if (rows.length === 0) {
           setGroups([]);

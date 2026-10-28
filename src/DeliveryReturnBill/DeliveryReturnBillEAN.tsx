@@ -112,14 +112,17 @@ export default function DeliveryReturnBillEAN({ navigation, route }: any) {
   /**
    * The return is saved for the model the operator selected.
    */
-  const submitReturn = async (model: EANCandidate) => {
+  const submitReturn = async (
+    model: EANCandidate,
+    eanToSubmit: string = scannedEAN,
+  ) => {
     setLoading(true);
     busyRef.current = true;
     try {
       const result = await submitReturnWithEAN(apiCtx, {
         context: params,
         sn: params.f_sn || '',
-        ean: scannedEAN,
+        ean: eanToSubmit,
         model: model.model,
       });
 
@@ -169,6 +172,14 @@ export default function DeliveryReturnBillEAN({ navigation, route }: any) {
 
       setScannedEAN(EAN);
       setCandidates(result.candidates);
+      setLabelError('');
+      if (result.candidates.length === 1) {
+        setSelectedKey(candidateKey(result.candidates[0]));
+        setLabelInfo('');
+        await submitReturn(result.candidates[0], EAN);
+        return;
+      }
+
       setSelectedKey(null);
       setLabelInfo(result.message || '');
     } catch (err: any) {
@@ -368,7 +379,7 @@ export default function DeliveryReturnBillEAN({ navigation, route }: any) {
           </View>
 
           {/* The models that carry the scanned EAN, the operator picks one */}
-          {candidates.length > 0 ? (
+          {candidates.length > 1 ? (
             <View style={styles.tableCard}>
               <ScrollView horizontal showsHorizontalScrollIndicator={true}>
                 <View>
@@ -399,7 +410,7 @@ export default function DeliveryReturnBillEAN({ navigation, route }: any) {
         </ScrollView>
 
         {/* Footer, the confirm appears when there is a list to choose from */}
-        {candidates.length > 0 ? (
+        {candidates.length > 1 ? (
           <View style={styles.footer}>
             <TouchableOpacity
               style={[
