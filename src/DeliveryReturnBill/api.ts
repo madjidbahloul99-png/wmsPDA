@@ -129,6 +129,19 @@ const buildQuery = (params: Record<string, string>): string =>
     )
     .join('&');
 
+/** Strip identity and signing values before a query is written to the log. */
+const getLoggableParams = (params: Record<string, string>) =>
+  Object.fromEntries(
+    Object.entries(params).filter(([key]) => {
+      const normalizedKey = key.toLowerCase();
+      return (
+        !normalizedKey.startsWith('operate') &&
+        normalizedKey !== 'usercode' &&
+        normalizedKey !== 'username'
+      );
+    }),
+  );
+
 /** GET against api/DeliveryReturn, throws an Error with the server message. */
 const requestGet = async (
   ctx: ApiContext,
@@ -140,31 +153,37 @@ const requestGet = async (
     throw new Error('Delivery Return Bill API is disabled.');
   }
   if (!DELIVERY_RETURN_BILL_API_KEY) {
-    console.warn('[DeliveryReturnBill] GET blocked: static API key is not configured.');
-    throw new Error('Delivery Return Bill API key is not configured in this build.');
+    console.warn(
+      '[DeliveryReturnBill] GET blocked: static API key is not configured.',
+    );
+    throw new Error(
+      'Delivery Return Bill API key is not configured in this build.',
+    );
   }
-  console.info('[DeliveryReturnBill] GET started:', path, {
-    params: Object.fromEntries(
-      Object.entries(params).filter(([key]) => {
-        const normalizedKey = key.toLowerCase();
-        return (
-          !normalizedKey.startsWith('operate') &&
-          normalizedKey !== 'usercode' &&
-          normalizedKey !== 'username'
-        );
-      }),
-    ),
-    apiKeyAvailable: true,
-  });
   const headers: Record<string, string> = {
     'X-Api-Key': DELIVERY_RETURN_BILL_API_KEY,
   };
-  const url = `${ctx.gs_BaseURL}${path}?${buildQuery(params)}`;
+  const url = `${ctx.gs_BaseURL}${path}?${buildQuery(
+    params,
+  )}`;
+  const loggableParams = getLoggableParams(params);
+  const loggableUrl = `${ctx.gs_BaseURL}${path}?${buildQuery(
+    loggableParams,
+  )}`;
+  console.info('[DeliveryReturnBill] request:', {
+    method: 'GET',
+    url: loggableUrl,
+    params: loggableParams,
+  });
   let response: Response;
   try {
     response = await fetch(url, { method: 'GET', headers });
   } catch (error) {
-    console.error('[DeliveryReturnBill] GET network error:', path, error);
+    console.error('[DeliveryReturnBill] request network error:', {
+      method: 'GET',
+      url: loggableUrl,
+      error,
+    });
     throw error;
   }
   let resData: any = null;
@@ -174,7 +193,9 @@ const requestGet = async (
     // no body or no json, the status tells the outcome
   }
   const envelope = readEnvelope(resData, response.status);
-  console.info('[DeliveryReturnBill] GET response:', path, {
+  console.info('[DeliveryReturnBill] response:', {
+    method: 'GET',
+    url: loggableUrl,
     status: response.status,
     code: envelope.code,
     message: envelope.message,
@@ -202,16 +223,22 @@ const requestPost = async (
     throw new Error('Delivery Return Bill API is disabled.');
   }
   if (!DELIVERY_RETURN_BILL_API_KEY) {
-    console.warn('[DeliveryReturnBill] POST blocked: static API key is not configured.');
-    throw new Error('Delivery Return Bill API key is not configured in this build.');
+    console.warn(
+      '[DeliveryReturnBill] POST blocked: static API key is not configured.',
+    );
+    throw new Error(
+      'Delivery Return Bill API key is not configured in this build.',
+    );
   }
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     'X-Api-Key': DELIVERY_RETURN_BILL_API_KEY,
   };
   const url = `${ctx.gs_BaseURL}${path}`;
-  console.info('[DeliveryReturnBill] POST started:', path, {
-    apiKeyAvailable: true,
+  console.info('[DeliveryReturnBill] request:', {
+    method: 'POST',
+    url,
+    bodyFields: Object.keys(body),
   });
   let response: Response;
   try {
@@ -221,7 +248,11 @@ const requestPost = async (
       body: JSON.stringify(body),
     });
   } catch (error) {
-    console.error('[DeliveryReturnBill] POST network error:', path, error);
+    console.error('[DeliveryReturnBill] request network error:', {
+      method: 'POST',
+      url,
+      error,
+    });
     throw error;
   }
   let resData: any = null;
@@ -231,7 +262,9 @@ const requestPost = async (
     // no body or no json, the status tells the outcome
   }
   const envelope = readEnvelope(resData, response.status);
-  console.info('[DeliveryReturnBill] POST response:', path, {
+  console.info('[DeliveryReturnBill] response:', {
+    method: 'POST',
+    url,
     status: response.status,
     code: envelope.code,
     message: envelope.message,
@@ -464,6 +497,8 @@ export async function getBillModels(
   ctx: ApiContext,
   params: { sapMainBillCode: string },
 ): Promise<BillModelGroup[]> {
+  console.info('[DeliveryReturnBill] getBillModels started:', params);
+
   const envelope = await requestGet(ctx, `${API_PATH}/ScanReturnBill`, {
     returnBillCode: params.sapMainBillCode,
     warehouseCode: ctx.gs_wareCode,

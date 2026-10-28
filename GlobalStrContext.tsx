@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState } from "react";
+import React, { createContext, useContext, useState } from 'react';
 
 /* ==========================================================
    Type definition for the second Global String Context
@@ -89,47 +89,55 @@ const GlobalStrContext = createContext<GlobalStrContextType | null>(null);
 /* ==========================================================
    Provider Component
 ========================================================== */
-export const GlobalStrProvider = ({ children }: { children: React.ReactNode }) => {
-  const [gs_factoryCode, setFactoryCode] = useState("001");
-  const [gs_factoryCodeMES, setFactoryCodeMES] = useState("001");
+export const GlobalStrProvider = ({
+  children,
+}: {
+  children: React.ReactNode;
+}) => {
+  const [gs_factoryCode, setFactoryCode] = useState('001');
+  const [gs_factoryCodeMES, setFactoryCodeMES] = useState('001');
 
-  const [gs_wareCode, setWareCode] = useState("");
-  const [gs_wareName, setWareName] = useState("");
-  const [gs_wareType, setWareType] = useState("");
+  const [gs_wareCode, setWareCode] = useState('');
+  const [gs_wareName, setWareName] = useState('');
+  const [gs_wareType, setWareType] = useState('');
 
-  const [gs_classCode, setClassCode] = useState("");
-  const [gs_className, setClassName] = useState("");
+  const [gs_classCode, setClassCode] = useState('');
+  const [gs_className, setClassName] = useState('');
 
-  const [gs_groupCode, setGroupCode] = useState("");
-  const [gs_groupName, setGroupName] = useState("");
+  const [gs_groupCode, setGroupCode] = useState('');
+  const [gs_groupName, setGroupName] = useState('');
 
-  const [gs_userCode, setUserCode] = useState("1");
-  const [gs_userName, setUserName] = useState("1");
-  const [gs_remark, setRemark] = useState("");
+  const [gs_userCode, setUserCode] = useState('1');
+  const [gs_userName, setUserName] = useState('1');
+  const [gs_remark, setRemark] = useState('');
 
-  const [gs_workdate, setWorkdate] = useState("");
-  const [gs_IPAddress, setIPAddress] = useState("");
+  const [gs_workdate, setWorkdate] = useState('');
+  const [gs_IPAddress, setIPAddress] = useState('');
 
-  const [gs_Project_ExecutePath, setProject_ExecutePath] = useState("");
+  const [gs_Project_ExecutePath, setProject_ExecutePath] = useState('');
 
   const [appConfig, setAppConfig] = useState<AppConfig | null>(null);
 
-  const [gs_MESBaseURL, setMESBaseURL] = useState("");
+  const [gs_MESBaseURL, setMESBaseURL] = useState('');
 
-  const [gs_BaseURL, setBaseURL] = useState("https://wmsapi.condor.dz");
-  const [gs_BaseURL_WEB, setBaseURL_WEB] = useState("https://wmsapi.condor.dz");
+  const [gs_BaseURL, setBaseURL] = useState('https://wmsapi.condor.dz');
+  const [gs_BaseURL_WEB, setBaseURL_WEB] = useState('https://wmsapi.condor.dz');
 
-  const [gs_PADURL, setPADURL] = useState("https://mesdownload.condor.dz");
-  const [gs_PADURL_WEB, setPADURL_WEB] = useState("https://mesdownload.condor.dz");
+  const [gs_PADURL, setPADURL] = useState('https://mesdownload.condor.dz');
+  const [gs_PADURL_WEB, setPADURL_WEB] = useState(
+    'https://mesdownload.condor.dz',
+  );
 
-  const [gs_PasswordSalt, setPasswordSalt] = useState("abc12345");
-  const [gs_randomNumber, setRandomNumber] = useState("2");
-  const [gs_version, setVersion] = useState("1.0.2");
+  const [gs_PasswordSalt, setPasswordSalt] = useState('abc12345');
+  const [gs_randomNumber, setRandomNumber] = useState('2');
+  const [gs_version, setVersion] = useState('1.0.2');
 
-  const [g_webUrl, setWebUrl] = useState("https://mespdamobile.condor.dz/WINCEWeb.asmx");
+  const [g_webUrl, setWebUrl] = useState(
+    'https://mespdamobile.condor.dz/WINCEWeb.asmx',
+  );
   const [g_isRealUrl, setIsRealUrl] = useState(true);
 
-  return ( 
+  return (
     <GlobalStrContext.Provider
       value={{
         gs_factoryCode,
@@ -216,7 +224,7 @@ export const GlobalStrProvider = ({ children }: { children: React.ReactNode }) =
 export const useGlobalStr = () => {
   const ctx = useContext(GlobalStrContext);
   if (!ctx) {
-    throw new Error("useGlobalStr must be used inside GlobalStrProvider");
+    throw new Error('useGlobalStr must be used inside GlobalStrProvider');
   }
   return ctx;
 };
