@@ -136,7 +136,6 @@ export const GlobalStrProvider = ({ children }: { children: React.ReactNode }) =
   const [g_isRealUrl, setIsRealUrl] = useState(true);
 
   return (
-  return (
     <GlobalStrContext.Provider
       value={{
         gs_factoryCode,
