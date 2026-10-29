@@ -84,16 +84,22 @@ export type GlobalStrContextType = {
 /* ==========================================================
    Create Context
 ========================================================== */
-export const GlobalStrContext = createContext<GlobalStrContextType | null>(null);
+export const GlobalStrContext = createContext<GlobalStrContextType | null>(
+  null,
+);
 
 /* ==========================================================
    Provider Component
 ========================================================== */
-export const GlobalStrProvider = ({ children }: { children: React.ReactNode }) => {
-  const [gs_factoryCode, setFactoryCode] = useState("001");
-  const [gs_factoryindex, _setFactoryindex] = useState("zentech");
-  //const [gs_factoryindex, _setFactoryindex] = useState("other");
-  const [gs_factoryCodeMES, setFactoryCodeMES] = useState("001");
+export const GlobalStrProvider = ({
+  children,
+}: {
+  children: React.ReactNode;
+}) => {
+  const [gs_factoryCode, setFactoryCode] = useState('001');
+  //const [gs_factoryindex, _setFactoryindex] = useState("zentech");
+  const [gs_factoryindex, _setFactoryindex] = useState('other');
+  const [gs_factoryCodeMES, setFactoryCodeMES] = useState('001');
 
   const [gs_wareCode, setWareCode] = useState('');
   const [gs_wareName, setWareName] = useState('');
@@ -109,8 +115,8 @@ export const GlobalStrProvider = ({ children }: { children: React.ReactNode }) =
   const [gs_userName, setUserName] = useState('1');
   const [gs_remark, setRemark] = useState('');
 
-  const [gs_workdate, setWorkdate] = useState("");
-  const [gs_IPAddress, setIPAddress] = useState("");
+  const [gs_workdate, setWorkdate] = useState('');
+  const [gs_IPAddress, setIPAddress] = useState('');
 
   const [gs_MESBaseURL, setMESBaseURL] = useState('');
 

@@ -21,7 +21,6 @@ import {
   DeviceEventEmitter,
 } from 'react-native';
 import { useGlobalStr } from '../../GlobalStrContext';
-import * as pubfunction from '../pubfunction';
 import { ApiContext, checkSNTraceability } from './api';
 import { ReturnContext, TraceabilityRecord } from './types';
 import { EVENT_RETURNED } from './events';
@@ -29,8 +28,12 @@ import { EVENT_RETURNED } from './events';
 /**
  * Page 2 - Scan the SN of the returned product and check its delivery traceability.
  *
- *   traceability found  -> the confirm page
- *   no delivery found   -> the EAN page (the EAN has to be scanned)
+ * The server answers a status (ValidateProductSN):
+ *
+ *   A - the SN model is the selected model          -> the confirm page
+ *   B - the SN model is in the bill, not selected   -> inline message, stay
+ *   C - the SN model is not in this return bill     -> inline message, stay
+ *   D - the SN is not in the delivery traceability  -> the EAN page
  *
  * The list of the scanned items is kept in the screen on purpose: the real API
  * has no endpoint that returns it. Every successful return appends the scanned
@@ -80,8 +83,8 @@ export default function DeliveryReturnBillSN({ navigation, route }: any) {
   const [txtSN, setTxtSN] = useState('');
   const [labelError, setLabelError] = useState('');
   const [labelStatus, setLabelStatus] = useState('');
-  const [doneQty, setDoneQty] = useState<number>(0);
-  const [planQty, setPlanQty] = useState<number>(0);
+  const [doneQty, setDoneQty] = useState<number>(params.f_doneQty || 0);
+  const [planQty, setPlanQty] = useState<number>(params.f_planQty || 0);
   const [products, setProducts] = useState<TraceabilityRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [showKeyboard] = useState(false);
@@ -90,13 +93,19 @@ export default function DeliveryReturnBillSN({ navigation, route }: any) {
   const scanTimer = useRef<any>(null);
   // True while a request is in flight, a ref is always up to date (no stale closure)
   const busyRef = useRef(false);
+  const doneQtyRef = useRef(params.f_doneQty || 0);
+  const planQtyRef = useRef(params.f_planQty || 0);
   // The scanned items, kept in a ref to always be up to date
   const productsRef = useRef<TraceabilityRecord[]>([]);
 
   // Keep the quantities of the selected model
   useEffect(() => {
-    setPlanQty(params.f_planQty || 0);
-    setDoneQty(params.f_doneQty || 0);
+    const nextPlanQty = params.f_planQty || 0;
+    const nextDoneQty = params.f_doneQty || 0;
+    planQtyRef.current = nextPlanQty;
+    doneQtyRef.current = nextDoneQty;
+    setPlanQty(nextPlanQty);
+    setDoneQty(nextDoneQty);
   }, [params.f_planQty, params.f_doneQty]);
   const ensureFocus = () => {
     txtSNRef.current?.focus();
@@ -120,8 +129,6 @@ export default function DeliveryReturnBillSN({ navigation, route }: any) {
         billFinished?: boolean;
       }) => {
         if (data) {
-          if (typeof data.actualQty === 'number') setDoneQty(data.actualQty);
-          if (typeof data.planQty === 'number') setPlanQty(data.planQty);
           if (data.billFinished) {
             setLabelStatus('This return bill is finished.');
           } else if (data.productStatus) {
@@ -140,6 +147,8 @@ export default function DeliveryReturnBillSN({ navigation, route }: any) {
             const list = [...productsRef.current, product];
             productsRef.current = list;
             setProducts(list);
+            doneQtyRef.current += 1;
+            setDoneQty(doneQtyRef.current);
           }
         }
         setTxtSN('');
@@ -191,6 +200,12 @@ export default function DeliveryReturnBillSN({ navigation, route }: any) {
 
     setTxtSN('');
     setLabelError('');
+    setLabelStatus('');
+
+    if (planQtyRef.current <= doneQtyRef.current) {
+      setLabelStatus('This model is completed. SN scanning is disabled.');
+      return;
+    }
 
     // The EAN is scanned on its own page, refuse it here
     if (SN.substring(0, 3) === '613') {
@@ -210,22 +225,17 @@ export default function DeliveryReturnBillSN({ navigation, route }: any) {
       );
       if (scanned) {
         setLabelError('This product was already scanned.');
-        pubfunction.ShowError('This product was already scanned.');
         return;
       }
 
       const result = await checkSNTraceability(apiCtx, {
         sn: SN,
-        mainBillCode: params.f_billCode || '',
-        model: params.f_model || '',
+        modelCode: params.f_model || '',
+        returnBillCode: params.f_billCode || '',
+        warehouseCode: params.f_wareCode || gs_wareCode || '',
       });
-      console.info(
-        '[DeliveryReturnBillSN] checkSNTraceability result:',
-        result,
-      );
-
-      if (result.found && result.traces.length > 0) {
-        // Traceability found, straight to the confirmation
+      // A - the SN is the selected model: straight to the confirmation
+      if (result.result === 'A' || (!result.result && result.found)) {
         navigation.navigate('DeliveryReturnBillConfirm', {
           ...buildContext(),
           f_sn: SN,
@@ -234,27 +244,26 @@ export default function DeliveryReturnBillSN({ navigation, route }: any) {
         return;
       }
 
-      // The product was not found, the EAN identifies it
-      const message =
-        result.error || `SN ${SN} not found, please scan the EAN.`;
-      if (result.requiresEan) {
+      // D - the SN is in no model of the delivery traceability: scan the EAN
+      if (result.result === 'D' || (!result.result && result.requiresEan)) {
         navigation.navigate('DeliveryReturnBillEAN', {
           ...buildContext(),
           f_sn: SN,
           f_requiresEan: true,
-          f_initialMessage: message,
+          f_initialMessage:
+            result.message || `SN ${SN} not found, please scan the EAN.`,
         });
-      } else {
-        setLabelError(message);
+        return;
       }
+
+      // B / C - the SN belongs to another model (in the bill or outside it):
+      // stay on this page and show the message of the server
+      setLabelError(
+        result.message || `SN ${SN} cannot be returned on this row.`,
+      );
     } catch (err: any) {
-      const message = err.message || 'Network error';
-      navigation.navigate('DeliveryReturnBillEAN', {
-        ...buildContext(),
-        f_sn: SN,
-        f_requiresEan: true,
-        f_initialMessage: message,
-      });
+      // Network / server error: stay here, never jump to the EAN page
+      setLabelError(err.message || 'Network error');
     } finally {
       busyRef.current = false;
       setLoading(false);
@@ -265,8 +274,10 @@ export default function DeliveryReturnBillSN({ navigation, route }: any) {
   };
 
   const handleTextChange = (text: string) => {
+    if (planQtyRef.current <= doneQtyRef.current) return;
     setTxtSN(text);
     setLabelError('');
+    setLabelStatus('');
 
     if (scanTimer.current) {
       clearTimeout(scanTimer.current);
@@ -381,7 +392,7 @@ export default function DeliveryReturnBillSN({ navigation, route }: any) {
             style={styles.input}
             value={txtSN}
             onChangeText={handleTextChange}
-            editable={!loading}
+            editable={!loading && planQty > doneQty}
             placeholder=" SCAN PRODUCT SN"
             placeholderTextColor="#64748B"
             autoCapitalize="characters"
@@ -395,6 +406,12 @@ export default function DeliveryReturnBillSN({ navigation, route }: any) {
             <Text style={styles.infoText}>{labelError}</Text>
           ) : null}
         </View>
+
+        {planQty <= doneQty ? (
+          <Text style={styles.statusText}>
+            This model is completed. SN scanning is disabled.
+          </Text>
+        ) : null}
 
         {/* Products that were already scanned in this session */}
         <View style={styles.tableCard}>

@@ -7,7 +7,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  FlatList,
   StatusBar,
   ActivityIndicator,
   Image,
@@ -15,7 +14,6 @@ import {
   DeviceEventEmitter,
 } from 'react-native';
 import { useGlobalStr } from '../../GlobalStrContext';
-import * as pubfunction from '../pubfunction';
 import { ApiContext, lookupByEAN, submitReturnWithEAN } from './api';
 import { EANCandidate, ReturnContext } from './types';
 import { EVENT_RETURNED } from './events';
@@ -23,10 +21,11 @@ import { EVENT_RETURNED } from './events';
 /**
  * Page 3 - Scan the EAN of a product that has no delivery traceability.
  *
- * The EAN is matched to a model: the lookup returns the list of the models
- * that carry it, the operator selects the model of the product he wants to
- * return and presses Confirm OK. The return is saved with scanType = "EAN"
- * and the screen goes back to the SN scan page.
+ * The EAN must belong to the model already selected on page 1: the server
+ * answers that model alone (isSelected = true) and the return is saved
+ * automatically with scanType = "EAN". When the EAN belongs to another model
+ * the screen shows an inline error and stays here. After a successful save it
+ * goes back to the SN scan page.
  */
 export default function DeliveryReturnBillEAN({ navigation, route }: any) {
   const params: ReturnContext & {
@@ -44,7 +43,6 @@ export default function DeliveryReturnBillEAN({ navigation, route }: any) {
     gs_version,
     gs_classCode,
     gs_IPAddress,
-    gs_remark,
   } = useGlobalStr();
 
   const apiCtx: ApiContext = useMemo(
@@ -75,10 +73,6 @@ export default function DeliveryReturnBillEAN({ navigation, route }: any) {
   const [labelError, setLabelError] = useState(params.f_initialMessage || '');
   const [labelInfo, setLabelInfo] = useState('');
   const [scannedEAN, setScannedEAN] = useState('');
-  const [candidates, setCandidates] = useState<EANCandidate[]>([]);
-  // The identity of the selected row (model | color | ean), two models of the
-  // same list can share a model code but differ by their color
-  const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [showKeyboard] = useState(false);
 
@@ -116,12 +110,19 @@ export default function DeliveryReturnBillEAN({ navigation, route }: any) {
     model: EANCandidate,
     eanToSubmit: string = scannedEAN,
   ) => {
+    const sn = (params.f_sn || '').trim();
+    if (!sn) {
+      setLabelInfo('');
+      setLabelError('A product SN is required before saving an EAN return.');
+      return;
+    }
+
     setLoading(true);
     busyRef.current = true;
     try {
       const result = await submitReturnWithEAN(apiCtx, {
         context: params,
-        sn: params.f_sn || '',
+        sn,
         ean: eanToSubmit,
         model: model.model,
       });
@@ -140,7 +141,7 @@ export default function DeliveryReturnBillEAN({ navigation, route }: any) {
       navigation.goBack();
     } catch (err: any) {
       const message = err.message || 'Network error';
-      pubfunction.ShowError(message);
+      setLabelInfo('');
       setLabelError(message);
     } finally {
       busyRef.current = false;
@@ -149,8 +150,9 @@ export default function DeliveryReturnBillEAN({ navigation, route }: any) {
   };
 
   /**
-   * Looks up the models of the scanned EAN, the list is the list of the
-   * models of the API (model | description | color | ean).
+   * Looks up the models of the scanned EAN. The server answers the selected
+   * model alone (isSelected = true) when it carries this EAN; otherwise the
+   * EAN belongs to another model and the return cannot be saved on this row.
    */
   const lookupEAN = async (EAN: string) => {
     setLoading(true);
@@ -158,32 +160,33 @@ export default function DeliveryReturnBillEAN({ navigation, route }: any) {
     try {
       const result = await lookupByEAN(apiCtx, {
         ean: EAN,
-        mainBillCode: params.f_billCode || '',
+        modelCode: params.f_model || '',
       });
 
-      if (result.candidates.length === 0) {
-        setCandidates([]);
-        setSelectedKey(null);
+      const selected = result.candidates.find(
+        candidate => candidate.isSelected,
+      );
+
+      if (!selected) {
         setScannedEAN('');
-        const message = result.message || `EAN ${EAN} not found.`;
-        setLabelError(message);
+        const models = Array.from(
+          new Set(result.candidates.map(candidate => candidate.model)),
+        ).join(', ');
+        setLabelError(
+          result.candidates.length === 0
+            ? `EAN ${EAN} not found.`
+            : `EAN ${EAN} belongs to ${models}, not to the selected model ${
+                params.f_model || '-'
+              }.`,
+        );
         return;
       }
 
       setScannedEAN(EAN);
-      setCandidates(result.candidates);
       setLabelError('');
-      if (result.candidates.length === 1) {
-        setSelectedKey(candidateKey(result.candidates[0]));
-        setLabelInfo('');
-        await submitReturn(result.candidates[0], EAN);
-        return;
-      }
-
-      setSelectedKey(null);
-      setLabelInfo(result.message || '');
+      setLabelInfo(`EAN ${EAN} -> model ${selected.model}`);
+      await submitReturn(selected, EAN);
     } catch (err: any) {
-      pubfunction.ShowError(err.message || 'Network error');
       setLabelError(err.message || 'Network error');
     } finally {
       busyRef.current = false;
@@ -215,14 +218,6 @@ export default function DeliveryReturnBillEAN({ navigation, route }: any) {
     setLabelError('');
     setLabelInfo('');
 
-    // The permission check is disabled for the tests, to re-enable it add
-    // gs_remark back to the useGlobalStr() destructure above.
-    // if ((gs_remark || '').toUpperCase() !== 'EAN') {
-    //   pubfunction.ShowError("You don't have permission to scan EAN!");
-    //   setLabelError("You don't have permission to scan EAN!");
-    //   return;
-    // }
-
     lookupEAN(EAN);
   };
 
@@ -252,55 +247,6 @@ export default function DeliveryReturnBillEAN({ navigation, route }: any) {
         processEANInput(trimmed);
       }
     }, 600);
-  };
-
-  /**
-   * The identity of a candidate row: two models of the list can share a model
-   * code (the API answers one row per model and color).
-   */
-  const candidateKey = (model: EANCandidate): string =>
-    `${model.model}|${model.colorName}|${model.ean}`;
-
-  const handleConfirmClick = () => {
-    // A double tap would save the return twice
-    if (busyRef.current) return;
-
-    const model = candidates.find(item => candidateKey(item) === selectedKey);
-    if (!model) {
-      pubfunction.ShowError('Please select a model first!');
-      return;
-    }
-    submitReturn(model);
-  };
-
-  const renderCandidate = ({
-    item,
-    index,
-  }: {
-    item: EANCandidate;
-    index: number;
-  }) => {
-    const isSelected = selectedKey === candidateKey(item);
-    return (
-      <TouchableOpacity
-        style={[
-          styles.tableRow,
-          { backgroundColor: index % 2 === 0 ? '#FFFFFF' : '#F8FAFC' },
-          isSelected && styles.selectedRow,
-        ]}
-        onPress={() => setSelectedKey(candidateKey(item))}
-        activeOpacity={0.7}
-      >
-        <Text style={[styles.cell, { width: 140 }]}>{item.model}</Text>
-        <Text style={[styles.cell, { width: 240 }]}>
-          {item.modelDesc || '-'}
-        </Text>
-        <Text style={[styles.cell, { width: 110 }]}>
-          {item.colorName || '-'}
-        </Text>
-        <Text style={[styles.cell, { width: 150 }]}>{item.ean}</Text>
-      </TouchableOpacity>
-    );
   };
 
   const infoRow = (label: string, value: string) => (
@@ -377,56 +323,7 @@ export default function DeliveryReturnBillEAN({ navigation, route }: any) {
               <Text style={styles.statusText}>{labelInfo}</Text>
             ) : null}
           </View>
-
-          {/* The models that carry the scanned EAN, the operator picks one */}
-          {candidates.length > 1 ? (
-            <View style={styles.tableCard}>
-              <ScrollView horizontal showsHorizontalScrollIndicator={true}>
-                <View>
-                  <View style={styles.tableHeader}>
-                    <Text style={[styles.headerCell, { width: 140 }]}>
-                      MODEL
-                    </Text>
-                    <Text style={[styles.headerCell, { width: 240 }]}>
-                      Description
-                    </Text>
-                    <Text style={[styles.headerCell, { width: 110 }]}>
-                      Color
-                    </Text>
-                    <Text style={[styles.headerCell, { width: 150 }]}>EAN</Text>
-                  </View>
-
-                  <FlatList
-                    data={candidates}
-                    renderItem={renderCandidate}
-                    keyExtractor={(item, index) => `${item.model}-${index}`}
-                    style={{ flex: 1 }}
-                    initialNumToRender={10}
-                  />
-                </View>
-              </ScrollView>
-            </View>
-          ) : null}
         </ScrollView>
-
-        {/* Footer, the confirm appears when there is a list to choose from */}
-        {candidates.length > 1 ? (
-          <View style={styles.footer}>
-            <TouchableOpacity
-              style={[
-                styles.btn,
-                styles.btnConfirm,
-                (loading || !selectedKey) && styles.btnDisabled,
-              ]}
-              onPress={handleConfirmClick}
-              disabled={loading || !selectedKey}
-            >
-              <Text style={styles.btnText}>
-                {loading ? 'Saving...' : 'Confirm OK'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        ) : null}
       </View>
 
       {loading && (
@@ -515,58 +412,6 @@ const styles = StyleSheet.create({
     marginTop: 4,
     marginLeft: 4,
   },
-  tableCard: {
-    backgroundColor: '#FFF',
-    borderRadius: 12,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#0052cc',
-    marginBottom: 8,
-  },
-  tableHeader: {
-    flexDirection: 'row',
-    backgroundColor: '#0052cc',
-    paddingVertical: 10,
-  },
-  headerCell: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#FFFFFF',
-    textAlign: 'center',
-    textTransform: 'uppercase',
-  },
-  tableRow: {
-    flexDirection: 'row',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
-    alignItems: 'center',
-  },
-  cell: {
-    fontSize: 11,
-    color: '#1E293B',
-    textAlign: 'center',
-    fontWeight: '600',
-  },
-  selectedRow: { backgroundColor: '#BAE6FD' },
-  footer: {
-    flexDirection: 'row',
-    borderTopWidth: 1,
-    borderTopColor: '#E2E8F0',
-    paddingTop: 6,
-  },
-  btn: {
-    flex: 1,
-    height: 44,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginHorizontal: 4,
-    elevation: 2,
-  },
-  btnConfirm: { backgroundColor: '#10B981' },
-  btnDisabled: { opacity: 0.5 },
-  btnText: { color: '#FFFFFF', fontSize: 14, fontWeight: '900' },
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(255, 255, 255, 0.5)',

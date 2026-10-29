@@ -5,8 +5,8 @@
  * (Controllers/DeliveryReturnNew/DeliveryReturnNewController.cs):
  *
  *   GET  api/DeliveryReturn/ScanReturnBill?returnBillCode=&warehouseCode=
- *   GET  api/DeliveryReturn/ValidateProductSN?sn=&modelCode=
- *   GET  api/DeliveryReturn/CheckEAN?ean=
+ *   GET  api/DeliveryReturn/ValidateProductSN?sn=&modelCode=&returnBillCode=&warehouseCode=
+ *   GET  api/DeliveryReturn/CheckEAN?ean=&modelCode=
  *   POST api/DeliveryReturn/SaveReturnDetail        (JSON body)
  *
  * GET requests use the [FromQuery] models, the POST uses [FromBody].
@@ -37,6 +37,7 @@ import {
   ReturnBillLine,
   ReturnContext,
   ReturnResult,
+  SnResult,
   TraceabilityCheckResult,
   TraceabilityRecord,
 } from './types';
@@ -129,19 +130,6 @@ const buildQuery = (params: Record<string, string>): string =>
     )
     .join('&');
 
-/** Strip identity and signing values before a query is written to the log. */
-const getLoggableParams = (params: Record<string, string>) =>
-  Object.fromEntries(
-    Object.entries(params).filter(([key]) => {
-      const normalizedKey = key.toLowerCase();
-      return (
-        !normalizedKey.startsWith('operate') &&
-        normalizedKey !== 'usercode' &&
-        normalizedKey !== 'username'
-      );
-    }),
-  );
-
 /** GET against api/DeliveryReturn, throws an Error with the server message. */
 const requestGet = async (
   ctx: ApiContext,
@@ -164,36 +152,22 @@ const requestGet = async (
     'X-Api-Key': DELIVERY_RETURN_BILL_API_KEY,
   };
   const url = `${ctx.gs_deliveryReturnAPI}${path}?${buildQuery(params)}`;
-  const loggableParams = getLoggableParams(params);
-  const loggableUrl = `${ctx.gs_deliveryReturnAPI}${path}?${buildQuery(
-    loggableParams,
-  )}`;
-  console.info('[DeliveryReturnBill] request:', {
-    method: 'GET',
-    url: loggableUrl,
-    params: loggableParams,
-  });
   let response: Response;
   try {
     response = await fetch(url, { method: 'GET', headers });
   } catch (error) {
-    console.error('[DeliveryReturnBill] request network error:', {
-      method: 'GET',
-      url: loggableUrl,
-      error,
-    });
+    console.error('[DeliveryReturnBill] GET network error');
     throw error;
   }
   let resData: any = null;
   try {
     resData = await response.json();
-  } catch {
+  } catch (error) {
     // no body or no json, the status tells the outcome
   }
   const envelope = readEnvelope(resData, response.status);
   console.info('[DeliveryReturnBill] response:', {
     method: 'GET',
-    url: loggableUrl,
     status: response.status,
     code: envelope.code,
     message: envelope.message,
@@ -233,11 +207,6 @@ const requestPost = async (
     'X-Api-Key': DELIVERY_RETURN_BILL_API_KEY,
   };
   const url = `${ctx.gs_deliveryReturnAPI}${path}`;
-  console.info('[DeliveryReturnBill] request:', {
-    method: 'POST',
-    url,
-    bodyFields: Object.keys(body),
-  });
   let response: Response;
   try {
     response = await fetch(url, {
@@ -246,11 +215,7 @@ const requestPost = async (
       body: JSON.stringify(body),
     });
   } catch (error) {
-    console.error('[DeliveryReturnBill] request network error:', {
-      method: 'POST',
-      url,
-      error,
-    });
+    console.error('[DeliveryReturnBill] POST network error');
     throw error;
   }
   let resData: any = null;
@@ -262,7 +227,6 @@ const requestPost = async (
   const envelope = readEnvelope(resData, response.status);
   console.info('[DeliveryReturnBill] response:', {
     method: 'POST',
-    url,
     status: response.status,
     code: envelope.code,
     message: envelope.message,
@@ -383,10 +347,12 @@ export const mapRawLine = (raw: any): ReturnBillLine => {
 
 /** Maps one line of the EAN lookup (the answer of CheckEAN). */
 export const mapEANCandidate = (raw: any): EANCandidate => ({
-  model: pickText(raw, ['model', 'MODEL']),
+  model: pickText(raw, ['model', 'MODEL']).trim(),
   modelDesc: pickText(raw, ['modelDesc', 'MODEL_DESC']),
   colorName: pickText(raw, ['colorName', 'COLOR_NAME']),
-  ean: pickText(raw, ['ean', 'CODE_EAN']),
+  ean: pickText(raw, ['ean', 'EAN', 'CODE_EAN']).trim(),
+  isSelected:
+    raw ? raw.isSelected === true || raw.IsSelected === true : false,
 });
 
 /**
@@ -495,8 +461,6 @@ export async function getBillModels(
   ctx: ApiContext,
   params: { sapMainBillCode: string },
 ): Promise<BillModelGroup[]> {
-  console.info('[DeliveryReturnBill] getBillModels started:', params);
-
   const envelope = await requestGet(ctx, `${API_PATH}/ScanReturnBill`, {
     returnBillCode: params.sapMainBillCode,
     warehouseCode: ctx.gs_wareCode,
@@ -513,25 +477,60 @@ export async function getBillModels(
    ========================================================================== */
 
 /**
- * GET ValidateProductSN?sn=&modelCode=
+ * GET ValidateProductSN?sn=&modelCode=&returnBillCode=&warehouseCode=
  *
- * traceabilityExists = true  -> the operator goes to the confirm page
- * traceabilityExists = false -> no delivery found for this SN, the EAN page
+ * The server validates the SN against the selected row and answers a status:
  *
- * A model mismatch answers as an exception of the server, the screen shows its
- * message: "SN model X does not match the selected model Y".
+ *   A - the SN model is the selected model          -> confirm page
+ *   B - the SN model is in the bill, not selected   -> stay, inline message
+ *   C - the SN model is not in this return bill     -> stay, inline message
+ *   D - the SN is not in the delivery traceability  -> EAN page
+ *
+ * B and C are business statuses (isok = "0") answered with HTTP 200, so the
+ * screen must route on `result`, never on the envelope or on an exception.
  */
 export async function checkSNTraceability(
   ctx: ApiContext,
-  params: { sn: string; mainBillCode: string; model: string },
+  params: {
+    sn: string;
+    modelCode: string;
+    returnBillCode: string;
+    warehouseCode: string;
+  },
 ): Promise<TraceabilityCheckResult> {
   const envelope = await requestGet(ctx, `${API_PATH}/ValidateProductSN`, {
     sn: params.sn,
-    modelCode: params.model || '',
+    modelCode: params.modelCode || '',
+    returnBillCode: params.returnBillCode || '',
+    warehouseCode: params.warehouseCode || ctx.gs_wareCode || '',
     ...getOperateSign(ctx),
   });
   const res = envelope.data || {};
-  const traceabilityExists = res.traceabilityExists === true;
+  const rawResult = pickText(res, ['result', 'Result']).trim().toUpperCase();
+  const result: SnResult | '' =
+    rawResult === 'A' ||
+    rawResult === 'B' ||
+    rawResult === 'C' ||
+    rawResult === 'D'
+      ? (rawResult as SnResult)
+      : '';
+  const hasResult = rawResult.length > 0;
+  const traceabilityExists =
+    res.traceabilityExists === true || res.TraceabilityExists === true;
+  const model = pickText(res, ['model', 'Model']).trim();
+  const message = pickText(res, ['message', 'Message']).trim();
+
+  // An older API answers without `result`, keep its traceabilityExists routing
+  const found = result ? result === 'A' : !hasResult && traceabilityExists;
+  const requiresEan = result ? result === 'D' : !hasResult && !traceabilityExists;
+  const unknownResultMessage = hasResult && !result
+    ? `Unexpected SN validation result: ${rawResult}${
+        message ? ` (${message})` : ''
+      }`
+    : '';
+  const fallbackMessage = 'SN not found, please scan the EAN';
+  const responseMessage = unknownResultMessage || message;
+
   const trace: TraceabilityRecord = {
     sn: params.sn,
     lineId: '',
@@ -539,7 +538,7 @@ export async function checkSNTraceability(
     outBillCode: pickText(res, ['outBillCode', 'out_bill_code']),
     sapMainBillCode: pickText(res, ['sapMainBillCode', 'sap_main_bill_code']),
     sapUuid: pickText(res, ['sapUuid', 'sap_uuid']),
-    model: pickText(res, ['model']) || params.model,
+    model: model || params.modelCode,
     modelDesc: '',
     color: '',
     ean: '',
@@ -561,13 +560,16 @@ export async function checkSNTraceability(
     goodsCount: '',
   };
   return {
-    found: traceabilityExists,
-    traces: traceabilityExists ? [trace] : [],
-    requiresEan: !traceabilityExists,
-    error: traceabilityExists
+    result,
+    isok: pickText(res, ['isok', 'isOk', 'Isok', 'IsOk']),
+    model,
+    message: responseMessage,
+    found,
+    traces: found ? [trace] : [],
+    requiresEan,
+    error: found
       ? undefined
-      : pickText(res, ['message']) ||
-        'No delivery found for this SN, please scan the EAN',
+      : responseMessage || fallbackMessage,
   };
 }
 
@@ -576,18 +578,23 @@ export async function checkSNTraceability(
    ========================================================================== */
 
 /**
- * GET CheckEAN?ean=
+ * GET CheckEAN?ean=&modelCode=
  *
- * The EAN is matched to a model: the answer is the list of the models that
- * carry it, the operator picks the one matching the product and confirms.
- * Identical model/color rows are shown once.
+ * The server matches the EAN with the model selected on page 1:
+ *
+ *   the selected model carries this EAN -> it answers this row alone with
+ *                                         isSelected = true (save directly)
+ *   otherwise                          -> the full list of the models, the
+ *                                         operator scanned an EAN of another
+ *                                         model (the screen shows an error)
  */
 export async function lookupByEAN(
   ctx: ApiContext,
-  params: { ean: string; mainBillCode: string },
+  params: { ean: string; modelCode: string },
 ): Promise<EANLookupResult> {
   const envelope = await requestGet(ctx, `${API_PATH}/CheckEAN`, {
     ean: params.ean,
+    modelCode: params.modelCode || '',
     ...getOperateSign(ctx),
   });
   const rows: any[] = Array.isArray(envelope.data) ? envelope.data : [];
@@ -604,7 +611,7 @@ export async function lookupByEAN(
     candidates,
     message:
       candidates.length > 0
-        ? `${candidates.length} model(s) found, please select one.`
+        ? `${candidates.length} model(s) found for EAN ${params.ean}.`
         : 'EAN not found',
   };
 }
@@ -697,6 +704,9 @@ export async function submitReturnWithEAN(
     model: string;
   },
 ): Promise<ReturnResult> {
+  if (!payload.sn.trim()) {
+    throw new Error('A product SN is required before saving an EAN return.');
+  }
   const envelope = await requestPost(
     ctx,
     `${API_PATH}/SaveReturnDetail`,

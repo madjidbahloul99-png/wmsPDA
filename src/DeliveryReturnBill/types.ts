@@ -109,6 +109,11 @@ export interface EANCandidate {
   modelDesc: string;
   colorName: string;
   ean: string;
+  /**
+   * true when this model is the one already selected on page 1. The server
+   * then answers this row alone and the return is saved without a choice.
+   */
+  isSelected: boolean;
 }
 
 /** Delivery traceability of a scanned SN (ValidateProductSNResponse). */
@@ -195,8 +200,26 @@ export interface ReturnResult {
   billFinished?: boolean;
 }
 
+/**
+ * Status of the SN validation (ValidateProductSNResponse.result).
+ *
+ *   A - the SN model is the selected model, go to the confirmation page
+ *   B - the SN model is in the return bill, but it is not the selected one
+ *   C - the SN model is not in the return bill
+ *   D - the SN is not in the delivery traceability, the EAN has to be scanned
+ */
+export type SnResult = 'A' | 'B' | 'C' | 'D';
+
 /** Result of the SN traceability lookup. */
 export interface TraceabilityCheckResult {
+  /** status of the server, "" when an older API answered without one */
+  result: SnResult | '';
+  /** server flag: "1" accepted (A, D), "0" business error (B, C) */
+  isok: string;
+  /** model of the scanned SN, from the delivery traceability */
+  model: string;
+  /** message of the server, shown inline on the SN page */
+  message: string;
   /** true when the SN has delivery traceability (go straight to the confirm page) */
   found: boolean;
   /** the traceability records of the SN, one row each on the confirmation page */

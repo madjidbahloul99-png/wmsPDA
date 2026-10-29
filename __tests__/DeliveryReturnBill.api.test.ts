@@ -223,11 +223,13 @@ describe("DeliveryReturnBill api (real WMS API)", () => {
     ).rejects.toThrow("No model found for this bill in your warehouse");
   });
 
-  it("maps the traceability of a found SN", async () => {
+  it("maps the traceability of a found SN (result A)", async () => {
     mockFetch({
       code: 200,
       message: "success",
       data: {
+        isok: "1",
+        result: "A",
         sn: "KLE0535030012055",
         traceabilityExists: true,
         model: "43A4200G",
@@ -240,9 +242,13 @@ describe("DeliveryReturnBill api (real WMS API)", () => {
 
     const result = await checkSNTraceability(ctx, {
       sn: "KLE0535030012055",
-      mainBillCode: "2026062030",
-      model: "43A4200G",
+      modelCode: "43A4200G",
+      returnBillCode: "2026062030",
+      warehouseCode: "DA06-9000",
     });
+    expect(result.result).toBe("A");
+    expect(result.isok).toBe("1");
+    expect(result.model).toBe("43A4200G");
     expect(result.found).toBe(true);
     expect(result.traces.length).toBe(1);
     expect(result.traces[0].model).toBe("43A4200G");
@@ -255,43 +261,128 @@ describe("DeliveryReturnBill api (real WMS API)", () => {
     expect(url).toContain(`${API_PATH}/ValidateProductSN?`);
     expect(url).toContain("sn=KLE0535030012055");
     expect(url).toContain("modelCode=43A4200G");
+    expect(url).toContain("returnBillCode=2026062030");
+    expect(url).toContain("warehouseCode=DA06-9000");
   });
 
-  it("asks for the EAN when the SN has no delivery", async () => {
+  it("asks for the EAN when the SN has no delivery (result D)", async () => {
     mockFetch({
       code: 200,
       message: "success",
       data: {
+        isok: "1",
+        result: "D",
         sn: "KLE0535030012055",
         traceabilityExists: false,
-        message: "No delivery found for this SN, please scan the EAN",
+        message: "SN not found, please scan the EAN",
       },
     });
 
     const result = await checkSNTraceability(ctx, {
       sn: "KLE0535030012055",
-      mainBillCode: "2026062030",
-      model: "43A4200G",
+      modelCode: "43A4200G",
+      returnBillCode: "2026062030",
+      warehouseCode: "DA06-9000",
     });
+    expect(result.result).toBe("D");
     expect(result.found).toBe(false);
     expect(result.traces.length).toBe(0);
     expect(result.requiresEan).toBe(true);
-    expect(result.error).toBe("No delivery found for this SN, please scan the EAN");
+    expect(result.error).toBe("SN not found, please scan the EAN");
   });
 
-  it("surfaces the model mismatch of the server", async () => {
+  it("keeps the operator on the page for a model of the bill (result B, isok 0)", async () => {
+    mockFetch({
+      code: 200,
+      message: "success",
+      data: {
+        isok: "0",
+        result: "B",
+        sn: "KLE0535030012055",
+        traceabilityExists: true,
+        model: "43A4200H",
+        message:
+          "This SN is model 43A4200H, please select that model in the return bill.",
+      },
+    });
+
+    const result = await checkSNTraceability(ctx, {
+      sn: "KLE0535030012055",
+      modelCode: "43A4200G",
+      returnBillCode: "2026062030",
+      warehouseCode: "DA06-9000",
+    });
+    // Business status answered with HTTP 200: no exception, no confirm page
+    expect(result.result).toBe("B");
+    expect(result.isok).toBe("0");
+    expect(result.found).toBe(false);
+    expect(result.requiresEan).toBe(false);
+    expect(result.traces.length).toBe(0);
+    expect(result.message).toContain("43A4200H");
+  });
+
+  it("keeps the operator on the page for a model outside the bill (result C)", async () => {
+    mockFetch({
+      code: 200,
+      message: "success",
+      data: {
+        isok: "0",
+        result: "C",
+        sn: "KLE0535030012055",
+        traceabilityExists: true,
+        model: "43A4200Z",
+        message: "This SN is model 43A4200Z, this model is not in the return bill.",
+      },
+    });
+
+    const result = await checkSNTraceability(ctx, {
+      sn: "KLE0535030012055",
+      modelCode: "43A4200G",
+      returnBillCode: "2026062030",
+      warehouseCode: "DA06-9000",
+    });
+    expect(result.result).toBe("C");
+    expect(result.found).toBe(false);
+    expect(result.requiresEan).toBe(false);
+    expect(result.message).toContain("not in the return bill");
+  });
+
+  it("routes an older answer without result on traceabilityExists", async () => {
+    mockFetch({
+      code: 200,
+      message: "success",
+      data: {
+        traceabilityExists: true,
+        model: "43A4200G",
+      },
+    });
+
+    const result = await checkSNTraceability(ctx, {
+      sn: "KLE0535030012055",
+      modelCode: "43A4200G",
+      returnBillCode: "2026062030",
+      warehouseCode: "DA06-9000",
+    });
+    expect(result.result).toBe("");
+    expect(result.found).toBe(true);
+  });
+
+  it("surfaces the errors of the server", async () => {
     mockFetch({
       Code: 400,
-      Message: "SN model 43A4200G does not match the selected model 43A4200H",
+      Message: "sn, modelCode, returnBillCode and warehouseCode are required",
     });
 
     await expect(
       checkSNTraceability(ctx, {
         sn: "KLE0535030012055",
-        mainBillCode: "2026062030",
-        model: "43A4200H",
+        modelCode: "43A4200G",
+        returnBillCode: "2026062030",
+        warehouseCode: "DA06-9000",
       })
-    ).rejects.toThrow("SN model 43A4200G does not match the selected model 43A4200H");
+    ).rejects.toThrow(
+      "sn, modelCode, returnBillCode and warehouseCode are required"
+    );
   });
 
   it("maps the models of the EAN lookup and shows identical rows once", async () => {
@@ -299,25 +390,34 @@ describe("DeliveryReturnBill api (real WMS API)", () => {
       code: 200,
       message: "success",
       data: [
-        { model: "43A4200G", modelDesc: "FHD TV 43", colorName: "", ean: "6130839053541" },
-        { model: "43A4200G", modelDesc: "FHD TV 43", colorName: "", ean: "6130839053541" },
-        { model: "43A4200H", modelDesc: "FHD TV 43", colorName: "BLACK", ean: "6130839053541" },
+        { model: "43A4200G", modelDesc: "FHD TV 43", colorName: "", ean: "6130839053541", isSelected: true },
+        { model: "43A4200G", modelDesc: "FHD TV 43", colorName: "", ean: "6130839053541", isSelected: true },
+        { model: "43A4200H", modelDesc: "FHD TV 43", colorName: "BLACK", ean: "6130839053541", isSelected: false },
       ],
     });
 
     const result = await lookupByEAN(ctx, {
       ean: "6130839053541",
-      mainBillCode: "2026062030",
+      modelCode: "43A4200G",
     });
     // the duplicated row of the answer is shown once, the color differs
     expect(result.candidates.length).toBe(2);
     expect(result.candidates[0].model).toBe("43A4200G");
     expect(result.candidates[0].colorName).toBe("");
+    expect(result.candidates[0].isSelected).toBe(true);
     expect(result.candidates[1].model).toBe("43A4200H");
     expect(result.candidates[1].colorName).toBe("BLACK");
     expect(result.candidates[1].ean).toBe("6130839053541");
+    expect(result.candidates[1].isSelected).toBe(false);
+
+    const url = decodeURIComponent((globalThis as any).fetch.mock.calls[0][0]);
+    expect(url).toContain(`${API_PATH}/CheckEAN?`);
+    expect(url).toContain("ean=6130839053541");
+    expect(url).toContain("modelCode=43A4200G");
 
     expect(mapEANCandidate({ MODEL: "X", MODEL_DESC: "Y", CODE_EAN: "1" }).model).toBe("X");
+    expect(mapEANCandidate({ MODEL: "X", isSelected: true }).isSelected).toBe(true);
+    expect(mapEANCandidate({ MODEL: "X" }).isSelected).toBe(false);
   });
 
   it("saves the return of a traced SN (JSON body, TRACE)", async () => {

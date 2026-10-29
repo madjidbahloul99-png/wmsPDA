@@ -13,7 +13,6 @@ import {
   DeviceEventEmitter,
 } from 'react-native';
 import { useGlobalStr } from '../../GlobalStrContext';
-import * as pubfunction from '../pubfunction';
 import { ApiContext, confirmReturn } from './api';
 import { ReturnContext, TraceabilityRecord } from './types';
 import { EVENT_RETURNED } from './events';
@@ -119,7 +118,6 @@ export default function DeliveryReturnBillConfirm({ navigation, route }: any) {
       navigation.goBack();
     } catch (err: any) {
       const message = err.message || 'Network error';
-      pubfunction.ShowError(message);
       setLabelError(message);
     } finally {
       busyRef.current = false;

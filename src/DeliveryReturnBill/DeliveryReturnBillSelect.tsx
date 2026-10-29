@@ -21,7 +21,6 @@ import {
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useGlobalStr } from '../../GlobalStrContext';
-import * as pubfunction from '../pubfunction';
 import { ApiContext, getBillModels } from './api';
 import { BillModelGroup, BillModelRow, ReturnContext } from './types';
 
@@ -40,7 +39,8 @@ type TableItem = {
  * shows one line per customer of the model.
  *
  * The table is reloaded every time the screen comes back so the processed
- * quantity is up to date.
+ * quantity is up to date. Completed models remain selectable for review; the
+ * SN page disables scanning when the model is complete.
  */
 export default function DeliveryReturnBillSelect({ navigation }: any) {
   const {
@@ -88,6 +88,8 @@ export default function DeliveryReturnBillSelect({ navigation }: any) {
 
   const txtBillRef = useRef<TextInput>(null);
   const scanTimer = useRef<any>(null);
+  const skipFocusReloadRef = useRef('');
+  const currentBillCodeRef = useRef('');
   // True while a request is in flight, a ref is always up to date (no stale closure)
   const busyRef = useRef(false);
 
@@ -111,11 +113,10 @@ export default function DeliveryReturnBillSelect({ navigation }: any) {
         const rows = await getBillModels(apiCtx, {
           sapMainBillCode: cleanCode,
         });
-        console.info('[DeliveryReturnBill] getBillModels result:', rows);
-
         if (rows.length === 0) {
           setGroups([]);
           setSelectedKey(null);
+          currentBillCodeRef.current = '';
           setFBillCode('');
           setLabelError(`No return bill found for ${cleanCode}`);
           return;
@@ -126,10 +127,11 @@ export default function DeliveryReturnBillSelect({ navigation }: any) {
           group.rows.some(row => !row.customerCode),
         );
         if (hasEmptyCustomer) {
-          pubfunction.ShowError('The destination customer cannot be empty!');
           setGroups([]);
           setSelectedKey(null);
+          currentBillCodeRef.current = '';
           setFBillCode('');
+          setLabelError('The destination customer cannot be empty!');
           return;
         }
 
@@ -139,10 +141,13 @@ export default function DeliveryReturnBillSelect({ navigation }: any) {
         // shows exactly the message of the server.
         setGroups(rows);
         setSelectedKey(null);
+        if (currentBillCodeRef.current !== cleanCode) {
+          skipFocusReloadRef.current = cleanCode;
+        }
+        currentBillCodeRef.current = cleanCode;
         setFBillCode(cleanCode);
       } catch (err: any) {
         setLabelError(err.message || 'Network error');
-        pubfunction.ShowError(err.message || 'Network error');
       } finally {
         busyRef.current = false;
         setLoading(false);
@@ -170,7 +175,11 @@ export default function DeliveryReturnBillSelect({ navigation }: any) {
         txtBillRef.current?.focus();
       }, 150);
       if (f_billCode) {
-        loadBillModels(f_billCode);
+        if (skipFocusReloadRef.current === f_billCode) {
+          skipFocusReloadRef.current = '';
+        } else {
+          loadBillModels(f_billCode);
+        }
       }
     }, [f_billCode, loadBillModels]),
   );
@@ -230,7 +239,7 @@ export default function DeliveryReturnBillSelect({ navigation }: any) {
       group.rows.forEach(row => {
         items.push({
           // The key is a business key, it stays the same when the list is reloaded
-          key: `${row.customerCode}|${row.model}|${row.systemDeliveryCode}`,
+          key: `${row.customerCode}|${row.model}|${row.systemDeliveryCode}|${row.color}|${row.ean}|${row.lineId}`,
           group,
           row,
         });
@@ -249,33 +258,18 @@ export default function DeliveryReturnBillSelect({ navigation }: any) {
     ? selectedItem.row
     : null;
 
-  /** Summary of the scanned bill. */
-  const summary = useMemo(() => {
-    let customers = 0;
-    let units = 0;
-    const seen: { [key: string]: boolean } = {};
-    groups.forEach(group => {
-      units += group.planQty;
-      group.rows.forEach(row => {
-        const key = `${row.customerCode}|${row.customerName}`;
-        if (!seen[key]) {
-          seen[key] = true;
-          customers += 1;
-        }
-      });
-    });
-    return { customers, models: groups.length, units };
-  }, [groups]);
-
   /**
    * Choice - goes to the SN scan page with the selected customer and model.
+   *
+   * Completed models remain selectable so the operator can review their
+   * session SN list; the SN page blocks further scans.
    */
   const handleChoiceClick = () => {
     // A double tap would push the SN page twice
     if (busyRef.current) return;
 
     if (!selectedRow || !selectedItem) {
-      pubfunction.ShowError('Please select a row first!');
+      setLabelError('Please select a row first!');
       return;
     }
 
@@ -317,11 +311,16 @@ export default function DeliveryReturnBillSelect({ navigation }: any) {
   const renderItem = React.useCallback(
     ({ item, index }: { item: TableItem; index: number }) => {
       const row = item.row;
+      // Completed models remain selectable for review.
+      const isCompleted = row.diffQty <= 0;
       const isSelected = selectedKey === item.key;
 
-      // Blue when something was already returned, red when nothing was returned yet
+      // Blue when something was already returned, red when nothing was returned
+      // yet, grey when the model is completed.
       let textColor = '#1E293B';
-      if (row.diffQty > 0) {
+      if (isCompleted) {
+        textColor = '#94A3B8';
+      } else if (row.diffQty > 0) {
         textColor = row.doneQty > 0 ? '#0052cc' : '#EF4444';
       }
 
@@ -331,8 +330,10 @@ export default function DeliveryReturnBillSelect({ navigation }: any) {
             styles.tableRow,
             { backgroundColor: index % 2 === 0 ? '#FFFFFF' : '#F8FAFC' },
             isSelected && styles.selectedRow,
+            isCompleted && styles.completedRow,
           ]}
           onPress={() => setSelectedKey(item.key)}
+          activeOpacity={0.2}
         >
           <Text style={[styles.cell, { color: textColor, width: 120 }]}>
             {row.systemDeliveryCode}
@@ -539,13 +540,6 @@ const styles = StyleSheet.create({
     marginLeft: 4,
     fontWeight: '800',
   },
-  summaryText: {
-    color: '#0052cc',
-    fontSize: 12,
-    fontWeight: '800',
-    marginTop: 4,
-    marginLeft: 4,
-  },
   tableCard: {
     flex: 1,
     backgroundColor: '#FFF',
@@ -599,6 +593,7 @@ const styles = StyleSheet.create({
   choiceButtonDisabled: { opacity: 0.5 },
   choiceButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '900' },
   selectedRow: { backgroundColor: '#BAE6FD' },
+  completedRow: { opacity: 0.55 },
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(255, 255, 255, 0.5)',
