@@ -198,6 +198,8 @@ export interface ReturnResult {
   productStatus?: string;
   /** true when the whole return bill is finished */
   billFinished?: boolean;
+  /** true when the server found the SN already saved (retry of a lost answer) */
+  alreadySaved?: boolean;
 }
 
 /**
@@ -207,14 +209,16 @@ export interface ReturnResult {
  *   B - the SN model is in the return bill, but it is not the selected one
  *   C - the SN model is not in the return bill
  *   D - the SN is not in the delivery traceability, the EAN has to be scanned
+ *   E - the SN is already saved in this return bill (duplicate scan)
+ *   S - the SN is already in stock, it cannot be returned again
  */
-export type SnResult = 'A' | 'B' | 'C' | 'D';
+export type SnResult = 'A' | 'B' | 'C' | 'D' | 'E' | 'S';
 
 /** Result of the SN traceability lookup. */
 export interface TraceabilityCheckResult {
   /** status of the server, "" when an older API answered without one */
   result: SnResult | '';
-  /** server flag: "1" accepted (A, D), "0" business error (B, C) */
+  /** server flag: "1" accepted (A, D), "0" business error (B, C, E, S) */
   isok: string;
   /** model of the scanned SN, from the delivery traceability */
   model: string;

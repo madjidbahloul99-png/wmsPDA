@@ -93,8 +93,11 @@ export default function DeliveryReturnBillSelect({ navigation }: any) {
   // True while a request is in flight, a ref is always up to date (no stale closure)
   const busyRef = useRef(false);
 
+  // The field is disabled while a request runs (editable={!loading}) and the
+  // OS then drops its focus. Put the cursor back once the request is over so
+  // the operator can scan again without tapping the screen.
   const ensureFocus = () => {
-    txtBillRef.current?.focus();
+    setTimeout(() => txtBillRef.current?.focus(), 50);
   };
 
   /**
@@ -151,9 +154,6 @@ export default function DeliveryReturnBillSelect({ navigation }: any) {
       } finally {
         busyRef.current = false;
         setLoading(false);
-        setTimeout(() => {
-          txtBillRef.current?.focus();
-        }, 120);
       }
     },
     [apiCtx],
@@ -171,7 +171,7 @@ export default function DeliveryReturnBillSelect({ navigation }: any) {
   // Reload the bill when the screen comes back (products could have been returned)
   useFocusEffect(
     React.useCallback(() => {
-      setTimeout(() => {
+      const timer = setTimeout(() => {
         txtBillRef.current?.focus();
       }, 150);
       if (f_billCode) {
@@ -181,8 +181,19 @@ export default function DeliveryReturnBillSelect({ navigation }: any) {
           loadBillModels(f_billCode);
         }
       }
+      return () => clearTimeout(timer);
     }, [f_billCode, loadBillModels]),
   );
+
+  // Every request ends with setLoading(false): give the cursor back to the
+  // input after the render that re-enables it, even when the request failed.
+  useEffect(() => {
+    if (loading) {
+      return;
+    }
+    const timer = setTimeout(() => txtBillRef.current?.focus(), 80);
+    return () => clearTimeout(timer);
+  }, [loading]);
 
   const processBillInput = (scannedText: string) => {
     // A scan during a request is ignored, it would load the bill twice

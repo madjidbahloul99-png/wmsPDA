@@ -347,6 +347,68 @@ describe("DeliveryReturnBill api (real WMS API)", () => {
     expect(result.message).toContain("not in the return bill");
   });
 
+  it("keeps the operator on the page for an SN already saved in the bill (result E)", async () => {
+    mockFetch({
+      code: 200,
+      message: "success",
+      data: {
+        isok: "0",
+        result: "E",
+        sn: "KLE0535030012055",
+        traceabilityExists: false,
+        model: "43A4200G",
+        message: "SN already scanned in this return bill (model 43A4200G)",
+      },
+    });
+
+    const result = await checkSNTraceability(ctx, {
+      sn: "KLE0535030012055",
+      modelCode: "43A4200G",
+      returnBillCode: "2026062030",
+      warehouseCode: "DA06-9000",
+    });
+    // Duplicate of this bill: never the confirm page, never the EAN page
+    expect(result.result).toBe("E");
+    expect(result.isok).toBe("0");
+    expect(result.found).toBe(false);
+    expect(result.requiresEan).toBe(false);
+    expect(result.alreadyScanned).toBe(true);
+    expect(result.traces.length).toBe(0);
+    expect(result.message).toBe(
+      "SN already scanned in this return bill (model 43A4200G)"
+    );
+    expect(result.message).not.toContain("Unexpected");
+  });
+
+  it("keeps the operator on the page for an SN already in stock (result S)", async () => {
+    mockFetch({
+      code: 200,
+      message: "success",
+      data: {
+        isok: "0",
+        result: "S",
+        sn: "KLE0535030012055",
+        traceabilityExists: false,
+        message: "SN already in stock (warehouse DA06-9000)",
+      },
+    });
+
+    const result = await checkSNTraceability(ctx, {
+      sn: "KLE0535030012055",
+      modelCode: "43A4200G",
+      returnBillCode: "2026062030",
+      warehouseCode: "DA06-9000",
+    });
+    expect(result.result).toBe("S");
+    expect(result.isok).toBe("0");
+    expect(result.found).toBe(false);
+    expect(result.requiresEan).toBe(false);
+    expect(result.alreadyScanned).toBe(false);
+    expect(result.traces.length).toBe(0);
+    expect(result.message).toBe("SN already in stock (warehouse DA06-9000)");
+    expect(result.message).not.toContain("Unexpected");
+  });
+
   it("routes an older answer without result on traceabilityExists", async () => {
     mockFetch({
       code: 200,
@@ -550,5 +612,73 @@ describe("DeliveryReturnBill api (real WMS API)", () => {
     await expect(
       confirmReturn(ctx, { context: context, sn: "1326168351000021" })
     ).rejects.toThrow("This model is already completed");
+  });
+
+  it("does not trust an HTTP 200 without a JSON answer", async () => {
+    // A proxy page or an empty body: the status alone is not an answer
+    (globalThis as any).fetch = jest.fn(() =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.reject(new Error("Unexpected token '<'")),
+      })
+    );
+
+    await expect(
+      getBillModels(ctx, { sapMainBillCode: "2026062030" })
+    ).rejects.toThrow("HTTP Error: 200 (invalid answer)");
+  });
+
+  it("surfaces a timeout of the server", async () => {
+    const abortError = Object.assign(new Error("Aborted"), {
+      name: "AbortError",
+    });
+    (globalThis as any).fetch = jest.fn(() => Promise.reject(abortError));
+
+    await expect(
+      getBillModels(ctx, { sapMainBillCode: "2026062030" })
+    ).rejects.toThrow("The server did not answer in time, please try again.");
+  });
+
+  it("requires a SN before saving a traced return", async () => {
+    await expect(
+      confirmReturn(ctx, { context: context, sn: "   " })
+    ).rejects.toThrow("A product SN is required before saving the return.");
+  });
+
+  it("maps an idempotent save (alreadySaved) and a missing qtyOk", async () => {
+    mockFetch({
+      code: 200,
+      message: "success",
+      data: {
+        returnBillCode: "2026062030",
+        sn: "KLE0535030012055",
+        model: "43A4200G",
+        qty: 6,
+        qtyOk: 2,
+        billFinished: false,
+        alreadySaved: true,
+      },
+    });
+
+    const saved = await confirmReturn(ctx, {
+      context: context,
+      sn: "KLE0535030012055",
+    });
+    expect(saved.alreadySaved).toBe(true);
+
+    // No qtyOk in the answer: actualQty stays undefined, the screen keeps its count
+    mockFetch({ code: 200, message: "success", data: { qty: 6 } });
+    const noQty = await confirmReturn(ctx, {
+      context: context,
+      sn: "KLE0535030012056",
+    });
+    expect(noQty.actualQty).toBeUndefined();
+  });
+
+  it("keeps a real qty of 0 instead of defaulting to one unit", () => {
+    const line = mapRawLine({ id: "1", model: "M", qty: 0, qtyOk: 0 });
+    expect(line.planQty).toBe(0);
+    expect(line.doneQty).toBe(0);
   });
 });

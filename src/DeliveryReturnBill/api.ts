@@ -130,44 +130,88 @@ const buildQuery = (params: Record<string, string>): string =>
     )
     .join('&');
 
-/** GET against api/DeliveryReturn, throws an Error with the server message. */
-const requestGet = async (
+/** Timeout of one call: the PDA network can stall without ever failing. */
+const REQUEST_TIMEOUT_MS = 20000;
+
+type HttpMethod = 'GET' | 'POST';
+
+/**
+ * One signed call against api/DeliveryReturn.
+ *
+ * GET puts the parameters in the query string, POST sends them as a JSON body.
+ * A stalled request is aborted after REQUEST_TIMEOUT_MS: the screens keep a
+ * busy flag until the promise settles, a hanging fetch would freeze the scan.
+ */
+const request = async (
   ctx: ApiContext,
+  method: HttpMethod,
   path: string,
-  params: Record<string, string>,
+  payload: Record<string, any>,
 ): Promise<ApiEnvelope> => {
   if (!DELIVERY_RETURN_BILL_API_ENABLED) {
-    console.warn('[DeliveryReturnBill] GET blocked: API feature is disabled.');
+    console.warn(
+      `[DeliveryReturnBill] ${method} blocked: API feature is disabled.`,
+    );
     throw new Error('Delivery Return Bill API is disabled.');
   }
   if (!DELIVERY_RETURN_BILL_API_KEY) {
     console.warn(
-      '[DeliveryReturnBill] GET blocked: static API key is not configured.',
+      `[DeliveryReturnBill] ${method} blocked: static API key is not configured.`,
     );
     throw new Error(
       'Delivery Return Bill API key is not configured in this build.',
     );
   }
+
   const headers: Record<string, string> = {
     'X-Api-Key': DELIVERY_RETURN_BILL_API_KEY,
   };
-  const url = `${ctx.gs_deliveryReturnAPI}${path}?${buildQuery(params)}`;
+  let url = `${ctx.gs_deliveryReturnAPI}${path}`;
+  const init: RequestInit = { method, headers };
+  if (method === 'GET') {
+    url += `?${buildQuery(payload as Record<string, string>)}`;
+  } else {
+    headers['Content-Type'] = 'application/json';
+    init.body = JSON.stringify(payload);
+  }
+
+  // AbortController exists on React Native, the guard keeps the tests safe
+  const controller =
+    typeof AbortController !== 'undefined' ? new AbortController() : null;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  if (controller) {
+    init.signal = controller.signal;
+    timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  }
+
   let response: Response;
   try {
-    response = await fetch(url, { method: 'GET', headers });
-  } catch (error) {
-    console.error('[DeliveryReturnBill] GET network error');
+    response = await fetch(url, init);
+  } catch (error: any) {
+    if (error && error.name === 'AbortError') {
+      console.error(`[DeliveryReturnBill] ${method} timeout`);
+      throw new Error('The server did not answer in time, please try again.');
+    }
+    console.error(`[DeliveryReturnBill] ${method} network error`);
     throw error;
+  } finally {
+    if (timer !== null) {
+      clearTimeout(timer);
+    }
   }
+
+  // An empty body or an HTML page must not be read as a success
+  let parsed = true;
   let resData: any = null;
   try {
     resData = await response.json();
-  } catch (error) {
+  } catch {
     // no body or no json, the status tells the outcome
+    parsed = false;
   }
   const envelope = readEnvelope(resData, response.status);
   console.info('[DeliveryReturnBill] response:', {
-    method: 'GET',
+    method,
     status: response.status,
     code: envelope.code,
     message: envelope.message,
@@ -178,70 +222,29 @@ const requestGet = async (
     }
     if (response.status === 401) {
       throw new Error('Session expired, please log in again');
+    }
+    if (!parsed) {
+      // An empty body or an HTML page is not a valid answer of the API
+      throw new Error(`HTTP Error: ${response.status} (invalid answer)`);
     }
     throw new Error(`HTTP Error: ${response.status}`);
   }
   return envelope;
 };
 
+/** GET against api/DeliveryReturn, throws an Error with the server message. */
+const requestGet = (
+  ctx: ApiContext,
+  path: string,
+  params: Record<string, string>,
+): Promise<ApiEnvelope> => request(ctx, 'GET', path, params);
+
 /** POST (JSON body) against api/DeliveryReturn, throws on a server message. */
-const requestPost = async (
+const requestPost = (
   ctx: ApiContext,
   path: string,
   body: Record<string, any>,
-): Promise<ApiEnvelope> => {
-  if (!DELIVERY_RETURN_BILL_API_ENABLED) {
-    console.warn('[DeliveryReturnBill] POST blocked: API feature is disabled.');
-    throw new Error('Delivery Return Bill API is disabled.');
-  }
-  if (!DELIVERY_RETURN_BILL_API_KEY) {
-    console.warn(
-      '[DeliveryReturnBill] POST blocked: static API key is not configured.',
-    );
-    throw new Error(
-      'Delivery Return Bill API key is not configured in this build.',
-    );
-  }
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    'X-Api-Key': DELIVERY_RETURN_BILL_API_KEY,
-  };
-  const url = `${ctx.gs_deliveryReturnAPI}${path}`;
-  let response: Response;
-  try {
-    response = await fetch(url, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(body),
-    });
-  } catch (error) {
-    console.error('[DeliveryReturnBill] POST network error');
-    throw error;
-  }
-  let resData: any = null;
-  try {
-    resData = await response.json();
-  } catch {
-    // no body or no json, the status tells the outcome
-  }
-  const envelope = readEnvelope(resData, response.status);
-  console.info('[DeliveryReturnBill] response:', {
-    method: 'POST',
-    status: response.status,
-    code: envelope.code,
-    message: envelope.message,
-  });
-  if (!envelope.ok) {
-    if (envelope.message) {
-      throw new Error(envelope.message);
-    }
-    if (response.status === 401) {
-      throw new Error('Session expired, please log in again');
-    }
-    throw new Error(`HTTP Error: ${response.status}`);
-  }
-  return envelope;
-};
+): Promise<ApiEnvelope> => request(ctx, 'POST', path, body);
 
 /* ==========================================================================
    Mapping of the payload
@@ -290,7 +293,8 @@ export const mapRawLine = (raw: any): ReturnBillLine => {
     'movementStatus',
   ]);
   const planQty = pickNumber(raw, ['qty', 'Qty', 'BILL_COUNT', 'billCount']);
-  const billCount = planQty !== null && planQty > 0 ? planQty : 1;
+  // qty = 0 is a real value, only a missing quantity defaults to one unit
+  const billCount = planQty !== null ? planQty : 1;
   const okQty = pickNumber(raw, ['qtyOk', 'QtyOk', 'OK_QTY']);
   const doneQty =
     okQty !== null
@@ -485,9 +489,11 @@ export async function getBillModels(
  *   B - the SN model is in the bill, not selected   -> stay, inline message
  *   C - the SN model is not in this return bill     -> stay, inline message
  *   D - the SN is not in the delivery traceability  -> EAN page
+ *   E - the SN was already returned in this bill    -> stay, inline message
+ *   S - the SN is already in stock                  -> stay, inline message
  *
- * B and C are business statuses (isok = "0") answered with HTTP 200, so the
- * screen must route on `result`, never on the envelope or on an exception.
+ * B, C, E and S are business statuses (isok = "0") answered with HTTP 200, so
+ * the screen must route on `result`, never on the envelope or on an exception.
  */
 export async function checkSNTraceability(
   ctx: ApiContext,
@@ -511,7 +517,9 @@ export async function checkSNTraceability(
     rawResult === 'A' ||
     rawResult === 'B' ||
     rawResult === 'C' ||
-    rawResult === 'D'
+    rawResult === 'D' ||
+    rawResult === 'E' ||
+    rawResult === 'S'
       ? (rawResult as SnResult)
       : '';
   const hasResult = rawResult.length > 0;
@@ -567,6 +575,7 @@ export async function checkSNTraceability(
     found,
     traces: found ? [trace] : [],
     requiresEan,
+    alreadyScanned: result === 'E',
     error: found
       ? undefined
       : responseMessage || fallbackMessage,
@@ -654,9 +663,10 @@ const buildSaveBody = (
 const mapSaveResponse = (res: any): ReturnResult => ({
   success: true,
   planQty: pickNumber(res, ['qty']) ?? 0,
-  actualQty: pickNumber(res, ['qtyOk']) ?? 0,
+  actualQty: pickNumber(res, ['qtyOk']) ?? undefined,
   productStatus: res.billFinished === true ? 'BILL FINISHED' : 'RETURNED',
   billFinished: res.billFinished === true,
+  alreadySaved: res.alreadySaved === true,
 });
 
 /**
@@ -674,6 +684,9 @@ export async function confirmReturn(
     trace?: TraceabilityRecord | null;
   },
 ): Promise<ReturnResult> {
+  if (!payload.sn.trim()) {
+    throw new Error('A product SN is required before saving the return.');
+  }
   const envelope = await requestPost(
     ctx,
     `${API_PATH}/SaveReturnDetail`,

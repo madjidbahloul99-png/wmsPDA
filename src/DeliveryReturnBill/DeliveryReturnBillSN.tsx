@@ -20,6 +20,7 @@ import {
   Dimensions,
   DeviceEventEmitter,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { useGlobalStr } from '../../GlobalStrContext';
 import { ApiContext, checkSNTraceability } from './api';
 import { ReturnContext, TraceabilityRecord } from './types';
@@ -34,6 +35,8 @@ import { EVENT_RETURNED } from './events';
  *   B - the SN model is in the bill, not selected   -> inline message, stay
  *   C - the SN model is not in this return bill     -> inline message, stay
  *   D - the SN is not in the delivery traceability  -> the EAN page
+ *   E - the SN was already returned in this bill    -> inline message, stay
+ *   S - the SN is already in stock                  -> inline message, stay
  *
  * The list of the scanned items is kept in the screen on purpose: the real API
  * has no endpoint that returns it. Every successful return appends the scanned
@@ -108,7 +111,7 @@ export default function DeliveryReturnBillSN({ navigation, route }: any) {
     setDoneQty(nextDoneQty);
   }, [params.f_planQty, params.f_doneQty]);
   const ensureFocus = () => {
-    txtSNRef.current?.focus();
+    setTimeout(() => txtSNRef.current?.focus(), 50);
   };
 
   /**
@@ -127,10 +130,13 @@ export default function DeliveryReturnBillSN({ navigation, route }: any) {
         outBillCode?: string;
         sapMainBillCode?: string;
         billFinished?: boolean;
+        alreadySaved?: boolean;
       }) => {
         if (data) {
           if (data.billFinished) {
             setLabelStatus('This return bill is finished.');
+          } else if (data.alreadySaved) {
+            setLabelStatus('This product was already saved.');
           } else if (data.productStatus) {
             setLabelStatus(`Status: ${data.productStatus}`);
           }
@@ -147,7 +153,12 @@ export default function DeliveryReturnBillSN({ navigation, route }: any) {
             const list = [...productsRef.current, product];
             productsRef.current = list;
             setProducts(list);
-            doneQtyRef.current += 1;
+            // The answer of the server is authoritative, another PDA may have
+            // saved units of this model since the bill was scanned
+            doneQtyRef.current =
+              typeof data.actualQty === 'number'
+                ? data.actualQty
+                : doneQtyRef.current + 1;
             setDoneQty(doneQtyRef.current);
           }
         }
@@ -159,10 +170,6 @@ export default function DeliveryReturnBillSN({ navigation, route }: any) {
       },
     );
 
-    setTimeout(() => {
-      txtSNRef.current?.focus();
-    }, 300);
-
     return () => {
       returnedSub.remove();
       if (scanTimer.current) {
@@ -170,6 +177,25 @@ export default function DeliveryReturnBillSN({ navigation, route }: any) {
       }
     };
   }, [params.f_billCode, params.f_model]);
+
+  // The screen comes back from the confirm / EAN page without a save: the
+  // input must be ready for the next scan.
+  useFocusEffect(
+    useCallback(() => {
+      const timer = setTimeout(() => txtSNRef.current?.focus(), 150);
+      return () => clearTimeout(timer);
+    }, []),
+  );
+
+  // Every request ends with setLoading(false): give the cursor back to the
+  // input after the render that re-enables it, even when the request failed.
+  useEffect(() => {
+    if (loading) {
+      return;
+    }
+    const timer = setTimeout(() => txtSNRef.current?.focus(), 80);
+    return () => clearTimeout(timer);
+  }, [loading]);
 
   const buildContext = useCallback(
     (): ReturnContext => ({
@@ -267,9 +293,6 @@ export default function DeliveryReturnBillSN({ navigation, route }: any) {
     } finally {
       busyRef.current = false;
       setLoading(false);
-      setTimeout(() => {
-        txtSNRef.current?.focus();
-      }, 150);
     }
   };
 

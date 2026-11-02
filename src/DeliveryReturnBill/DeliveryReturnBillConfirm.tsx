@@ -106,6 +106,7 @@ export default function DeliveryReturnBillConfirm({ navigation, route }: any) {
         planQty: result.planQty,
         productStatus: result.productStatus,
         billFinished: result.billFinished,
+        alreadySaved: result.alreadySaved,
         sn: sn,
         model: params.f_model || (traces[0] ? traces[0].model : ''),
         outBillCode: traces[0] ? traces[0].outBillCode : '',

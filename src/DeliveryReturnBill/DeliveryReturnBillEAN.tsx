@@ -1,4 +1,10 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, {
+  useState,
+  useRef,
+  useEffect,
+  useCallback,
+  useMemo,
+} from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   View,
@@ -13,6 +19,7 @@ import {
   Dimensions,
   DeviceEventEmitter,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { useGlobalStr } from '../../GlobalStrContext';
 import { ApiContext, lookupByEAN, submitReturnWithEAN } from './api';
 import { EANCandidate, ReturnContext } from './types';
@@ -82,7 +89,7 @@ export default function DeliveryReturnBillEAN({ navigation, route }: any) {
   const busyRef = useRef(false);
 
   const ensureFocus = () => {
-    txtEANRef.current?.focus();
+    setTimeout(() => txtEANRef.current?.focus(), 50);
   };
 
   useEffect(() => {
@@ -92,16 +99,30 @@ export default function DeliveryReturnBillEAN({ navigation, route }: any) {
       return;
     }
 
-    setTimeout(() => {
-      txtEANRef.current?.focus();
-    }, 300);
-
     return () => {
       if (scanTimer.current) {
         clearTimeout(scanTimer.current);
       }
     };
   }, [params.f_requiresEan, navigation]);
+
+  // The input must be ready every time the screen regains the focus.
+  useFocusEffect(
+    useCallback(() => {
+      const timer = setTimeout(() => txtEANRef.current?.focus(), 150);
+      return () => clearTimeout(timer);
+    }, []),
+  );
+
+  // Every request ends with setLoading(false): give the cursor back to the
+  // input after the render that re-enables it, even when the request failed.
+  useEffect(() => {
+    if (loading) {
+      return;
+    }
+    const timer = setTimeout(() => txtEANRef.current?.focus(), 80);
+    return () => clearTimeout(timer);
+  }, [loading]);
 
   /**
    * The return is saved for the model the operator selected.
@@ -132,6 +153,7 @@ export default function DeliveryReturnBillEAN({ navigation, route }: any) {
         planQty: result.planQty,
         productStatus: result.productStatus,
         billFinished: result.billFinished,
+        alreadySaved: result.alreadySaved,
         sn: params.f_sn,
         model: model.model,
         sapMainBillCode: params.f_billCode,
@@ -191,9 +213,6 @@ export default function DeliveryReturnBillEAN({ navigation, route }: any) {
     } finally {
       busyRef.current = false;
       setLoading(false);
-      setTimeout(() => {
-        txtEANRef.current?.focus();
-      }, 150);
     }
   };
 
