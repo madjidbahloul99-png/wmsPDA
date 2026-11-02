@@ -94,6 +94,12 @@ export default function DeliveryReturnBillSN({ navigation, route }: any) {
 
   const txtSNRef = useRef<TextInput>(null);
   const scanTimer = useRef<any>(null);
+  // Bumped to remount the input: a fresh native view focuses itself through
+  // autoFocus, the only reliable way on Android after a screen pop.
+  const [inputKey, setInputKey] = useState(0);
+  const lastRefocusRef = useRef(0);
+  const firstRenderRef = useRef(true);
+  const blurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // True while a request is in flight, a ref is always up to date (no stale closure)
   const busyRef = useRef(false);
   const doneQtyRef = useRef(params.f_doneQty || 0);
@@ -110,8 +116,39 @@ export default function DeliveryReturnBillSN({ navigation, route }: any) {
     setPlanQty(nextPlanQty);
     setDoneQty(nextDoneQty);
   }, [params.f_planQty, params.f_doneQty]);
-  const ensureFocus = () => {
-    setTimeout(() => txtSNRef.current?.focus(), 50);
+  /**
+   * Remounts the SN input so its native autoFocus runs again. focus() is not
+   * reliable here: React Native keeps a JS "currently focused input" pointer
+   * that stays set when the native focus is lost, which makes every later
+   * focus() a no-op. A new native view focuses itself on attach instead.
+   */
+  const refocusSN = useCallback(() => {
+    // Never steal the focus from a screen that is already on top
+    if (!navigation.isFocused()) return;
+    // A completed model disables the input, it cannot take the focus
+    if (!(planQtyRef.current > doneQtyRef.current)) return;
+    // Ignore repeated triggers (blur + transition) of the same return
+    if (Date.now() - lastRefocusRef.current < 300) return;
+    lastRefocusRef.current = Date.now();
+    setInputKey(key => key + 1);
+  }, [navigation]);
+
+  const handleSNFocus = () => {
+    if (blurTimerRef.current) {
+      clearTimeout(blurTimerRef.current);
+      blurTimerRef.current = null;
+    }
+    console.info('[DeliveryReturnBill] SN input focused');
+  };
+
+  const handleSNBlur = () => {
+    console.info('[DeliveryReturnBill] SN input blurred');
+    // A blur caused by the confirm page navigating in must not be undone
+    if (blurTimerRef.current) clearTimeout(blurTimerRef.current);
+    blurTimerRef.current = setTimeout(() => {
+      blurTimerRef.current = null;
+      refocusSN();
+    }, 100);
   };
 
   /**
@@ -164,9 +201,6 @@ export default function DeliveryReturnBillSN({ navigation, route }: any) {
         }
         setTxtSN('');
         setLabelError('');
-        setTimeout(() => {
-          txtSNRef.current?.focus();
-        }, 150);
       },
     );
 
@@ -178,24 +212,51 @@ export default function DeliveryReturnBillSN({ navigation, route }: any) {
     };
   }, [params.f_billCode, params.f_model]);
 
-  // The screen comes back from the confirm / EAN page without a save: the
-  // input must be ready for the next scan.
+  // The screen comes back from the confirm / EAN page (saved or not): remount
+  // the input once the pop animation has finished. The SN route receives
+  // transitionEnd when it is revealed again (closing: false), the timer is the
+  // fallback for a screen change without a native transition.
   useFocusEffect(
     useCallback(() => {
-      const timer = setTimeout(() => txtSNRef.current?.focus(), 150);
-      return () => clearTimeout(timer);
-    }, []),
+      let done = false;
+      const bump = () => {
+        if (done) return;
+        done = true;
+        refocusSN();
+      };
+
+      const sub = navigation.addListener('transitionEnd', (event: any) => {
+        if (!event.closing) {
+          bump();
+        }
+      });
+      const timer = setTimeout(bump, 500);
+
+      return () => {
+        sub();
+        clearTimeout(timer);
+        if (blurTimerRef.current) {
+          clearTimeout(blurTimerRef.current);
+          blurTimerRef.current = null;
+        }
+      };
+    }, [navigation, refocusSN]),
   );
 
-  // Every request ends with setLoading(false): give the cursor back to the
-  // input after the render that re-enables it, even when the request failed.
+  // Every request ends with setLoading(false): the input was disabled while
+  // loading, so remount it to get the focus back, even when the request failed.
+  // The delay lets a navigation to the confirm page apply first.
   useEffect(() => {
+    if (firstRenderRef.current) {
+      firstRenderRef.current = false;
+      return;
+    }
     if (loading) {
       return;
     }
-    const timer = setTimeout(() => txtSNRef.current?.focus(), 80);
+    const timer = setTimeout(refocusSN, 80);
     return () => clearTimeout(timer);
-  }, [loading]);
+  }, [loading, refocusSN]);
 
   const buildContext = useCallback(
     (): ReturnContext => ({
@@ -238,7 +299,7 @@ export default function DeliveryReturnBillSN({ navigation, route }: any) {
       setLabelError(
         'Please scan the product SN, this is an EAN (starts with 613)!',
       );
-      ensureFocus();
+      refocusSN();
       return;
     }
 
@@ -411,6 +472,7 @@ export default function DeliveryReturnBillSN({ navigation, route }: any) {
         {/* SN input */}
         <View style={styles.inputGroup}>
           <TextInput
+            key={inputKey}
             ref={txtSNRef}
             style={styles.input}
             value={txtSN}
@@ -420,9 +482,11 @@ export default function DeliveryReturnBillSN({ navigation, route }: any) {
             placeholderTextColor="#64748B"
             autoCapitalize="characters"
             autoCorrect={false}
+            autoFocus
             showSoftInputOnFocus={showKeyboard}
             blurOnSubmit={false}
-            onBlur={ensureFocus}
+            onFocus={handleSNFocus}
+            onBlur={handleSNBlur}
             selectTextOnFocus={true}
           />
           {labelError ? (

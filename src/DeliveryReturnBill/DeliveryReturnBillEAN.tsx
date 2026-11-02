@@ -82,14 +82,41 @@ export default function DeliveryReturnBillEAN({ navigation, route }: any) {
   const [scannedEAN, setScannedEAN] = useState('');
   const [loading, setLoading] = useState(false);
   const [showKeyboard] = useState(false);
+  const [inputKey, setInputKey] = useState(0);
 
   const txtEANRef = useRef<TextInput>(null);
   const scanTimer = useRef<any>(null);
+  const lastRefocusRef = useRef(0);
+  const firstRenderRef = useRef(true);
+  const blurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // True while a request is in flight, a ref is always up to date (no stale closure)
   const busyRef = useRef(false);
 
-  const ensureFocus = () => {
-    setTimeout(() => txtEANRef.current?.focus(), 50);
+  // A fresh native view applies autoFocus when Android attaches it. Coalesce
+  // repeated triggers during one transition to avoid needless remounts.
+  const refocusEAN = useCallback(() => {
+    if (!navigation.isFocused()) return;
+    if (Date.now() - lastRefocusRef.current < 300) return;
+    lastRefocusRef.current = Date.now();
+    setInputKey(key => key + 1);
+  }, [navigation]);
+
+  const handleEANFocus = () => {
+    if (blurTimerRef.current) {
+      clearTimeout(blurTimerRef.current);
+      blurTimerRef.current = null;
+    }
+    console.info('[DeliveryReturnBill] EAN input focused');
+  };
+
+  const handleEANBlur = () => {
+    console.info('[DeliveryReturnBill] EAN input blurred');
+    // A blur caused by navigation must not steal focus from the next screen.
+    if (blurTimerRef.current) clearTimeout(blurTimerRef.current);
+    blurTimerRef.current = setTimeout(() => {
+      blurTimerRef.current = null;
+      refocusEAN();
+    }, 100);
   };
 
   useEffect(() => {
@@ -106,23 +133,47 @@ export default function DeliveryReturnBillEAN({ navigation, route }: any) {
     };
   }, [params.f_requiresEan, navigation]);
 
-  // The input must be ready every time the screen regains the focus.
+  // Remount after this route's pop transition completes. Keep a short fallback
+  // for initial focus when the navigator does not emit transitionEnd.
   useFocusEffect(
     useCallback(() => {
-      const timer = setTimeout(() => txtEANRef.current?.focus(), 150);
-      return () => clearTimeout(timer);
-    }, []),
+      let done = false;
+      const bump = () => {
+        if (done) return;
+        done = true;
+        refocusEAN();
+      };
+      const sub = navigation.addListener('transitionEnd', (event: any) => {
+        if (!event.closing) {
+          bump();
+        }
+      });
+      const timer = setTimeout(bump, 450);
+
+      return () => {
+        sub();
+        clearTimeout(timer);
+        if (blurTimerRef.current) {
+          clearTimeout(blurTimerRef.current);
+          blurTimerRef.current = null;
+        }
+      };
+    }, [navigation, refocusEAN]),
   );
 
-  // Every request ends with setLoading(false): give the cursor back to the
-  // input after the render that re-enables it, even when the request failed.
+  // Requests disable the input. Remount after re-enabling it; the delayed
+  // route check avoids competing with a navigation started by the request.
   useEffect(() => {
+    if (firstRenderRef.current) {
+      firstRenderRef.current = false;
+      return;
+    }
     if (loading) {
       return;
     }
-    const timer = setTimeout(() => txtEANRef.current?.focus(), 80);
+    const timer = setTimeout(refocusEAN, 80);
     return () => clearTimeout(timer);
-  }, [loading]);
+  }, [loading, refocusEAN]);
 
   /**
    * The return is saved for the model the operator selected.
@@ -321,6 +372,7 @@ export default function DeliveryReturnBillEAN({ navigation, route }: any) {
           {/* EAN input */}
           <View style={styles.inputGroup}>
             <TextInput
+              key={inputKey}
               ref={txtEANRef}
               style={styles.input}
               value={txtEAN}
@@ -330,9 +382,11 @@ export default function DeliveryReturnBillEAN({ navigation, route }: any) {
               placeholderTextColor="#64748B"
               autoCapitalize="characters"
               autoCorrect={false}
+              autoFocus
               showSoftInputOnFocus={showKeyboard}
               blurOnSubmit={false}
-              onBlur={ensureFocus}
+              onFocus={handleEANFocus}
+              onBlur={handleEANBlur}
               selectTextOnFocus={true}
             />
             {labelError ? (
