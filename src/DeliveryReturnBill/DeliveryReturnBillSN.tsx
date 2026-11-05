@@ -122,13 +122,13 @@ export default function DeliveryReturnBillSN({ navigation, route }: any) {
    * that stays set when the native focus is lost, which makes every later
    * focus() a no-op. A new native view focuses itself on attach instead.
    */
-  const refocusSN = useCallback(() => {
+  const refocusSN = useCallback((force = false) => {
     // Never steal the focus from a screen that is already on top
     if (!navigation.isFocused()) return;
     // A completed model disables the input, it cannot take the focus
     if (!(planQtyRef.current > doneQtyRef.current)) return;
     // Ignore repeated triggers (blur + transition) of the same return
-    if (Date.now() - lastRefocusRef.current < 300) return;
+    if (!force && Date.now() - lastRefocusRef.current < 300) return;
     lastRefocusRef.current = Date.now();
     setInputKey(key => key + 1);
   }, [navigation]);
@@ -254,7 +254,7 @@ export default function DeliveryReturnBillSN({ navigation, route }: any) {
     if (loading) {
       return;
     }
-    const timer = setTimeout(refocusSN, 80);
+    const timer = setTimeout(() => refocusSN(true), 80);
     return () => clearTimeout(timer);
   }, [loading, refocusSN]);
 
@@ -299,7 +299,7 @@ export default function DeliveryReturnBillSN({ navigation, route }: any) {
       setLabelError(
         'Please scan the product SN, this is an EAN (starts with 613)!',
       );
-      refocusSN();
+      refocusSN(true);
       return;
     }
 

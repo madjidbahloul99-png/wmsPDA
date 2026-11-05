@@ -94,9 +94,9 @@ export default function DeliveryReturnBillEAN({ navigation, route }: any) {
 
   // A fresh native view applies autoFocus when Android attaches it. Coalesce
   // repeated triggers during one transition to avoid needless remounts.
-  const refocusEAN = useCallback(() => {
+  const refocusEAN = useCallback((force = false) => {
     if (!navigation.isFocused()) return;
-    if (Date.now() - lastRefocusRef.current < 300) return;
+    if (!force && Date.now() - lastRefocusRef.current < 300) return;
     lastRefocusRef.current = Date.now();
     setInputKey(key => key + 1);
   }, [navigation]);
@@ -171,7 +171,7 @@ export default function DeliveryReturnBillEAN({ navigation, route }: any) {
     if (loading) {
       return;
     }
-    const timer = setTimeout(refocusEAN, 80);
+    const timer = setTimeout(() => refocusEAN(true), 80);
     return () => clearTimeout(timer);
   }, [loading, refocusEAN]);
 

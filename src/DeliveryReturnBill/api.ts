@@ -355,8 +355,7 @@ export const mapEANCandidate = (raw: any): EANCandidate => ({
   modelDesc: pickText(raw, ['modelDesc', 'MODEL_DESC']),
   colorName: pickText(raw, ['colorName', 'COLOR_NAME']),
   ean: pickText(raw, ['ean', 'EAN', 'CODE_EAN']).trim(),
-  isSelected:
-    raw ? raw.isSelected === true || raw.IsSelected === true : false,
+  isSelected: raw ? raw.isSelected === true || raw.IsSelected === true : false,
 });
 
 /**
@@ -473,6 +472,9 @@ export async function getBillModels(
     ...getOperateSign(ctx),
   });
   const rows: any[] = Array.isArray(envelope.data) ? envelope.data : [];
+
+  console.info(envelope.data);
+  console.info(rows);
   return aggregateByModel(rows.map(raw => mapRawLine(raw)));
 }
 
@@ -530,12 +532,15 @@ export async function checkSNTraceability(
 
   // An older API answers without `result`, keep its traceabilityExists routing
   const found = result ? result === 'A' : !hasResult && traceabilityExists;
-  const requiresEan = result ? result === 'D' : !hasResult && !traceabilityExists;
-  const unknownResultMessage = hasResult && !result
-    ? `Unexpected SN validation result: ${rawResult}${
-        message ? ` (${message})` : ''
-      }`
-    : '';
+  const requiresEan = result
+    ? result === 'D'
+    : !hasResult && !traceabilityExists;
+  const unknownResultMessage =
+    hasResult && !result
+      ? `Unexpected SN validation result: ${rawResult}${
+          message ? ` (${message})` : ''
+        }`
+      : '';
   const fallbackMessage = 'SN not found, please scan the EAN';
   const responseMessage = unknownResultMessage || message;
 
@@ -576,9 +581,7 @@ export async function checkSNTraceability(
     traces: found ? [trace] : [],
     requiresEan,
     alreadyScanned: result === 'E',
-    error: found
-      ? undefined
-      : responseMessage || fallbackMessage,
+    error: found ? undefined : responseMessage || fallbackMessage,
   };
 }
 
