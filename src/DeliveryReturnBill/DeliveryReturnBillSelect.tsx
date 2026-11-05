@@ -368,13 +368,7 @@ export default function DeliveryReturnBillSelect({ navigation }: any) {
             {row.fromck || '-'}
           </Text>
           <Text style={[styles.cell, { color: textColor, width: 100 }]}>
-            {row.toWarehouseCode || gs_wareCode || '-'}
-          </Text>
-          <Text style={[styles.cell, { color: textColor, width: 90 }]}>
-            {row.customerCode}
-          </Text>
-          <Text style={[styles.cell, { color: textColor, width: 160 }]}>
-            {row.customerName}
+            {row.toWarehouseCode || '-'}
           </Text>
           <Text style={[styles.cell, { color: textColor, width: 150 }]}>
             {row.operatorBatch}
@@ -385,7 +379,7 @@ export default function DeliveryReturnBillSelect({ navigation }: any) {
         </TouchableOpacity>
       );
     },
-    [selectedKey, gs_wareCode],
+    [selectedKey],
   );
 
   return (
@@ -452,10 +446,6 @@ export default function DeliveryReturnBillSelect({ navigation }: any) {
                 <Text style={[styles.headerCell, { width: 50 }]}>Diff</Text>
                 <Text style={[styles.headerCell, { width: 100 }]}>From WH</Text>
                 <Text style={[styles.headerCell, { width: 100 }]}>To WH</Text>
-                <Text style={[styles.headerCell, { width: 90 }]}>Customer</Text>
-                <Text style={[styles.headerCell, { width: 160 }]}>
-                  Customer Name
-                </Text>
                 <Text style={[styles.headerCell, { width: 150 }]}>Batch</Text>
                 <Text style={[styles.headerCell, { width: 120 }]}>
                   SAP BILL

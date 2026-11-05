@@ -158,7 +158,7 @@ describe("DeliveryReturnBill api (real WMS API)", () => {
     expect(line.outBillCode).toBe("1326168356");
   });
 
-  it("groups the lines of the bill by model, one row per customer", () => {
+  it("groups the lines of the bill by model, one row per model", () => {
     const groups = aggregateByModel(
       [SAMPLE_ROW, SAMPLE_ROW_2].map((raw) => mapRawLine(raw))
     );
@@ -166,20 +166,20 @@ describe("DeliveryReturnBill api (real WMS API)", () => {
 
     const group = groups[0];
     expect(group.model).toBe("FC-33DT4SAW");
+    // the quantities are summed over all the lines of the model
     expect(group.planQty).toBe(2);
     expect(group.doneQty).toBe(1);
     expect(group.diffQty).toBe(1);
-    expect(group.rows.length).toBe(2);
+    expect(group.rows.length).toBe(1);
 
-    const first = group.rows[0];
-    expect(first.customerCode).toBe("12000957");
-    expect(first.doneQty).toBe(1);
-
-    const second = group.rows[1];
-    expect(second.customerCode).toBe("12000958");
-    expect(second.planQty).toBe(1);
-    expect(second.doneQty).toBe(0);
-    expect(second.systemDeliveryCode).toBe("1326168355");
+    const row = group.rows[0];
+    expect(row.model).toBe("FC-33DT4SAW");
+    expect(row.planQty).toBe(2);
+    expect(row.doneQty).toBe(1);
+    expect(row.diffQty).toBe(1);
+    // the display fields come from the first line of the group
+    expect(row.customerCode).toBe("12000957");
+    expect(row.systemDeliveryCode).toBe("1326168354");
   });
 
   it("scans a return bill, signs the request and maps the answer", async () => {
@@ -187,7 +187,7 @@ describe("DeliveryReturnBill api (real WMS API)", () => {
 
     const groups = await getBillModels(ctx, { sapMainBillCode: "2026062030" });
     expect(groups.length).toBe(1);
-    expect(groups[0].rows.length).toBe(2);
+    expect(groups[0].rows.length).toBe(1);
 
     // the request carried the path, the parameters and the operate* sign
     const url = decodeURIComponent((globalThis as any).fetch.mock.calls[0][0]);

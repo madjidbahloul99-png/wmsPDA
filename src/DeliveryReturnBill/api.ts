@@ -359,16 +359,17 @@ export const mapEANCandidate = (raw: any): EANCandidate => ({
 });
 
 /**
- * Groups the lines of a bill by model, and the lines of a model by customer.
+ * Groups the lines of a bill by model.
  *
- * A return bill can hold several customers (multi client) and the same model
- * can belong to more than one of them, so the rows are kept per customer.
+ * A model is shown as a single row: the quantities are summed over all the
+ * lines of the model, the display fields (bills, batch, dates, warehouses)
+ * come from the first line of the group.
  */
 export const aggregateByModel = (lines: ReturnBillLine[]): BillModelGroup[] => {
   const modelGroups: { [key: string]: ReturnBillLine[] } = {};
 
   lines.forEach(line => {
-    const key = `${line.model}|${line.color}|${line.ean}`;
+    const key = line.model; // group by model only, the color and EAN are the same for a model
     if (!modelGroups[key]) {
       modelGroups[key] = [];
     }
@@ -379,60 +380,37 @@ export const aggregateByModel = (lines: ReturnBillLine[]): BillModelGroup[] => {
     const group = modelGroups[key];
     const first = group[0];
 
-    const customerGroups: { [key: string]: ReturnBillLine[] } = {};
-    group.forEach(line => {
-      const customerKey = `${line.customerCode}|${line.customerName}|${line.outBillCode}`;
-      if (!customerGroups[customerKey]) {
-        customerGroups[customerKey] = [];
-      }
-      customerGroups[customerKey].push(line);
-    });
+    const planQty = group.reduce((sum, line) => sum + line.planQty, 0);
+    const doneQty = group.reduce((sum, line) => sum + line.doneQty, 0);
 
-    const rows: BillModelRow[] = Object.keys(customerGroups).map(
-      (customerKey, rowIdx) => {
-        const customerLines = customerGroups[customerKey];
-        const customer = customerLines[0];
-
-        let planQty = 0;
-        let doneQty = 0;
-        customerLines.forEach(line => {
-          planQty += line.planQty;
-          doneQty += line.doneQty;
-        });
-
-        return {
-          id: `${idx}-${rowIdx}`,
-          lineId: customer.lineId,
-          systemDeliveryCode: customer.outBillCode,
-          deliveryCode: customer.outBillCode,
-          model: customer.model,
-          modelDesc: customer.modelDesc,
-          color: customer.color,
-          ean: customer.ean,
-          brand: customer.brand,
-          customerCode: customer.customerCode,
-          customerName: customer.customerName,
-          cityName: customer.cityName,
-          address: customer.address,
-          customerType: customer.customerType,
-          // the batch of the operation, the delivery bill when present
-          operatorBatch: customer.deliveryCode || customer.lineId,
-          sapMainBillCode: customer.mainBillCode,
-          fromck: customer.warehouseCode,
-          toWarehouseCode: customer.toWarehouseCode,
-          deliveryDate: customer.deliveryDate,
-          movementStatus: customer.movementStatus,
-          movementDate: customer.movementDate,
-          movementType: customer.movementType,
-          planQty,
-          doneQty,
-          diffQty: planQty - doneQty,
-        };
-      },
-    );
-
-    const planQty = rows.reduce((sum, row) => sum + row.planQty, 0);
-    const doneQty = rows.reduce((sum, row) => sum + row.doneQty, 0);
+    const row: BillModelRow = {
+      id: `${idx}-0`,
+      lineId: first.lineId,
+      systemDeliveryCode: first.outBillCode,
+      deliveryCode: first.outBillCode,
+      model: first.model,
+      modelDesc: first.modelDesc,
+      color: first.color,
+      ean: first.ean,
+      brand: first.brand,
+      customerCode: first.customerCode,
+      customerName: first.customerName,
+      cityName: first.cityName,
+      address: first.address,
+      customerType: first.customerType,
+      // the batch of the operation, the delivery bill when present
+      operatorBatch: first.deliveryCode || first.lineId,
+      sapMainBillCode: first.mainBillCode,
+      fromck: first.warehouseCode,
+      toWarehouseCode: first.toWarehouseCode,
+      deliveryDate: first.deliveryDate,
+      movementStatus: first.movementStatus,
+      movementDate: first.movementDate,
+      movementType: first.movementType,
+      planQty,
+      doneQty,
+      diffQty: planQty - doneQty,
+    };
 
     return {
       id: String(idx),
@@ -444,7 +422,7 @@ export const aggregateByModel = (lines: ReturnBillLine[]): BillModelGroup[] => {
       planQty,
       doneQty,
       diffQty: planQty - doneQty,
-      rows,
+      rows: [row],
     };
   });
 };
@@ -473,8 +451,6 @@ export async function getBillModels(
   });
   const rows: any[] = Array.isArray(envelope.data) ? envelope.data : [];
 
-  console.info(envelope.data);
-  console.info(rows);
   return aggregateByModel(rows.map(raw => mapRawLine(raw)));
 }
 
