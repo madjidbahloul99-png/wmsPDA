@@ -120,6 +120,8 @@ export interface EANCandidate {
 export interface TraceabilityRecord {
   sn: string;
   lineId: string;
+  /** plan row of the return the server resolved for this SN (ValidateProductSN) */
+  planId: string;
   mainBillCode: string;
   /** WMS delivery bill the goods went out with */
   outBillCode: string;
@@ -222,6 +224,13 @@ export interface TraceabilityCheckResult {
   isok: string;
   /** model of the scanned SN, from the delivery traceability */
   model: string;
+  /**
+   * the plan row of the model the server resolved for this SN
+   * (ValidateProductSN), empty when the server version does not send it. It
+   * is the only planId a TRACE save is allowed to use, the save of a traced
+   * SN without one is refused.
+   */
+  planId: string;
   /** message of the server, shown inline on the SN page */
   message: string;
   /** true when the SN has delivery traceability (go straight to the confirm page) */

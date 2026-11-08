@@ -28,6 +28,8 @@ import { EVENT_RETURNED } from './events';
 export default function DeliveryReturnBillConfirm({ navigation, route }: any) {
   const params: ReturnContext & {
     f_sn?: string;
+    /** plan row of the server (ValidateProductSN), required for the traced save */
+    f_planId?: string;
     f_traces?: TraceabilityRecord[];
   } = useMemo(() => route.params || {}, [route.params]);
 
@@ -93,9 +95,12 @@ export default function DeliveryReturnBillConfirm({ navigation, route }: any) {
 
     try {
       const sn = params.f_sn || (traces[0] ? traces[0].sn : '');
+      // the plan row of the server, the traced save refuses without one
+      const planId = params.f_planId || (traces[0] ? traces[0].planId : '');
       const result = await confirmReturn(apiCtx, {
         context: params,
         sn: sn,
+        planId: planId,
         trace: traces[0] || null,
       });
 

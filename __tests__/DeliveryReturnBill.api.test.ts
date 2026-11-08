@@ -233,6 +233,8 @@ describe("DeliveryReturnBill api (real WMS API)", () => {
         sn: "KLE0535030012055",
         traceabilityExists: true,
         model: "43A4200G",
+        // the plan row the server resolved for this SN
+        planId: "4012",
         outBillCode: "1326168354",
         sapMainBillCode: "2026062030",
         sapUuid: "SAPUUID-1",
@@ -249,9 +251,11 @@ describe("DeliveryReturnBill api (real WMS API)", () => {
     expect(result.result).toBe("A");
     expect(result.isok).toBe("1");
     expect(result.model).toBe("43A4200G");
+    expect(result.planId).toBe("4012");
     expect(result.found).toBe(true);
     expect(result.traces.length).toBe(1);
     expect(result.traces[0].model).toBe("43A4200G");
+    expect(result.traces[0].planId).toBe("4012");
     expect(result.traces[0].outBillCode).toBe("1326168354");
     expect(result.traces[0].sapMainBillCode).toBe("2026062030");
     expect(result.traces[0].sapUuid).toBe("SAPUUID-1");
@@ -499,6 +503,7 @@ describe("DeliveryReturnBill api (real WMS API)", () => {
     const trace: TraceabilityRecord = {
       sn: "KLE0535030012055",
       lineId: "",
+      planId: "1326168351000021",
       mainBillCode: "",
       outBillCode: "1326168354",
       sapMainBillCode: "SAPBILL-1",
@@ -528,6 +533,7 @@ describe("DeliveryReturnBill api (real WMS API)", () => {
     const result = await confirmReturn(ctx, {
       context: context,
       sn: "KLE0535030012055",
+      planId: "1326168351000021",
       trace,
     });
 
@@ -601,7 +607,11 @@ describe("DeliveryReturnBill api (real WMS API)", () => {
     });
 
     await expect(
-      confirmReturn(ctx, { context: context, sn: "1326168351000021" })
+      confirmReturn(ctx, {
+        context: context,
+        sn: "1326168351000021",
+        planId: "1326168351000021",
+      })
     ).rejects.toThrow("SN already scanned in this return bill");
 
     mockFetch({
@@ -610,7 +620,11 @@ describe("DeliveryReturnBill api (real WMS API)", () => {
     });
 
     await expect(
-      confirmReturn(ctx, { context: context, sn: "1326168351000021" })
+      confirmReturn(ctx, {
+        context: context,
+        sn: "1326168351000021",
+        planId: "1326168351000021",
+      })
     ).rejects.toThrow("This model is already completed");
   });
 
@@ -642,7 +656,7 @@ describe("DeliveryReturnBill api (real WMS API)", () => {
 
   it("requires a SN before saving a traced return", async () => {
     await expect(
-      confirmReturn(ctx, { context: context, sn: "   " })
+      confirmReturn(ctx, { context: context, sn: "   ", planId: "" })
     ).rejects.toThrow("A product SN is required before saving the return.");
   });
 
@@ -664,6 +678,7 @@ describe("DeliveryReturnBill api (real WMS API)", () => {
     const saved = await confirmReturn(ctx, {
       context: context,
       sn: "KLE0535030012055",
+      planId: "1326168351000021",
     });
     expect(saved.alreadySaved).toBe(true);
 
@@ -672,8 +687,27 @@ describe("DeliveryReturnBill api (real WMS API)", () => {
     const noQty = await confirmReturn(ctx, {
       context: context,
       sn: "KLE0535030012056",
+      planId: "1326168351000021",
     });
     expect(noQty.actualQty).toBeUndefined();
+  });
+
+  it("refuses a traced save without the plan row of the server", async () => {
+    // Blank planId: the server is not updated yet or no row is open, the save
+    // must not book the unit on an arbitrary row of the bill
+    (globalThis as any).fetch = undefined;
+    await expect(
+      confirmReturn(ctx, { context: context, sn: "KLE0535030012055", planId: "" })
+    ).rejects.toThrow(
+      "No open plan row for this model on the server, the return cannot be saved."
+    );
+    await expect(
+      confirmReturn(ctx, { context: context, sn: "KLE0535030012055", planId: "  " })
+    ).rejects.toThrow(
+      "No open plan row for this model on the server, the return cannot be saved."
+    );
+    // no request went out
+    expect((globalThis as any).fetch).toBeUndefined();
   });
 
   it("keeps a real qty of 0 instead of defaulting to one unit", () => {

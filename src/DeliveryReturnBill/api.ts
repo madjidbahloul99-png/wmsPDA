@@ -490,6 +490,7 @@ export async function checkSNTraceability(
     ...getOperateSign(ctx),
   });
   const res = envelope.data || {};
+  console.info('[DeliveryReturnBill] ValidateProductSN response:', res);
   const rawResult = pickText(res, ['result', 'Result']).trim().toUpperCase();
   const result: SnResult | '' =
     rawResult === 'A' ||
@@ -504,6 +505,9 @@ export async function checkSNTraceability(
   const traceabilityExists =
     res.traceabilityExists === true || res.TraceabilityExists === true;
   const model = pickText(res, ['model', 'Model']).trim();
+  // the plan row the server resolved for this SN (added to ValidateProductSN),
+  // empty when the server version does not send it or no row is open
+  const planId = pickText(res, ['planId', 'PlanId', 'PLAN_ID']);
   const message = pickText(res, ['message', 'Message']).trim();
 
   // An older API answers without `result`, keep its traceabilityExists routing
@@ -523,6 +527,8 @@ export async function checkSNTraceability(
   const trace: TraceabilityRecord = {
     sn: params.sn,
     lineId: '',
+    // the plan row the server resolved for this SN, a TRACE save requires it
+    planId: planId,
     mainBillCode: '',
     outBillCode: pickText(res, ['outBillCode', 'out_bill_code']),
     sapMainBillCode: pickText(res, ['sapMainBillCode', 'sap_main_bill_code']),
@@ -552,6 +558,7 @@ export async function checkSNTraceability(
     result,
     isok: pickText(res, ['isok', 'isOk', 'Isok', 'IsOk']),
     model,
+    planId,
     message: responseMessage,
     found,
     traces: found ? [trace] : [],
@@ -617,11 +624,13 @@ const buildSaveBody = (
     model: string;
     ean: string;
     scanType: string;
+    /** the plan row of the save, the caller owns it (ValidateProductSN or f_lineId) */
+    planId: string;
     trace?: TraceabilityRecord | null;
   },
 ): Record<string, any> => ({
   returnBillCode: payload.context.f_billCode || '',
-  planId: payload.context.f_lineId || '',
+  planId: payload.planId,
   warehouseCode: ctx.gs_wareCode || '',
   sn: payload.sn,
   model: payload.model,
@@ -651,6 +660,11 @@ const mapSaveResponse = (res: any): ReturnResult => ({
 /**
  * POST SaveReturnDetail (scanType = "TRACE")
  *
+ * The plan row comes from the answer of ValidateProductSN (result A), without
+ * a fallback: the server is the only one that knows which row of the model
+ * the SN belongs to, a save without one would book the unit on an arbitrary
+ * row of the bill and is refused.
+ *
  * The server refuses an SN that was already scanned in the bill ("SN already
  * scanned in this return bill") and a completed row ("This model is already
  * completed"), the screens show those messages.
@@ -660,11 +674,18 @@ export async function confirmReturn(
   payload: {
     context: ReturnContext;
     sn: string;
+    /** plan row of the server (ValidateProductSN planId), required for TRACE */
+    planId: string;
     trace?: TraceabilityRecord | null;
   },
 ): Promise<ReturnResult> {
   if (!payload.sn.trim()) {
     throw new Error('A product SN is required before saving the return.');
+  }
+  if (!(payload.planId || '').trim()) {
+    throw new Error(
+      'No open plan row for this model on the server, the return cannot be saved.',
+    );
   }
   const envelope = await requestPost(
     ctx,
@@ -675,6 +696,7 @@ export async function confirmReturn(
       model: payload.context.f_model,
       ean: '',
       scanType: SCAN_TYPE_TRACE,
+      planId: payload.planId.trim(),
       trace: payload.trace || null,
     }),
   );
@@ -686,6 +708,9 @@ export async function confirmReturn(
  *
  * The model is the one the operator selected in the list of the EAN page, the
  * SN is the one that had no delivery traceability.
+ *
+ * The plan row is still the one of the bill (f_lineId): CheckEAN does not
+ * answer a planId yet, it is sent to the server as soon as it does.
  */
 export async function submitReturnWithEAN(
   ctx: ApiContext,
@@ -708,6 +733,7 @@ export async function submitReturnWithEAN(
       model: payload.model,
       ean: payload.ean,
       scanType: SCAN_TYPE_EAN,
+      planId: payload.context.f_lineId || '',
       trace: null,
     }),
   );

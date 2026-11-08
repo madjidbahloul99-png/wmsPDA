@@ -122,16 +122,19 @@ export default function DeliveryReturnBillSN({ navigation, route }: any) {
    * that stays set when the native focus is lost, which makes every later
    * focus() a no-op. A new native view focuses itself on attach instead.
    */
-  const refocusSN = useCallback((force = false) => {
-    // Never steal the focus from a screen that is already on top
-    if (!navigation.isFocused()) return;
-    // A completed model disables the input, it cannot take the focus
-    if (!(planQtyRef.current > doneQtyRef.current)) return;
-    // Ignore repeated triggers (blur + transition) of the same return
-    if (!force && Date.now() - lastRefocusRef.current < 300) return;
-    lastRefocusRef.current = Date.now();
-    setInputKey(key => key + 1);
-  }, [navigation]);
+  const refocusSN = useCallback(
+    (force = false) => {
+      // Never steal the focus from a screen that is already on top
+      if (!navigation.isFocused()) return;
+      // A completed model disables the input, it cannot take the focus
+      if (!(planQtyRef.current > doneQtyRef.current)) return;
+      // Ignore repeated triggers (blur + transition) of the same return
+      if (!force && Date.now() - lastRefocusRef.current < 300) return;
+      lastRefocusRef.current = Date.now();
+      setInputKey(key => key + 1);
+    },
+    [navigation],
+  );
 
   const handleSNFocus = () => {
     if (blurTimerRef.current) {
@@ -321,11 +324,21 @@ export default function DeliveryReturnBillSN({ navigation, route }: any) {
         returnBillCode: params.f_billCode || '',
         warehouseCode: params.f_wareCode || gs_wareCode || '',
       });
+      console.info('[DeliveryReturnBill] ValidateProductSN result', result);
       // A - the SN is the selected model: straight to the confirmation
       if (result.result === 'A' || (!result.result && result.found)) {
+        // Strict plan row: without the one the server resolved for this SN
+        // the save would book the unit on an arbitrary row of the model
+        if (!result.planId) {
+          setLabelError(
+            'No open plan row for this model on the server, the return cannot be saved.',
+          );
+          return;
+        }
         navigation.navigate('DeliveryReturnBillConfirm', {
           ...buildContext(),
           f_sn: SN,
+          f_planId: result.planId,
           f_traces: result.traces,
         });
         return;
