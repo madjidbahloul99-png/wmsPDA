@@ -134,7 +134,7 @@ export const GlobalStrProvider = ({
 
   const [gs_PasswordSalt, setPasswordSalt] = useState('abc12345');
   const [gs_randomNumber, setRandomNumber] = useState('2');
-  const [gs_version, setVersion] = useState('1.0.3');
+  const [gs_version, setVersion] = useState('1.0.4');
 
   const [g_webUrl, setWebUrl] = useState(
     'https://mespdamobile.condor.dz/WINCEWeb.asmx',
