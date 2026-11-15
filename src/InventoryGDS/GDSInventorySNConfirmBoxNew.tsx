@@ -45,8 +45,12 @@ export default function GDSInventorySNConfirmBoxNew({ navigation, route }: any) 
     g_webUrl,
     g_isRealUrl,
     gs_PasswordSalt,
+    
     gs_version,
-  } = useGlobalStr();
+    gs_factoryindex,
+} = useGlobalStr();
+
+    const styles = createStyles(gs_factoryindex === "zentech" ? "#06b86c" : "#0052cc");
 
   const [loading, setLoading] = useState(false);
   const [label_error, setLabelError] = useState("");
@@ -416,7 +420,7 @@ export default function GDSInventorySNConfirmBoxNew({ navigation, route }: any) 
 
               {loading ? (
                 <View style={styles.loaderContainer}>
-                  <ActivityIndicator size="large" color="#0052cc" />
+                  <ActivityIndicator size="large" color={gs_factoryindex === "zentech" ? "#06b86c" : "#0052cc"} />
                   <Text style={styles.loaderText}>Querying stock info...</Text>
                 </View>
               ) : (
@@ -462,10 +466,10 @@ export default function GDSInventorySNConfirmBoxNew({ navigation, route }: any) 
 const { width } = Dimensions.get("window");
 const scale = (size: number) => (width / 375) * size;
 
-const styles = StyleSheet.create({
+const createStyles = (factoryColor: string) => StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F8FAFC" },
   header: {
-    backgroundColor: "#0052cc",
+    backgroundColor: factoryColor,
     paddingHorizontal: width * 0.05,
     height: scale(56),
     flexDirection: "row",
@@ -480,11 +484,11 @@ const styles = StyleSheet.create({
   userNameText: { color: "#FFFFFF", fontSize: scale(12), fontWeight: "700" },
   content: { flex: 1, padding: 12 },
   metaCard: {
-    backgroundColor: "#0052cc",
+    backgroundColor: factoryColor,
     borderRadius: 12,
     padding: 10,
     borderWidth: 1,
-    borderColor: "#0052cc",
+    borderColor: factoryColor,
     marginBottom: 8,
     elevation: 1,
   },
@@ -513,7 +517,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 8,
     borderWidth: 1,
-    borderColor: "#0052cc",
+    borderColor: factoryColor,
     marginBottom: 10,
   },
   modelHeaderText: {
@@ -543,7 +547,7 @@ const styles = StyleSheet.create({
   eanLabel: {
     fontSize: 12,
     fontWeight: "800",
-    color: "#0052cc",
+    color: factoryColor,
     marginBottom: 8,
   },
   inputWithClear: {
@@ -557,7 +561,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#e2f0eeff",
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#0052cc",
+    borderColor: factoryColor,
     paddingHorizontal: 10,
     paddingVertical: 0,
     fontSize: 14,
@@ -598,7 +602,7 @@ const styles = StyleSheet.create({
   palletBtn: {
     width: "100%",
     height: scale(46),
-    backgroundColor: "#0052cc",
+    backgroundColor: factoryColor,
     borderRadius: 8,
     justifyContent: "center",
     alignItems: "center",
@@ -615,12 +619,12 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: "#0052cc",
+    borderColor: factoryColor,
     marginBottom: 10,
   },
   listHeader: {
     flexDirection: "row",
-    backgroundColor: "#0052cc",
+    backgroundColor: factoryColor,
     paddingVertical: 8,
     paddingHorizontal: 4,
   },
@@ -654,7 +658,7 @@ const styles = StyleSheet.create({
   totalRowText: {
     fontSize: 12,
     fontWeight: "900",
-    color: "#0052cc",
+    color: factoryColor,
   },
   loaderContainer: {
     flex: 1,

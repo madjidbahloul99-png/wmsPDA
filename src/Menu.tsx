@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useGlobalStr } from "../GlobalStrContext";
 import * as pubfunction from "./pubfunction";
+import { clearJwtToken } from "./utils/jwtAuth";
 
 // Interface representing the BaseMenuVo object
 interface BaseMenuVo {
@@ -127,7 +128,15 @@ const getMenuDetails = (menuName: string) => {
       return {
         title: "Delivery Return\nNew",
         icon: require("../assets/logomenu/DeliveryReturn.png"),
+        // Legacy delivery return flow (multi screen, menu url of the server)
         screen: "DeliveryReturnNONewSap",
+      };
+    case "Delivery Return Bill":
+      return {
+        title: "Delivery Return\nBill",
+        icon: require("../assets/logomenu/DeliveryReturn.png"),
+        // New delivery return flow (SN based return with traceability)
+        screen: "DeliveryReturnBillSelect",
       };
     case "Return to original wh":
       return {
@@ -137,10 +146,9 @@ const getMenuDetails = (menuName: string) => {
       };
     default:
       // Adaptive split title fallback
-      const formattedTitle = name.includes(" ") 
-        ? name.replace(/ (?=[^ ]+$)/, "\n") 
+      const formattedTitle = name.includes(" ")
+        ? name.replace(/ (?=[^ ]+$)/, "\n")
         : name;
-        
       return {
         title: formattedTitle,
         icon: require("../assets/logomenu/Inwarehouse.png"),
@@ -168,7 +176,10 @@ export default function Menu({ navigation }: any) {
     gs_userName,
     gs_wareName,
     gs_PasswordSalt,
+    gs_factoryindex,
   } = useGlobalStr();
+
+    const styles = createStyles(gs_factoryindex === "zentech" ? "#06b86c" : "#0052cc");
 
   const [filteredMenu, setFilteredMenu] = useState<BaseMenuVo[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
@@ -200,7 +211,27 @@ export default function Menu({ navigation }: any) {
           }
         }
 
-        setFilteredMenu(validMenus);
+        // The new "Delivery Return Bill" flow has no menu url of the server
+        // yet, it rides on the same permission as the legacy "Delivery Return
+        // New": one authorized entry on the server, two tiles on the screen.
+        // Once the server adds its own entry the guard skips the duplicate.
+        const menuWithName = (list: BaseMenuVo[], wanted: string) =>
+          list.some((item) => (item.menuName || "").trim() === wanted);
+        const expandedMenus: BaseMenuVo[] = [];
+        for (const menu of validMenus) {
+          expandedMenus.push(menu);
+          if (
+            (menu.menuName || "").trim() === "Delivery Return New" &&
+            !menuWithName(validMenus, "Delivery Return Bill")
+          ) {
+            expandedMenus.push({
+              menuName: "Delivery Return Bill",
+              menuValue: menu.menuValue,
+            });
+          }
+        }
+
+        setFilteredMenu(expandedMenus);
         setCurrentPage(1);
       } else if (data && !data.success) {
         pubfunction.ShowError(data.msg || "Failed to load menus list");
@@ -217,7 +248,8 @@ export default function Menu({ navigation }: any) {
     getMenuListJava();
   }, []);
 
-  const handleReturn = () => {
+  const handleReturn = async () => {
+    await clearJwtToken();
     navigation.goBack();
   };
 
@@ -282,7 +314,7 @@ export default function Menu({ navigation }: any) {
 
       {loading && (
         <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="large" color="#0052cc" />
+          <ActivityIndicator size="large" color={gs_factoryindex === "zentech" ? "#06b86c" : "#0052cc"} />
           <Text style={styles.loadingText}>Loading permissions...</Text>
         </View>
       )}
@@ -357,13 +389,13 @@ export default function Menu({ navigation }: any) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (factoryColor: string) => StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: "#F8FAFC",
   },
   header: {
-    backgroundColor: "#0052cc",
+    backgroundColor: factoryColor,
     paddingHorizontal: width * 0.05,
     height: scale(56),
     flexDirection: "row",
@@ -388,7 +420,7 @@ const styles = StyleSheet.create({
   },
   subHeader: {
     flexDirection: 'row',
-    backgroundColor: '#0052cc',
+    backgroundColor: factoryColor,
     paddingHorizontal: 20,
     paddingBottom: 12,
     justifyContent: 'space-between',
@@ -438,7 +470,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     minHeight: scale(160),
     elevation: 3,
-    shadowColor: "#0052cc",
+    shadowColor: factoryColor,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
@@ -492,7 +524,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
     fontSize: scale(14),
     fontWeight: "600",
-    color: "#0052cc",
+    color: factoryColor,
   },
   emptyContainer: {
     width: "100%",
@@ -519,7 +551,7 @@ const styles = StyleSheet.create({
   footerButton: {
     flex: 1,
     height: scale(38),
-    backgroundColor: "#0052cc",
+    backgroundColor: factoryColor,
     borderRadius: 8,
     justifyContent: "center",
     alignItems: "center",

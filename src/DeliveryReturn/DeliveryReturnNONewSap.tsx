@@ -41,8 +41,11 @@ export default function DeliveryReturnNONewSap({ navigation }: any) {
     gs_userCode,
     gs_userName,
     gs_PasswordSalt,
-    gs_version,
-  } = useGlobalStr();
+    
+    gs_factoryindex,
+} = useGlobalStr();
+
+    const styles = createStyles(gs_factoryindex === "zentech" ? "#06b86c" : "#0052cc");
 
   // Page level global states
   const [txtSN, setTxtSN] = useState("");
@@ -288,7 +291,7 @@ export default function DeliveryReturnNONewSap({ navigation }: any) {
     // If cyqty > 0, if okqty > 0 then Blue, else Red. Otherwise standard charcoal.
     let textColor = "#1E293B";
     if (item.cyqty > 0) {
-      textColor = item.okqty > 0 ? "#0052cc" : "#EF4444";
+      textColor = item.okqty > 0 ? "#06b86c" : "#EF4444";
     }
 
     const isSelected = selectedIndex === index;
@@ -404,7 +407,7 @@ export default function DeliveryReturnNONewSap({ navigation }: any) {
 
         {loading && (
           <View style={styles.loadingOverlay}>
-            <ActivityIndicator size="large" color="#0052cc" />
+            <ActivityIndicator size="large" color="#06b86c" />
           </View>
         )}
       </View>
@@ -415,10 +418,10 @@ export default function DeliveryReturnNONewSap({ navigation }: any) {
 const { width } = Dimensions.get("window");
 const scale = (size: number) => (width / 375) * size;
 
-const styles = StyleSheet.create({
+const createStyles = (factoryColor: string) => StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F8FAFC" },
   header: {
-    backgroundColor: "#0052cc",
+    backgroundColor: factoryColor,
     paddingHorizontal: width * 0.05,
     height: scale(56),
     flexDirection: "row",
@@ -441,7 +444,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     elevation: 2,
     borderWidth: 1,
-    borderColor: "#0052cc",
+    borderColor: factoryColor,
   },
   inputGroup: { marginBottom: 12 },
   input: {
@@ -453,7 +456,7 @@ const styles = StyleSheet.create({
     color: "#1E293B",
     fontWeight: "600",
     borderWidth: 1,
-    borderColor: "#0052cc",
+    borderColor: factoryColor,
   },
   tableCard: {
     flex: 1,
@@ -462,16 +465,16 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     elevation: 2,
     borderWidth: 1,
-    borderColor: "#0052cc",
+    borderColor: factoryColor,
     marginBottom: 8,
   },
-  tableHeader: { flexDirection: "row", backgroundColor: "#0052cc", paddingVertical: 10 },
+  tableHeader: { flexDirection: "row", backgroundColor: factoryColor, paddingVertical: 10 },
   headerCell: { fontSize: 11, fontWeight: "800", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
   tableRow: { flexDirection: "row", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#F1F5F9", alignItems: "center" },
   cell: { fontSize: 11, color: "#1E293B", textAlign: "center", fontWeight: "600" },
   emptyText: { textAlign: "center", padding: 40, color: "#94A3B8", fontStyle: "italic", width: 1120 },
   footer: { borderTopWidth: 1, borderTopColor: '#e2e8f0', paddingTop: 2 },
-  choiceButton: { height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0052cc' },
+  choiceButton: { height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center', backgroundColor: factoryColor },
   choiceButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '900' },
   infoText: { color: "#EF4444", fontSize: 13, marginTop: 4, marginLeft: 4, fontWeight: "800" },
   selectedRow: { backgroundColor: "#BAE6FD" },

@@ -364,7 +364,7 @@ export default function InWareHouseChina({ navigation }: any) {
 
             {loading && (
                 <View style={styles.loadingOverlay}>
-                    <ActivityIndicator size="large" color="#0052cc" />
+                    <ActivityIndicator size="large" color="#06b86c" />
                 </View>
             )}
         </SafeAreaView>
@@ -377,7 +377,7 @@ const scale = (size: number) => (width / 375) * size;
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: "#F8FAFC" },
     header: {
-        backgroundColor: "#0052cc",
+        backgroundColor: "#06b86c",
         paddingHorizontal: width * 0.05,
         height: scale(56),
         flexDirection: "row",
@@ -398,7 +398,7 @@ const styles = StyleSheet.create({
         marginBottom: 8,
         elevation: 2,
         borderWidth: 1,
-        borderColor: "#0052cc",
+        borderColor: "#06b86c",
     },
     pickerContainer: {
         borderWidth: 1,
@@ -420,7 +420,7 @@ const styles = StyleSheet.create({
         color: "#1E293B",
         fontWeight: "600",
         borderWidth: 1,
-        borderColor: "#0052cc",
+        borderColor: "#06b86c",
     },
     inputDisabled: {
         backgroundColor: "#F1F5F9",
@@ -432,7 +432,7 @@ const styles = StyleSheet.create({
         borderRadius: 16,
         padding: 10,
         borderWidth: 1,
-        borderColor: "#0052cc",
+        borderColor: "#06b86c",
         marginBottom: 8,
     },
     infoRow: {
@@ -443,7 +443,7 @@ const styles = StyleSheet.create({
     infoLabel: { fontSize: 12, fontWeight: "800", color: "#475569" },
     infoVal: { fontSize: 12, fontWeight: "900", color: "#1E293B" },
     btnAction: {
-        backgroundColor: "#0052cc",
+        backgroundColor: "#06b86c",
         padding: 10,
         borderRadius: 8,
         alignItems: "center",
@@ -456,12 +456,12 @@ const styles = StyleSheet.create({
         borderRadius: 16,
         overflow: "hidden",
         borderWidth: 1,
-        borderColor: "#0052cc",
+        borderColor: "#06b86c",
         marginBottom: 8,
     },
     listHeader: {
         flexDirection: "row",
-        backgroundColor: "#0052cc",
+        backgroundColor: "#06b86c",
         paddingVertical: 10,
         paddingHorizontal: 6,
     },

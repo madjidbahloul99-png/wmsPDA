@@ -44,7 +44,10 @@ export default function AllocateRejectInSNConfirmOldWMS({ navigation, route }: a
     g_webUrl,
     g_isRealUrl,
     gs_factoryCode,
+    gs_factoryindex,
   } = useGlobalStr();
+
+    const styles = createStyles(gs_factoryindex === "zentech" ? "#06b86c" : "#0052cc");
 
   // Screen States
   const [f_allocateCode, setFAllocateCode] = useState(initialAllocateCode);
@@ -243,7 +246,7 @@ export default function AllocateRejectInSNConfirmOldWMS({ navigation, route }: a
 
       {loading && (
         <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="large" color="#0052cc" />
+          <ActivityIndicator size="large" color="#06b86c" />
         </View>
       )}
     </SafeAreaView>
@@ -253,10 +256,10 @@ export default function AllocateRejectInSNConfirmOldWMS({ navigation, route }: a
 const { width } = Dimensions.get("window");
 const scale = (size: number) => (width / 375) * size;
 
-const styles = StyleSheet.create({
+const createStyles = (factoryColor: string) => StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F8FAFC" },
   header: {
-    backgroundColor: "#0052cc",
+    backgroundColor: factoryColor,
     paddingHorizontal: width * 0.05,
     height: scale(56),
     flexDirection: "row",
@@ -275,14 +278,14 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 8,
     borderWidth: 1,
-    borderColor: "#0052cc",
+    borderColor: factoryColor,
     marginBottom: 8,
   },
   infoBlock: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    backgroundColor: "#0052cc",
+    backgroundColor: factoryColor,
     borderRadius: 10,
     paddingVertical: 10,
     paddingHorizontal: 14,
@@ -296,10 +299,10 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: "#0052cc",
+    borderColor: factoryColor,
     marginBottom: 8,
   },
-  tableHeader: { flexDirection: "row", backgroundColor: "#0052cc", paddingVertical: 10 },
+  tableHeader: { flexDirection: "row", backgroundColor: factoryColor, paddingVertical: 10 },
   headerCell: { fontSize: 11, fontWeight: "800", color: "#FFFFFF", textAlign: "center" },
   tableRow: { flexDirection: "row", paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: "#F1F5F9", alignItems: "center" },
   cell: { fontSize: 11, color: "#1E293B", textAlign: "center", fontWeight: "600" },
@@ -316,7 +319,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  confirmBtn: { backgroundColor: "#0052cc" },
+  confirmBtn: { backgroundColor: factoryColor },
   btnText: { color: "#FFFFFF", fontSize: 15, fontWeight: "900" },
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,

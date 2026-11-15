@@ -32,9 +32,10 @@ interface PalletRowProps {
     index: number;
     isSelected: boolean;
     onPress: (index: number) => void;
+    styles: any;
 }
 
-const PalletRow = React.memo(({ item, index, isSelected, onPress }: PalletRowProps) => (
+const PalletRow = React.memo(({ item, index, isSelected, onPress, styles }: PalletRowProps) => (
     <TouchableOpacity
         style={[
             styles.tableRow,
@@ -64,8 +65,12 @@ export default function PalletNotIn({ navigation }: any) {
         operateWareHouseCode,
         operateRandomNumber,
         operateSign,
-        operateVersion,
-    } = global;
+        
+        gs_factoryindex,
+} = global;
+
+    const styles = createStyles(gs_factoryindex === "zentech" ? "#06b86c" : "#0052cc");
+
     const BASE_URL = gsURL;
 
     const [token, setToken] = useState("");
@@ -178,9 +183,10 @@ export default function PalletNotIn({ navigation }: any) {
                 index={index}
                 isSelected={selectedItemIndex === index}
                 onPress={handleSelectItem}
+                styles={styles}
             />
         ),
-        [selectedItemIndex, handleSelectItem]
+        [selectedItemIndex, handleSelectItem, styles]
     );
 
     const keyExtractor = useCallback((item: PalletItem) => item.id, []);
@@ -256,7 +262,7 @@ export default function PalletNotIn({ navigation }: any) {
                             {loading ? (
                                 <ActivityIndicator
                                     size="large"
-                                    color="#0052cc"
+                                    color="#06b86c"
                                     style={{ marginTop: 40 }}
                                 />
                             ) : (
@@ -302,10 +308,10 @@ const { width } = Dimensions.get("window");
 const isSmallDevice = width < 360;
 const scale = (size: number) => (width / 375) * size;
 
-const styles = StyleSheet.create({
+const createStyles = (factoryColor: string) => StyleSheet.create({
     container: { flex: 1, backgroundColor: "#F8FAFC" },
     header: {
-        backgroundColor: "#0052cc",
+        backgroundColor: factoryColor,
         paddingHorizontal: width * 0.05,
         height: scale(56),
         flexDirection: "row",
@@ -332,14 +338,14 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: "#1E293B",
         borderWidth: 1,
-        borderColor: "#0052cc",
+        borderColor: factoryColor,
         elevation: 2,
         maxHeight:40
         
     },
     statBox: {
         
-        backgroundColor: "#0052cc",
+        backgroundColor: factoryColor,
         paddingHorizontal: 12,
         paddingVertical: 4,
         borderRadius: 12,
@@ -364,7 +370,7 @@ const styles = StyleSheet.create({
         borderColor: "#E2E8F0",
         marginBottom: -1,
     },
-    tableHeader: { flexDirection: "row", backgroundColor: "#0052cc", paddingVertical: 10 },
+    tableHeader: { flexDirection: "row", backgroundColor: factoryColor, paddingVertical: 10 },
     headerCell: {
         fontSize: 12,
         fontWeight: "800",
@@ -385,7 +391,7 @@ const styles = StyleSheet.create({
     cellSub: { fontSize: 10, color: "#64748B", textAlign: "center" },
     footer: { padding: 16, borderTopWidth: 1, borderTopColor: "#e2e8f0" },
     actionBtn: { height: 44, borderRadius: 12, justifyContent: "center", alignItems: "center" },
-    btnPrimary: { backgroundColor: "#0052cc" },
-    btnDisabled: { backgroundColor: "#0052cc" },
+    btnPrimary: { backgroundColor: factoryColor },
+    btnDisabled: { backgroundColor: factoryColor },
     btnTextPrimary: { color: "#FFFFFF", fontSize: 15, fontWeight: "700" },
 });

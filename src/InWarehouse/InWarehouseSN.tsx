@@ -37,7 +37,10 @@ export default function InWarehouseSN({ navigation, route }: any) {
     gs_wareType,
     gs_userName,
     gs_userCode,
+    gs_factoryindex,
   } = useGlobalStr();
+
+    const styles = createStyles(gs_factoryindex === "zentech" ? "#06b86c" : "#0052cc");
 
   const [loading, setLoading] = useState(true);
   const [dataList, setDataList] = useState<SNEffectiveItem[]>([]);
@@ -166,7 +169,7 @@ export default function InWarehouseSN({ navigation, route }: any) {
               </View>
               <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={true}>
                 {loading ? (
-                  <ActivityIndicator size="large" color="#0052cc" style={{ marginTop: 40 }} />
+                  <ActivityIndicator size="large" color="#06b86c" style={{ marginTop: 40 }} />
                 ) : dataList.length === 0 ? (
                   <Text style={styles.emptyText}>No SN items found inside this box.</Text>
                 ) : (
@@ -202,10 +205,10 @@ export default function InWarehouseSN({ navigation, route }: any) {
 const { width } = Dimensions.get("window");
 const scale = (size: number) => (width / 375) * size;
 
-const styles = StyleSheet.create({
+const createStyles = (factoryColor: string) => StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F8FAFC" },
   header: {
-    backgroundColor: "#0052cc",
+    backgroundColor: factoryColor,
     paddingHorizontal: width * 0.05,
     height: scale(56),
     flexDirection: "row",
@@ -218,12 +221,12 @@ const styles = StyleSheet.create({
   returnLogo: { width: scale(23), height: scale(23), marginRight: 10, tintColor: "#FFFFFF" },
   headerTitle: { color: "#FFFFFF", fontSize: scale(11), fontWeight: "900", flex: 1 },
   userNameText: { color: "#FFFFFF", fontSize: scale(12), fontWeight: "700" },
-  totalQtyBox: { backgroundColor: "#0052cc", padding: 12, borderRadius: 8, flexDirection: "row", justifyContent: "space-between", marginBottom: 12 },
+  totalQtyBox: { backgroundColor: factoryColor, padding: 12, borderRadius: 8, flexDirection: "row", justifyContent: "space-between", marginBottom: 12 },
   totalQtyLabel: { color: "#FFFFFF", fontSize: 14, fontWeight: "700" },
   totalQtyValue: { color: "#FFFFFF", fontSize: 14, fontWeight: "900" },
   content: { flex: 1, padding: 16 },
-  tableCard: { flex: 1, backgroundColor: "#FFF", borderRadius: 16, overflow: "hidden", elevation: 3, borderWidth: 1, borderColor: "#0052cc", marginBottom: 12 },
-  tableHeader: { flexDirection: "row", backgroundColor: "#0052cc", paddingVertical: 10 },
+  tableCard: { flex: 1, backgroundColor: "#FFF", borderRadius: 16, overflow: "hidden", elevation: 3, borderWidth: 1, borderColor: factoryColor, marginBottom: 12 },
+  tableHeader: { flexDirection: "row", backgroundColor: factoryColor, paddingVertical: 10 },
   headerCell: { fontSize: 11, fontWeight: "800", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
   tableRow: { flexDirection: "row", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#E2E8F0", alignItems: "center" },
   cell: { fontSize: 11, color: "#1E293B", textAlign: "center", fontWeight: "600" },

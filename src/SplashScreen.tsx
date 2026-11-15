@@ -9,7 +9,7 @@ export default function SplashScreen({ navigation }: Props) {
 
   useEffect(() => {
     setTimeout(() => {
-      navigation.replace("Login"); 
+      navigation.replace("Login");
     }, 1600); //2000= 2 secondes
   }, []);
 

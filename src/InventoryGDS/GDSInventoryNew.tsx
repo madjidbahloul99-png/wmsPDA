@@ -39,11 +39,13 @@ const ScanRowItem = React.memo(
     index,
     isSelected,
     onSelect,
+    styles,
   }: {
     item: InventoryBillSnVO;
     index: number;
     isSelected: boolean;
     onSelect: (index: number) => void;
+    styles: any;
   }) => {
     return (
       <TouchableOpacity
@@ -89,8 +91,12 @@ export default function GDSInventoryNew({ navigation, route }: any) {
     g_isRealUrl,
     gs_PasswordSalt,
     gs_version,
+    
     gs_classCode,
-  } = useGlobalStr();
+    gs_factoryindex,
+} = useGlobalStr();
+
+    const styles = createStyles(gs_factoryindex === "zentech" ? "#06b86c" : "#0052cc");
 
   // Screen variables matching C# state
   const [f_modeEAN, setFModeEAN] = useState("");
@@ -543,9 +549,10 @@ export default function GDSInventoryNew({ navigation, route }: any) {
         index={index}
         isSelected={index === selectedRowIndex}
         onSelect={handleSelectRow}
+        styles={styles}
       />
     ),
-    [selectedRowIndex, handleSelectRow]
+    [selectedRowIndex, handleSelectRow, styles]
   );
 
   return (
@@ -685,17 +692,17 @@ export default function GDSInventoryNew({ navigation, route }: any) {
 
       {loading && (
         <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="large" color="#0052cc" />
+          <ActivityIndicator size="large" color="#06b86c" />
         </View>
       )}
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (factoryColor: string) => StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F8FAFC" },
   header: {
-    backgroundColor: "#0052cc",
+    backgroundColor: factoryColor,
     paddingHorizontal: width * 0.05,
     height: scale(56),
     flexDirection: "row",
@@ -714,14 +721,14 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 10,
     borderWidth: 1,
-    borderColor: "#0052cc",
+    borderColor: factoryColor,
     marginBottom: 6,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center"
   },
   modelHeaderText: { fontSize: 11, fontWeight: "900", color: "#1E293B", flex: 1 },
-  billCodeText: { fontSize: 10, fontWeight: "800", color: "#0052cc" },
+  billCodeText: { fontSize: 10, fontWeight: "800", color: factoryColor },
   palletBoxPanel: {
     marginBottom: 6,
   },
@@ -741,7 +748,7 @@ const styles = StyleSheet.create({
   configInput: {
     flex: 1,
     height: scale(38),
-    backgroundColor: "#0052cc",
+    backgroundColor: factoryColor,
     borderRadius: 6,
     paddingHorizontal: 8,
     paddingVertical: 0,
@@ -766,7 +773,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 8,
     borderWidth: 1,
-    borderColor: "#0052cc",
+    borderColor: factoryColor,
     marginBottom: 6,
   },
   scanTextInput: {
@@ -779,7 +786,7 @@ const styles = StyleSheet.create({
     color: "#1E293B",
     fontWeight: "700",
     borderWidth: 1,
-    borderColor: "#0052cc",
+    borderColor: factoryColor,
     textAlignVertical: "center",
     overflow: "hidden",
   },
@@ -789,12 +796,12 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: "#0052cc",
+    borderColor: factoryColor,
     marginBottom: 6,
   },
   listHeader: {
     flexDirection: "row",
-    backgroundColor: "#0052cc",
+    backgroundColor: factoryColor,
     paddingVertical: 8,
     paddingHorizontal: 4,
   },
@@ -835,7 +842,7 @@ const styles = StyleSheet.create({
   totalRowText: {
     fontSize: 11,
     fontWeight: "900",
-    color: "#0052cc"
+    color: factoryColor
   },
   staticTotalRow: {
     flexDirection: "row",
@@ -855,7 +862,7 @@ const styles = StyleSheet.create({
   staticTotalRowValue: {
     fontSize: 16,
     fontWeight: "900",
-    color: "#0052cc",
+    color: factoryColor,
   },
   infoLabel: {
     fontSize: 9,

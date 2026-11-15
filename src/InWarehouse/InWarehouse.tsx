@@ -38,7 +38,10 @@ export default function InWarehouse({ navigation }: any) {
         gs_userCode,
         gs_userName,
         gs_PasswordSalt,
+    gs_factoryindex,
     } = useGlobalStr();
+
+    const styles = createStyles(gs_factoryindex === "zentech" ? "#06b86c" : "#0052cc");
 
     const [sn, setSn] = useState("");
     const [palletCode, setPalletCode] = useState("");
@@ -306,7 +309,7 @@ export default function InWarehouse({ navigation }: any) {
                         <View style={{
                             borderRadius: 10,
                             borderWidth: scanState === "waiting" ? 1 : 2,
-                            borderColor: scanState === "waiting" ? "#0052cc" : scanState === "scanning" ? "#f59e0b" : scanState === "success" ? "#16a34a" : "#dc2626",
+                            borderColor: scanState === "waiting" ? "#06b86c" : scanState === "scanning" ? "#f59e0b" : scanState === "success" ? "#16a34a" : "#dc2626",
                             backgroundColor: "#e2f0eeff",
                             elevation: 4,
                         }}>
@@ -344,7 +347,7 @@ export default function InWarehouse({ navigation }: any) {
                             <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={true}>
                                 {boxList.length === 0 ? (
                                     loading ? (
-                                        <ActivityIndicator size="large" color="#0052cc" style={{ marginTop: 40 }} />
+                                        <ActivityIndicator size="large" color="#06b86c" style={{ marginTop: 40 }} />
                                     ) : (
                                         <Text style={styles.emptyText}>Waiting for barcode input...</Text>
                                     )
@@ -383,10 +386,10 @@ const { width } = Dimensions.get("window");
 const isSmallDevice = width < 360;
 const scale = (size: number) => (width / 375) * size;
 
-const styles = StyleSheet.create({
+const createStyles = (factoryColor: string) => StyleSheet.create({
     container: { flex: 1, backgroundColor: "#F8FAFC" },
     header: {
-        backgroundColor: "#0052cc",
+        backgroundColor: factoryColor,
         paddingHorizontal: width * 0.05,
         height: scale(56),
         flexDirection: "row",
@@ -407,14 +410,14 @@ const styles = StyleSheet.create({
         marginBottom: 12,
         elevation: 3,
         borderWidth: 1,
-        borderColor: "#0052cc"
+        borderColor: factoryColor
     },
     inputGroup: { marginTop: 6 },
     infoRow: {
         flexDirection: "row",
         justifyContent: "space-between",
         alignItems: "center",
-        backgroundColor: "#0052cc",
+        backgroundColor: factoryColor,
         borderRadius: 10,
         paddingHorizontal: 12,
         height: 38,
@@ -434,53 +437,14 @@ const styles = StyleSheet.create({
     },
     input: { backgroundColor: "#e2f0eeff", height: 42, borderRadius: 10, paddingHorizontal: 15, fontSize: 13, color: "#1E293B", fontWeight: "700" },
     disabledInput: { backgroundColor: "#CBD5E1", color: "#64748B" },
-    tableCard: { flex: 1, backgroundColor: "#FFF", borderRadius: 16, overflow: "hidden", elevation: 3, borderWidth: 1, borderColor: "#0052cc", marginBottom: 12 },
-    tableHeader: { flexDirection: "row", backgroundColor: "#0052cc", paddingVertical: 10 },
+    tableCard: { flex: 1, backgroundColor: "#FFF", borderRadius: 16, overflow: "hidden", elevation: 3, borderWidth: 1, borderColor: factoryColor, marginBottom: 12 },
+    tableHeader: { flexDirection: "row", backgroundColor: factoryColor, paddingVertical: 10 },
     headerCell: { fontSize: 11, fontWeight: "800", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
     tableRow: { flexDirection: "row", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#F1F5F9", alignItems: "center" },
     cell: { fontSize: 11, color: "#334155", textAlign: "center", fontWeight: "600" },
     footer: { borderTopWidth: 1, borderTopColor: '#e2e8f0', paddingTop: 8 },
     actionBtn: { height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
-    btnPrimary: { backgroundColor: '#0052cc' },
+    btnPrimary: { backgroundColor: factoryColor },
     btnTextPrimary: { color: '#FFFFFF', fontSize: 14, fontWeight: '900' },
     emptyText: { textAlign: "center", padding: 40, color: "#94A3B8", fontStyle: "italic", width: 350 },
 });
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

@@ -193,7 +193,7 @@ export default function AllocateInSNConfirmBox({ navigation, route }: any) {
 
       {loading && (
         <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="large" color="#0052cc" />
+          <ActivityIndicator size="large" color="#06b86c" />
         </View>
       )}
     </SafeAreaView>
@@ -206,7 +206,7 @@ const scale = (size: number) => (width / 375) * size;
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F8FAFC" },
   header: {
-    backgroundColor: "#0052cc",
+    backgroundColor: "#06b86c",
     paddingHorizontal: width * 0.05,
     height: scale(56),
     flexDirection: "row",
@@ -227,13 +227,13 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     elevation: 2,
     borderWidth: 1,
-    borderColor: "#0052cc",
+    borderColor: "#06b86c",
   },
   infoRow: { 
     flexDirection: "row", 
     justifyContent: "space-between", 
     alignItems: "center",
-    backgroundColor: "#0052cc",
+    backgroundColor: "#06b86c",
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 8,
@@ -246,12 +246,12 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: "#0052cc",
+    borderColor: "#06b86c",
     marginBottom: 8,
   },
   listHeader: {
     flexDirection: "row",
-    backgroundColor: "#0052cc",
+    backgroundColor: "#06b86c",
     paddingVertical: 10,
     paddingHorizontal: 6,
   },
@@ -287,7 +287,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 4,
     flex: 1,
   },
-  confirmBtn: { backgroundColor: "#0052cc" },
+  confirmBtn: { backgroundColor: "#06b86c" },
   btnText: { color: "#FFFFFF", fontSize: 15, fontWeight: "900" },
   totalRow: {
     padding: 10,
@@ -299,7 +299,7 @@ const styles = StyleSheet.create({
   totalRowText: {
     fontSize: 13,
     fontWeight: "900",
-    color: "#0052cc",
+    color: "#06b86c",
   },
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,

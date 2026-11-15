@@ -325,7 +325,7 @@ export default function AllocateIn({ navigation, route }: any) {
 
       {loading && (
         <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="large" color="#0052cc" />
+          <ActivityIndicator size="large" color="#06b86c" />
         </View>
       )}
     </SafeAreaView>
@@ -338,7 +338,7 @@ const scale = (size: number) => (width / 375) * size;
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F8FAFC" },
   header: {
-    backgroundColor: "#0052cc",
+    backgroundColor: "#06b86c",
     paddingHorizontal: width * 0.05,
     height: scale(56),
     flexDirection: "row",
@@ -359,13 +359,13 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     elevation: 2,
     borderWidth: 1,
-    borderColor: "#0052cc",
+    borderColor: "#06b86c",
   },
   infoRow: { 
     flexDirection: "row", 
     justifyContent: "space-between", 
     marginBottom: 6,
-    backgroundColor: "#0052cc",
+    backgroundColor: "#06b86c",
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 8,
@@ -382,30 +382,30 @@ const styles = StyleSheet.create({
     color: "#1E293B",
     fontWeight: "600",
     borderWidth: 1,
-    borderColor: "#0052cc",
+    borderColor: "#06b86c",
   },
   statusLabelCard: {
     backgroundColor: "#FFF",
     borderRadius: 12,
     padding: 12,
     borderWidth: 1,
-    borderColor: "#0052cc",
+    borderColor: "#06b86c",
     marginBottom: 8,
     alignItems: "center",
   },
-  statusLabelText: { color: "#0052cc", fontSize: 13, fontWeight: "900" },
+  statusLabelText: { color: "#06b86c", fontSize: 13, fontWeight: "900" },
   listCard: {
     flex: 1,
     backgroundColor: "#FFF",
     borderRadius: 16,
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: "#0052cc",
+    borderColor: "#06b86c",
     marginBottom: 8,
   },
   listHeader: {
     flexDirection: "row",
-    backgroundColor: "#0052cc",
+    backgroundColor: "#06b86c",
     paddingVertical: 10,
     paddingHorizontal: 6,
   },

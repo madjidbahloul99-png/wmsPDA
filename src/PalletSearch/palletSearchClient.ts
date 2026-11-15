@@ -14,8 +14,6 @@ const doRestPost = async (url: string, body: any): Promise<any> => {
   const response = await fetch(url, {
     method: "POST",
     headers,
-      
-    
    body: pubfunction.classToUrlStr(body),
   });
 

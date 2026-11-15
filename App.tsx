@@ -72,20 +72,16 @@ import DeliveryReturnNONewSap from "./src/DeliveryReturn/DeliveryReturnNONewSap"
 import DeliveryReturnNewSap from "./src/DeliveryReturn/DeliveryReturnNewSap";
 import DeliveryReturnSNConfirmBoxNew from "./src/DeliveryReturn/DeliveryReturnSNConfirmBoxNew";
 
-
-
+//Delivery Return new Multi Customer/One Bill
+import DeliveryReturnBillSelect from "./src/DeliveryReturnBill/DeliveryReturnBillSelect";
+import DeliveryReturnBillSN from "./src/DeliveryReturnBill/DeliveryReturnBillSN";
+import DeliveryReturnBillEAN from "./src/DeliveryReturnBill/DeliveryReturnBillEAN";
+import DeliveryReturnBillConfirm from "./src/DeliveryReturnBill/DeliveryReturnBillConfirm";
 
 //DistributorReturn
 import DistributorReturnNONewSap from "./src/DistributorReturn/DistributorReturnNONewSap";
 import DistributorReturnNewSap from "./src/DistributorReturn/DistributorReturnNewSap";
 import DistributorReturnSNConfirmBoxNew from "./src/DistributorReturn/DistributorReturnSNConfirmBoxNew";
-
-
-
-
-
-
-
 
 
 const Stack = createNativeStackNavigator();
@@ -132,6 +128,12 @@ export default function App() {
           <Stack.Screen name="AllocateInNONewSap" component={AllocateInNONewSap} />
           <Stack.Screen name="AllocateInNewSap" component={AllocateInNewSap} />
           <Stack.Screen name="AllocateInSNConfirmBoxNew" component={AllocateInSNConfirmBoxNew} />
+
+          {/* Delivery Return new Multi Customer/One Bill */}
+          <Stack.Screen name="DeliveryReturnBillSelect" component={DeliveryReturnBillSelect} />
+          <Stack.Screen name="DeliveryReturnBillSN" component={DeliveryReturnBillSN} />
+          <Stack.Screen name="DeliveryReturnBillEAN" component={DeliveryReturnBillEAN} />
+          <Stack.Screen name="DeliveryReturnBillConfirm" component={DeliveryReturnBillConfirm} />
 
           <Stack.Screen name="AllocateInNO" component={AllocateInNO} />
           <Stack.Screen name="AllocateIn" component={AllocateIn} />
