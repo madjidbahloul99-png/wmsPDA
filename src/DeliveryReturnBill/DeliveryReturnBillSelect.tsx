@@ -327,10 +327,10 @@ export default function DeliveryReturnBillSelect({ navigation }: any) {
       const isSelected = selectedKey === item.key;
 
       // Blue when something was already returned, red when nothing was returned
-      // yet, grey when the model is completed.
+      // yet, dark when the model is completed.
       let textColor = '#1E293B';
       if (isCompleted) {
-        textColor = '#94A3B8';
+        textColor = '#1E293B';
       } else if (row.diffQty > 0) {
         textColor = row.doneQty > 0 ? '#0052cc' : '#EF4444';
       }
